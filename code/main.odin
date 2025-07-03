@@ -1,6 +1,7 @@
 package main
 
 import "base:builtin"
+import "core:hash"
 import rl "vendor:raylib"
 
 
@@ -25,6 +26,7 @@ Tile :: struct {
     texture: rl.Texture2D,
     sockets: [4]Socket,
     frequency: u32,
+    hash: u32,
 }
 Socket :: struct {
     center: [3]Color3,
@@ -109,22 +111,23 @@ main :: proc () {
                         tile.sockets[3].center[x] = sub_pixels[m*w + x]
                         tile.sockets[3].side[x]   = sub_pixels[y*w + x]
                     }
+                    
+                    tile.hash = hash.djb2((cast([^]u8) &sub_pixels[0])[: len(sub_pixels)*size_of(Color3)])
                 }
                 
                 present: ^Tile
-                // for &it in slice(tiles) {
-                //     if tile.sockets == it.sockets {
-                //         present = &it
-                //         break
-                //     }
-                // }
+                for &it in slice(tiles) {
+                    if tile.hash == it.hash {
+                        present = &it
+                        break
+                    }
+                }
                 
                 if present != nil {
                     present.frequency += 1
                 } else {
                     tile.texture = rl.LoadTextureFromImage(sub_image)
                     tile.frequency = 1
-                    
                     append(&tiles, tile)
                 }
             }
@@ -155,12 +158,21 @@ main :: proc () {
             clear(&to_check)
             
             if lowest_indices.count != 0 {
-                lowest_index := random_choice(&entropy, slice(lowest_indices))^
-                lowest_cell  := &grid.data[lowest_index.y * Dim + lowest_index.x]
-                
-                options := lowest_cell.([dynamic]Tile)
-                pick    := random_choice(&entropy, options[:])^
-                collapse_cell(slice(grid), lowest_cell, lowest_index, pick, &to_check)
+                if lowest_cardinality == 1 {
+                    for index in slice(lowest_indices) {
+                        cell  := &grid.data[index.y * Dim + index.x]
+                        options := cell.([dynamic]Tile)
+                        assert(len(options) == 1)
+                        collapse_cell(slice(grid), cell, index, options[0], &to_check)
+                    }
+                } else {
+                    lowest_index := random_choice(&entropy, slice(lowest_indices))^
+                    lowest_cell  := &grid.data[lowest_index.y * Dim + lowest_index.x]
+                    
+                    options := lowest_cell.([dynamic]Tile)
+                    pick    := random_choice(&entropy, options[:])^
+                    collapse_cell(slice(grid), lowest_cell, lowest_index, pick, &to_check)
+                }
                 
                 clear(&lowest_indices)
                 lowest_cardinality = max(u32)
@@ -202,7 +214,8 @@ main :: proc () {
         
         for entry in slice(lowest_indices) {
             p := get_screen_p(entry.x, entry.y)
-            rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(rl.BLUE, 0.3))
+            color := lowest_cardinality == 1 ? rl.PURPLE : rl.BLUE
+            rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(color, 0.6))
         }
 
         for y in 0..<Dim {
@@ -251,8 +264,8 @@ main :: proc () {
 
 collapse_cell :: proc (grid: []Cell, cell: ^Cell, index: [2]int, pick: Tile, to_check: ^Array([2]int)) {
     options := cell.([dynamic]Tile)
-    delete(options)
     cell ^= pick
+    delete(options)
     
     add_neighbours :: proc (to_check: ^Array([2]int), index: [2]int) {
         nexts := [4][2]int{{-1, 0}, {+1, 0}, {0, -1}, {0, +1}}
