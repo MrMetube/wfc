@@ -75,6 +75,7 @@ random_choice_integer_min_max :: proc(series: ^RandomSeries, min, max: u32) -> (
     return result
 }
 random_choice_data :: proc(series: ^RandomSeries, data:[]$T) -> (result: ^T) {
+    assert(len(data) != 0)
     result = &data[random_choice(series, auto_cast len(data))]
     return result
 }
