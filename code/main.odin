@@ -144,7 +144,7 @@ main :: proc () {
         append(&grid, options)
     }
     
-    entropy := seed_random_series(0x75658663)
+    entropy := seed_random_series()//0x75658663)
     
     lowest_indices := make_array(&arena, [2]int, Dim*Dim)
     lowest_cardinality := max(u32)
@@ -170,7 +170,18 @@ main :: proc () {
                     lowest_cell  := &grid.data[lowest_index.y * Dim + lowest_index.x]
                     
                     options := lowest_cell.([dynamic]Tile)
-                    pick    := random_choice(&entropy, options[:])^
+                    total_freq: u32
+                    for option in options do total_freq += option.frequency
+                    choice := random_between_u32(&entropy, 0, total_freq)
+                    
+                    pick: Tile
+                    for option in options {
+                        if choice <= option.frequency {
+                            pick = option
+                            break
+                        }
+                        choice -= option.frequency
+                    }
                     collapse_cell(slice(grid), lowest_cell, lowest_index, pick, &to_check)
                 }
                 
@@ -207,16 +218,16 @@ main :: proc () {
         
         rl.BeginMode2D(camera)
         
-        for entry in slice(to_check) {
-            p := get_screen_p(entry.x, entry.y)
-            rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(rl.YELLOW, 0.3))
-        }
+        // for entry in slice(to_check) {
+        //     p := get_screen_p(entry.x, entry.y)
+        //     rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(rl.YELLOW, 0.3))
+        // }
         
-        for entry in slice(lowest_indices) {
-            p := get_screen_p(entry.x, entry.y)
-            color := lowest_cardinality == 1 ? rl.PURPLE : rl.BLUE
-            rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(color, 0.6))
-        }
+        // for entry in slice(lowest_indices) {
+        //     p := get_screen_p(entry.x, entry.y)
+        //     color := lowest_cardinality == 1 ? rl.PURPLE : rl.BLUE
+        //     rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(color, 0.6))
+        // }
 
         for y in 0..<Dim {
             for x in 0..<Dim {
@@ -232,25 +243,34 @@ main :: proc () {
                     if len(value) == 0 {
                         rl.DrawRectangleRec({p.x, p.y, size, size}, rl.RED)
                     } else {
-                        // for tile, i in slice(tiles) {
-                        //     present: b32
-                        //     for it in value do if it == tile { present = true; break }
-                        //     if !present do continue
+                        count: u32
+                        for tile, i in slice(tiles) {
+                            present: b32
+                            for it in value do if it == tile { present = true; break }
+                            if !present do continue
+                            count += tile.frequency
+                        }
+                        for tile, i in slice(tiles) {
+                            present: b32
+                            for it in value do if it == tile { present = true; break }
+                            if !present do continue
                             
-                        //     option_size := cast(f32) Option_Size
+                            option_size := cast(f32) Option_Size
                             
-                        //     offset := vec_cast(f32, (i) % 7, (i) / 7)
-                        //     op := p + option_size * (offset+1)
+                            offset := vec_cast(f32, (i) % 7, (i) / 7)
+                            op := p + option_size * (offset+1)
                             
-                        //     rect := rl.Rectangle {op.x, op.y, option_size, option_size}
-                        //     mouse := rl.GetMousePosition()
-                        //     if mouse.x >= rect.x && mouse.y >= rect.y && mouse.x < rect.x + rect.width && mouse.y < rect.y + rect.height {
-                        //         if rl.IsMouseButtonPressed(.LEFT) {
-                        //             collapse_cell(slice(grid), cell, {x,y}, tile, &to_check)
-                        //         }
-                        //     }
-                        //     rl.DrawTexturePro(tile.texture, Tile_Size, rect, 0, 0, rl.WHITE)
-                        // }
+                            option_rect := rl.Rectangle {op.x, op.y, option_size, option_size}
+                            mouse := rl.GetMousePosition()
+                            if mouse.x >= option_rect.x && mouse.y >= option_rect.y && mouse.x < option_rect.x + option_rect.width && mouse.y < option_rect.y + option_rect.height {
+                                if rl.IsMouseButtonPressed(.LEFT) {
+                                    collapse_cell(slice(grid), cell, {x,y}, tile, &to_check)
+                                }
+                            }
+                            
+                            rect := rl.Rectangle {p.x, p.y, size, size}
+                            rl.DrawTexturePro(tile.texture, {1,1, 1,1}, rect, 0, 0, rl.ColorAlpha(rl.WHITE, cast(f32) tile.frequency/cast(f32) count))
+                        }
                     }
                 }
             }
