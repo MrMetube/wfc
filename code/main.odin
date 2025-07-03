@@ -1,5 +1,6 @@
 package main
 
+import "base:builtin"
 import rl "vendor:raylib"
 
 
@@ -14,42 +15,29 @@ size := cast(f32) Draw_Size - 2*Pad
 
 Tile_Size :: rl.Rectangle{0,0,5,5}
 
-Cell :: struct ($E: typeid) {
-    done: b32,
-    options: bit_set[E],
+Cell :: union {
+    Tile,
+    [dynamic]Tile,
 }
 
-////////////////////////////////////////////////
-// Sudoku Tiles
-Tile :: enum { S1, S2, S3, S4, S5, S6, S7, S8, S9}
-SudokuCell :: Cell(Tile)
-
-
-////////////////////////////////////////////////
-// Maze Tiles
-MazeTile :: enum { E, NE, N, NW, W, SW, S, SE }
-Socket :: enum { White, Black }
-sockets := [MazeTile] [4] Socket {
-    .E  = {.Black, .Black, .White, .Black},
-    .NE = {.Black, .Black, .White, .White},
-    .N  = {.Black, .Black, .Black, .White},
-    .NW = {.White, .Black, .Black, .White},
-    .W  = {.White, .Black, .Black, .Black},
-    .SW = {.White, .White, .Black, .Black},
-    .S  = {.Black, .White, .Black, .Black},
-    .SE = {.Black, .White, .White, .Black},
+Tile :: struct {
+    texture: rl.Texture2D,
+    sockets: [4]Socket,
 }
-
-MazeCell :: Cell(MazeTile)
+Socket :: struct {
+    edge: [5]Color3,
+}
+Color3 :: [3]u8
 
 main :: proc () {
-    arena: Arena
-    init_arena(&arena, make([]u8, 1*Gigabyte))
-    
     rl.SetTraceLogLevel(.WARNING)
     rl.InitWindow(Screen_Size.x, Screen_Size.y, "Wave Function Collapse")
     rl.SetTargetFPS(120)
     
+    camera: rl.Camera2D = {
+        zoom = 1
+    }
+        
     e  := rl.LoadTexture("./e.bmp")
     ne := rl.LoadTexture("./ne.bmp")
     n  := rl.LoadTexture("./n.bmp")
@@ -58,26 +46,59 @@ main :: proc () {
     sw := rl.LoadTexture("./sw.bmp")
     s  := rl.LoadTexture("./s.bmp")
     se := rl.LoadTexture("./se.bmp")
-    tiles := [?] rl.Texture { e, ne, n, nw, w, sw, s, se, }
+    textures := [?] rl.Texture { e, ne, n, nw, w, sw, s, se, }
+    tiles: [len(textures)] Tile
     
-    s1 := rl.LoadTexture("./1.bmp")
-    s2 := rl.LoadTexture("./2.bmp")
-    s3 := rl.LoadTexture("./3.bmp")
-    s4 := rl.LoadTexture("./4.bmp")
-    s5 := rl.LoadTexture("./5.bmp")
-    s6 := rl.LoadTexture("./6.bmp")
-    s7 := rl.LoadTexture("./7.bmp")
-    s8 := rl.LoadTexture("./8.bmp")
-    s9 := rl.LoadTexture("./9.bmp")
-    _tiles := [?] rl.Texture { s1, s2, s3, s4, s5, s6, s7, s8, s9 }
+    arena: Arena
+    init_arena(&arena, make([]u8, 1*Gigabyte))
+    
+    for &tile, index in tiles {
+        tile.texture = textures[index]
+        img := rl.LoadImageFromTexture(tile.texture)
+        defer rl.UnloadImage(img)
+        assert(img.format == .UNCOMPRESSED_R8G8B8)
+        // 
+        // Extract sockets
+        // 
+        
+        pixels := (cast([^]Color3) img.data)[:img.width * img.height]
 
-    grid: [Dim*Dim] MazeCell = MazeCell{options = ~{}}
-    
-    camera: rl.Camera2D = {
-        zoom = 1
+        w := cast(int) img.width
+        h := cast(int) img.height
+        // east
+        for y in 0..<h {
+            x := w-1
+            tile.sockets[0].edge[y] = pixels[y*w + x]
+        }
+        // north
+        for x in 0..<w {
+            y := 0
+            tile.sockets[1].edge[x] = pixels[y*w + x]
+        }
+        
+        // west
+        for y in 0..<h {
+            x := 0
+            tile.sockets[2].edge[y] = pixels[y*w + x]
+        }
+        
+        // south
+        for x in 0..<w {
+            y := h-1
+            tile.sockets[3].edge[x] = pixels[y*w + x]
+        }
     }
     
-    entropy := seed_random_series()//(0x75658663)
+    grid: [Dim*Dim]Cell
+    for &cell in grid {
+        options := make([dynamic]Tile)
+        for tile in tiles {
+            builtin.append(&options, tile)
+        }
+        cell = options
+    }
+
+    entropy := seed_random_series(0x75658663)
     
     lowest_indices := make_array(&arena, [2]int, Dim*Dim)
     lowest_cardinality := max(u32)
@@ -94,14 +115,10 @@ main :: proc () {
                 lowest_index := random_choice(&entropy, slice(lowest_indices))^
                 lowest_cell  := &grid[lowest_index.y * Dim + lowest_index.x]
                 
-                pick := random_choice(&entropy, 0, lowest_cardinality)
-                for option in lowest_cell.options {
-                    if pick == 0 {
-                        lowest_cell.options = { option }
-                        lowest_cell.done = true
-                    }
-                    pick -= 1
-                }
+                options := lowest_cell.([dynamic]Tile)
+                pick    := random_choice(&entropy, options[:])^
+                delete(options)
+                lowest_cell ^= pick
                 
                 // for maze 
                 nexts := [4][2]int{{-1, 0}, {+1, 0}, {0, -1}, {0, +1}}
@@ -127,28 +144,6 @@ main :: proc () {
                     }
                 }
                 
-                // for dx in 0..<9 {
-                //     if dx != lowest_index.x {
-                //         append(&to_check, [2]int{dx, lowest_index.y})
-                //     }
-                // }
-                // for dy in 0..<9 {
-                //     if dy != lowest_index.y {
-                //         append(&to_check, [2]int{lowest_index.x, dy})
-                //     }
-                // }
-                
-                // base_x, base_y := (lowest_index.x/3)*3, (lowest_index.y/3)*3
-                // for dy in base_y..<base_y+3 {
-                //     for dx in base_x..<base_x+3 {
-                //         if dx != lowest_index.x {
-                //             if dy != lowest_index.y {
-                //                 append(&to_check, [2]int{dx, dy})
-                //             }
-                //         }
-                //     }
-                // }
-                
                 clear(&lowest_indices)
                 lowest_cardinality = max(u32)
             }
@@ -163,9 +158,10 @@ main :: proc () {
                 y := next.y
                 cell := &grid[y*Dim + x]
                 
-                if !cell.done && card(cell.options) > 1 {
-                    update_maze_cell(grid[:], cell, x, y)
-                    // update_sudoku_cell(grid[:], cell, x, y)
+                if options, ok := &cell.([dynamic]Tile); ok {
+                    if len(options) > 1 {
+                        update_maze_cell(grid[:], cell, options, x, y)
+                    }
                 }
             }
             
@@ -178,15 +174,15 @@ main :: proc () {
                     index := y*Dim + x
                     cell := &grid[index]
                     
-                    if cell.done do continue
-                    
-                    cardinality := cast(u32) card(cell.options)
-                    if cardinality > 0 && cardinality < lowest_cardinality {
-                        lowest_cardinality = cardinality
-                        clear(&lowest_indices)
-                    }
-                    if cardinality <= lowest_cardinality {
-                        append(&lowest_indices, [2]int{x,y})
+                    if options, ok := cell.([dynamic]Tile); ok {
+                        cardinality := cast(u32) len(options)
+                        if cardinality > 0 && cardinality < lowest_cardinality {
+                            lowest_cardinality = cardinality
+                            clear(&lowest_indices)
+                        }
+                        if cardinality <= lowest_cardinality {
+                            append(&lowest_indices, [2]int{x,y})
+                        }
                     }
                 }
             }
@@ -214,32 +210,33 @@ main :: proc () {
                 
                 p := get_screen_p(x, y) + Pad
                 
-                if cell.done {
-                    tile_index := reduce_to_value(cell.options)
-                    tile := tiles[tile_index]
-                    rl.DrawTexturePro(tile, Tile_Size, {p.x, p.y, size, size}, 0, 0, rl.WHITE)
-                } else if card(cell.options) == 0 {
-                    rl.DrawRectangleRec({p.x, p.y, size, size}, rl.RED)
-                } else {
-                    p -= Pad
-                    for tile, i in MazeTile {
-                        if tile not_in cell.options do continue
-                        
-                        option_size := cast(f32) Option_Size
-                        
-                        offset := vec_cast(f32, i % 3, i / 3)
-                        op := p + option_size * offset
-                        
-                        tile_texture := tiles[tile]
-                        rect := rl.Rectangle {op.x, op.y, option_size, option_size}
-                        mouse := rl.GetMousePosition()
-                        if mouse.x >= rect.x && mouse.y >= rect.y && mouse.x < rect.x + rect.width && mouse.y < rect.y + rect.height {
-                            if rl.IsMouseButtonPressed(.LEFT) {
-                                cell.options = {tile}
-                                cell.done = true
+                switch value in cell^ {
+                  case Tile:
+                    rl.DrawTexturePro(value.texture, Tile_Size, {p.x, p.y, size, size}, 0, 0, rl.WHITE)
+                  case [dynamic]Tile:
+                    if len(value) == 0 {
+                        rl.DrawRectangleRec({p.x, p.y, size, size}, rl.RED)
+                    } else {
+                        p -= Pad
+                        for tile, i in tiles {
+                            present: b32
+                            for it in value do if it == tile { present = true; break }
+                            if !present do continue
+                            
+                            option_size := cast(f32) Option_Size
+                            
+                            offset := vec_cast(f32, i % 3, i / 3)
+                            op := p + option_size * offset
+                            
+                            rect := rl.Rectangle {op.x, op.y, option_size, option_size}
+                            mouse := rl.GetMousePosition()
+                            if mouse.x >= rect.x && mouse.y >= rect.y && mouse.x < rect.x + rect.width && mouse.y < rect.y + rect.height {
+                                if rl.IsMouseButtonPressed(.LEFT) {
+                                    cell ^= tile
+                                }
                             }
+                            rl.DrawTexturePro(tile.texture, Tile_Size, rect, 0, 0, rl.WHITE)
                         }
-                        rl.DrawTexturePro(tile_texture, Tile_Size, rect, 0, 0, rl.WHITE)
                     }
                 }
             }
@@ -258,87 +255,45 @@ get_screen_p :: proc (x, y: int) -> (result: v2) {
     return result
 }
 
-update_sudoku_cell :: proc (grid: []SudokuCell, cell: ^SudokuCell, x, y: int) {
-    for option in cell.options {
-        // 
-        // check row
-        // 
-        
-        for dx in 0..<Dim {
-            if dx == x do continue
-            other := grid[y*Dim + dx]
-            if other.done {
-                cell.options -= other.options
-            }
-        }
-        
-        // 
-        // check column
-        // 
-        
-        for dy in 0..<Dim {
-            if dy == y do continue
-            other := grid[dy*Dim + x]
-            if other.done {
-                cell.options -= other.options
-            }
-        }
-        
-        // 
-        // check box
-        // 
-        
-        base_x, base_y := (x/3)*3, (y/3)*3
-        for dy in base_y..<base_y+3 {
-            for dx in base_x..<base_x+3 {
-                if x == dx && y == dy do continue
-                other := grid[dy*Dim + dx]
-                if other.done {
-                    cell.options -= other.options
-                }   
-            }
-        }
-    }
-}
-update_maze_cell :: proc (grid: []MazeCell, cell: ^MazeCell, x, y: int) {
-    for option in cell.options {
+update_maze_cell :: proc (grid: []Cell, cell: ^Cell, options: ^[dynamic]Tile, x, y: int) {
+    #reverse for option, index in options {
         ok := true
-        socket := sockets[option]
+        socket := option.sockets
         // west
         if x-1 >= 0  {
-            n := grid[(y)*Dim + (x-1)].options
-            if card(n) == 1 {
-                ns := sockets[reduce_to_value(n)]
+            n := grid[(y)*Dim + (x-1)]
+            if tile, _ok := n.(Tile); _ok {
+                ns := tile.sockets
                 ok &&= ns[0] == socket[2]
             }
         }
         // north
         if y-1 >= 0  {
-            n := grid[(y-1)*Dim + (x)].options
-            if card(n) == 1 {
-                ns := sockets[reduce_to_value(n)]
+            n := grid[(y-1)*Dim + (x)]
+            if tile, _ok := n.(Tile); _ok {
+                ns := tile.sockets
                 ok &&= ns[3] == socket[1]
             }
         }
         // east
         if x+1 < Dim {
-            n := grid[(y)*Dim + (x+1)].options
-            if card(n) == 1 {
-                ns := sockets[reduce_to_value(n)]
+            n := grid[(y)*Dim + (x+1)]
+            if tile, _ok := n.(Tile); _ok {
+                ns := tile.sockets
                 ok &&= ns[2] == socket[0]
             }
         }
         // south
         if y+1 < Dim {
-            n := grid[(y+1)*Dim + (x)].options
-            if card(n) == 1 {
-                ns := sockets[reduce_to_value(n)]
+            n := grid[(y+1)*Dim + (x)]
+            if tile, _ok := n.(Tile); _ok {
+                ns := tile.sockets
                 ok &&= ns[1] == socket[3]
             }
         }
         
         if !ok {
-            cell.options -= {option}
+            builtin.unordered_remove(options, index)
         }
     }
 }
