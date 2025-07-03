@@ -105,7 +105,7 @@ FormatNumberFlags  :: bit_set[ enum u8 {
     LeadingZero, PrependBaseSpecifier, Uppercase,
 }; u8 ]
 FormatContextFlags :: bit_set[ enum u8 {
-    PrependTypes, Multiline, AppendNewlineToResult,
+    PrependTypes, Multiline, AppendNewlineToResult, AppendZero,
 }; u8 ]
 
 ////////////////////////////////////////////////
@@ -381,6 +381,9 @@ format_string :: proc (buffer: []u8, format: string, args: ..any, flags := Forma
         
         if .AppendNewlineToResult in flags {
             format_view(&ctx, view_character('\n'))
+        }
+        if .AppendZero in flags {
+            format_view(&ctx, view_character(0))
         }
     }
     

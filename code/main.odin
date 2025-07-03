@@ -2,6 +2,7 @@ package main
 
 import "base:builtin"
 import "core:hash"
+import "core:time"
 import rl "vendor:raylib"
 
 
@@ -23,7 +24,7 @@ Cell :: union {
 
 Tile :: struct {
     // @Incomplete add a count to not store the same tile multiple times
-    texture: rl.Texture2D,
+    color: rl.Color,
     sockets: [4]Socket,
     frequency: u32,
     hash: u32,
@@ -45,8 +46,8 @@ main :: proc () {
     arena: Arena
     init_arena(&arena, make([]u8, 1*Gigabyte))
     
-    city := rl.LoadImage("./city.png")
-    tiles := make_array(&arena, Tile, 128)
+    city := rl.LoadImage("./flower.png")
+    tiles := make_array(&arena, Tile, 2048)
     
     {
         assert(city.format == .UNCOMPRESSED_R8G8B8A8)
@@ -126,7 +127,8 @@ main :: proc () {
                 if present != nil {
                     present.frequency += 1
                 } else {
-                    tile.texture = rl.LoadTextureFromImage(sub_image)
+                    tile.color.rgb = sub_pixels.data[1*Kernel+1]
+                    tile.color.a = 255
                     tile.frequency = 1
                     append(&tiles, tile)
                 }
@@ -136,98 +138,109 @@ main :: proc () {
     }
     
     grid := make_array(&arena, Cell, Dim*Dim)
-    for _ in 0..<len(grid.data) {
-        options := make([dynamic]Tile)
-        for tile in slice(tiles) {
-            builtin.append(&options, tile)
+    init_grid :: proc(grid: ^Array(Cell), tiles: []Tile) {
+        clear(grid)
+        
+        for _ in 0..<len(grid.data) {
+            options := make([dynamic]Tile)
+            for tile in tiles {
+                builtin.append(&options, tile)
+            }
+            append(grid, options)
         }
-        append(&grid, options)
     }
+    
+    init_grid(&grid, slice(tiles))
     
     entropy := seed_random_series()//0x75658663)
     
     lowest_indices := make_array(&arena, [2]int, Dim*Dim)
     lowest_cardinality := max(u32)
-    to_check := make_array(&arena, [2]int, Dim*Dim)
+    to_check := make_array(&arena, Check, Dim*Dim)
     
+    update, render: time.Duration
     for !rl.WindowShouldClose() {
-        if rl.IsKeyPressed(.SPACE) || rl.IsKeyPressedRepeat(.SPACE) {
-            //
-            // Pick a cell to collapse
-            //
-            clear(&to_check)
-            
-            if lowest_indices.count != 0 {
-                if lowest_cardinality == 1 {
-                    for index in slice(lowest_indices) {
-                        cell  := &grid.data[index.y * Dim + index.x]
-                        options := cell.([dynamic]Tile)
-                        assert(len(options) == 1)
+        
+        update_start := time.now()
+        //
+        // Pick a cell to collapse
+        //
+        clear(&to_check)
+        
+        if lowest_indices.count != 0 {
+            if lowest_cardinality == 1 {
+                for index in slice(lowest_indices) {
+                    cell  := &grid.data[index.y * Dim + index.x]
+                    options := cell.([dynamic]Tile)
+                    if len(options) == 0 {
+                        init_grid(&grid, slice(tiles))
+                    } else {
                         collapse_cell(slice(grid), cell, index, options[0], &to_check)
                     }
-                } else {
-                    lowest_index := random_choice(&entropy, slice(lowest_indices))^
-                    lowest_cell  := &grid.data[lowest_index.y * Dim + lowest_index.x]
-                    
-                    options := lowest_cell.([dynamic]Tile)
-                    total_freq: u32
-                    for option in options do total_freq += option.frequency
-                    choice := random_between_u32(&entropy, 0, total_freq)
-                    
-                    pick: Tile
-                    for option in options {
-                        if choice <= option.frequency {
-                            pick = option
-                            break
-                        }
-                        choice -= option.frequency
-                    }
-                    collapse_cell(slice(grid), lowest_cell, lowest_index, pick, &to_check)
                 }
+            } else {
+                lowest_index := random_choice(&entropy, slice(lowest_indices))^
+                lowest_cell  := &grid.data[lowest_index.y * Dim + lowest_index.x]
                 
-                clear(&lowest_indices)
-                lowest_cardinality = max(u32)
+                options := lowest_cell.([dynamic]Tile)
+                total_freq: u32
+                for option in options do total_freq += option.frequency
+                choice := random_between_u32(&entropy, 0, total_freq)
+                
+                pick: Tile
+                for option in options {
+                    if choice <= option.frequency {
+                        pick = option
+                        break
+                    }
+                    choice -= option.frequency
+                }
+                collapse_cell(slice(grid), lowest_cell, lowest_index, pick, &to_check)
             }
             
-            // 
-            // Collect all lowest cells
-            // 
-            
-            for y in 0..<Dim {
-                for x in 0..<Dim {
-                    index := y*Dim + x
-                    cell := &grid.data[index]
-                    
-                    if options, ok := cell.([dynamic]Tile); ok {
-                        cardinality := cast(u32) len(options)
-                        if cardinality > 0 && cardinality < lowest_cardinality {
-                            lowest_cardinality = cardinality
-                            clear(&lowest_indices)
-                        }
-                        if cardinality > 0 && cardinality <= lowest_cardinality {
-                            append(&lowest_indices, [2]int{x,y})
-                        }
+            clear(&lowest_indices)
+            lowest_cardinality = max(u32)
+        }
+        
+        // 
+        // Collect all lowest cells
+        // 
+        
+        for y in 0..<Dim {
+            for x in 0..<Dim {
+                index := y*Dim + x
+                cell := &grid.data[index]
+                
+                if options, ok := cell.([dynamic]Tile); ok {
+                    cardinality := cast(u32) len(options)
+                    if cardinality > 0 && cardinality < lowest_cardinality {
+                        lowest_cardinality = cardinality
+                        clear(&lowest_indices)
+                    }
+                    if cardinality > 0 && cardinality <= lowest_cardinality {
+                        append(&lowest_indices, [2]int{x,y})
                     }
                 }
             }
         }
+        update = time.since(update_start)
         
-        
+        render_start := time.now()
         rl.BeginDrawing()
         rl.ClearBackground({0x54, 0x57, 0x66, 0xFF})
         
         rl.BeginMode2D(camera)
         
-        // for entry in slice(to_check) {
-        //     p := get_screen_p(entry.x, entry.y)
-        //     rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(rl.YELLOW, 0.3))
-        // }
+        for entry in slice(to_check) {
+            p := get_screen_p(entry.index.x, entry.index.y)
+            rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(rl.YELLOW, 0.3))
+        }
         
-        // for entry in slice(lowest_indices) {
-        //     p := get_screen_p(entry.x, entry.y)
-        //     color := lowest_cardinality == 1 ? rl.PURPLE : rl.BLUE
-        //     rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(color, 0.6))
-        // }
+        for entry in slice(lowest_indices) {
+            p := get_screen_p(entry.x, entry.y)
+            color := lowest_cardinality == 1 ? rl.PURPLE : rl.BLUE
+            rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(color, 0.6))
+        }
 
         for y in 0..<Dim {
             for x in 0..<Dim {
@@ -237,58 +250,71 @@ main :: proc () {
                 
                 switch value in cell^ {
                   case Tile:
-                    rl.DrawTexturePro(value.texture, {1,1, 1,1}, {p.x, p.y, size, size}, 0, 0, rl.WHITE)
+                    rl.DrawRectangleRec({p.x, p.y, size, size}, value.color)
                     
                   case [dynamic]Tile:
                     if len(value) == 0 {
                         rl.DrawRectangleRec({p.x, p.y, size, size}, rl.RED)
                     } else {
-                        count: u32
-                        for tile, i in slice(tiles) {
-                            present: b32
-                            for it in value do if it == tile { present = true; break }
-                            if !present do continue
-                            count += tile.frequency
-                        }
-                        for tile, i in slice(tiles) {
-                            present: b32
-                            for it in value do if it == tile { present = true; break }
-                            if !present do continue
+                        // count: u32
+                        // sum: [4]u32
+                        // for tile, i in slice(tiles) {
+                        //     present: b32
+                        //     for it in value do if it == tile { present = true; break }
+                        //     if !present do continue
+                        //     count += tile.frequency
+                        //     sum += tile.frequency * vec_cast(u32, cast([4]u8) tile.color)
+                        // }
+                        
+                        // color := cast(rl.Color) vec_cast(u8, sum/count)
+                        // for tile, i in slice(tiles) {
+                        //     present: b32
+                        //     for it in value do if it == tile { present = true; break }
+                        //     if !present do continue
                             
-                            option_size := cast(f32) Option_Size
+                        //     option_size := cast(f32) Option_Size
                             
-                            offset := vec_cast(f32, (i) % 7, (i) / 7)
-                            op := p + option_size * (offset+1)
+                        //     offset := vec_cast(f32, (i) % 7, (i) / 7)
+                        //     op := p + option_size * (offset+1)
                             
-                            option_rect := rl.Rectangle {op.x, op.y, option_size, option_size}
-                            mouse := rl.GetMousePosition()
-                            if mouse.x >= option_rect.x && mouse.y >= option_rect.y && mouse.x < option_rect.x + option_rect.width && mouse.y < option_rect.y + option_rect.height {
-                                if rl.IsMouseButtonPressed(.LEFT) {
-                                    collapse_cell(slice(grid), cell, {x,y}, tile, &to_check)
-                                }
-                            }
+                        //     option_rect := rl.Rectangle {op.x, op.y, option_size, option_size}
+                        //     mouse := rl.GetMousePosition()
+                        //     if mouse.x >= option_rect.x && mouse.y >= option_rect.y && mouse.x < option_rect.x + option_rect.width && mouse.y < option_rect.y + option_rect.height {
+                        //         if rl.IsMouseButtonPressed(.LEFT) {
+                        //             collapse_cell(slice(grid), cell, {x,y}, tile, &to_check)
+                        //         }
+                        //     }
                             
-                            rect := rl.Rectangle {p.x, p.y, size, size}
-                            rl.DrawTexturePro(tile.texture, {1,1, 1,1}, rect, 0, 0, rl.ColorAlpha(rl.WHITE, cast(f32) tile.frequency/cast(f32) count))
-                        }
+                        //     rl.DrawRectangleRec({p.x, p.y, size, size}, color)
+                        // }
                     }
                 }
             }
         }
         
         rl.EndMode2D()
+        render = time.since(render_start)
+        
+        buffer: [256]u8
+        text := format_string(buffer[:], "Update % Render %", update, render, flags = {.AppendZero})
+        rl.DrawText(cast(cstring) raw_data(text), 10,  10, 20, rl.RED)
         
         rl.EndDrawing()
     }
 }
 
-collapse_cell :: proc (grid: []Cell, cell: ^Cell, index: [2]int, pick: Tile, to_check: ^Array([2]int)) {
+Check :: struct {
+    index: [2]int,
+    depth: u32,
+}
+
+collapse_cell :: proc (grid: []Cell, cell: ^Cell, index: [2]int, pick: Tile, to_check: ^Array(Check), depth: u32 = 15) {
     options := cell.([dynamic]Tile)
     cell ^= pick
     delete(options)
     
-    add_neighbours :: proc (to_check: ^Array([2]int), index: [2]int) {
-        nexts := [4][2]int{{-1, 0}, {+1, 0}, {0, -1}, {0, +1}}
+    add_neighbours :: proc (to_check: ^Array(Check), index: [2]int, depth: u32) {
+        nexts := [4][2]int{{-1, 0}, {+1, 0}, {0, -1}, {0, +1}} 
         for n in nexts {
             next := n + index
             ok := true
@@ -299,7 +325,7 @@ collapse_cell :: proc (grid: []Cell, cell: ^Cell, index: [2]int, pick: Tile, to_
             
             if ok {
                 for entry in slice(to_check) {
-                    if entry == next {
+                    if entry.index == next {
                         ok = false
                         break
                     }
@@ -307,24 +333,24 @@ collapse_cell :: proc (grid: []Cell, cell: ^Cell, index: [2]int, pick: Tile, to_
             }
             
             if ok {
-                append(to_check, next)
+                append(to_check, Check {next, depth-1})
             }
         }
     }
-    add_neighbours(to_check, index)
+    add_neighbours(to_check, index, depth)
     
     //
     // Check all effected neighbours
     //
     for index: i64; index < to_check.count; index += 1 {
         next := to_check.data[index]
-        x := next.x
-        y := next.y
+        x := next.index.x
+        y := next.index.y
         other := &grid[y*Dim + x]
         
         if options, ok := &other.([dynamic]Tile); ok {
-            if update_maze_cell(grid[:], other, options, x, y) {
-                add_neighbours(to_check, {x, y})
+            if update_maze_cell(grid[:], other, options, x, y) && next.depth > 0 {
+                add_neighbours(to_check, {x, y}, next.depth)
             }
         }
     }
@@ -368,7 +394,6 @@ update_maze_cell :: proc (grid: []Cell, cell: ^Cell, options: ^[dynamic]Tile, x,
         }
     }
     
-    // @incompletet handle that we could have removed all options leaving the cell invalid and the grid unsolvable
     return changed
 }
 
