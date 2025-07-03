@@ -34,10 +34,8 @@ main :: proc () {
     rl.InitWindow(Screen_Size.x, Screen_Size.y, "Wave Function Collapse")
     rl.SetTargetFPS(120)
     
-    camera: rl.Camera2D = {
-        zoom = 1
-    }
-        
+    camera := rl.Camera2D { zoom = 1 }
+    
     e  := rl.LoadTexture("./e.bmp")
     ne := rl.LoadTexture("./ne.bmp")
     n  := rl.LoadTexture("./n.bmp")
@@ -62,7 +60,7 @@ main :: proc () {
         // 
         
         pixels := (cast([^]Color3) img.data)[:img.width * img.height]
-
+        
         w := cast(int) img.width
         h := cast(int) img.height
         // east
@@ -97,7 +95,7 @@ main :: proc () {
         }
         cell = options
     }
-
+    
     entropy := seed_random_series(0x75658663)
     
     lowest_indices := make_array(&arena, [2]int, Dim*Dim)
@@ -117,52 +115,10 @@ main :: proc () {
                 
                 options := lowest_cell.([dynamic]Tile)
                 pick    := random_choice(&entropy, options[:])^
-                delete(options)
-                lowest_cell ^= pick
-                
-                // for maze 
-                nexts := [4][2]int{{-1, 0}, {+1, 0}, {0, -1}, {0, +1}}
-                for n in nexts {
-                    next := n + lowest_index
-                    ok := true
-                    
-                    if ok && (next.x < 0 || next.x >= Dim || next.y < 0 || next.y >= Dim) {
-                        ok = false
-                    }
-                    
-                    if ok {
-                        for entry in slice(to_check) {
-                            if entry == next {
-                                ok = false
-                                break
-                            }
-                        }
-                    }
-                    
-                    if ok {
-                        append(&to_check, next)
-                    }
-                }
+                collapse_cell(grid[:], lowest_cell, lowest_index, pick, &to_check)
                 
                 clear(&lowest_indices)
                 lowest_cardinality = max(u32)
-            }
-            
-            //
-            // Check all effected neighbours
-            //
-            // @incomplete if needed neighbours of neighbours that changed need to be updated as well
-            
-            for next in slice(to_check) {
-                x := next.x
-                y := next.y
-                cell := &grid[y*Dim + x]
-                
-                if options, ok := &cell.([dynamic]Tile); ok {
-                    if len(options) > 1 {
-                        update_maze_cell(grid[:], cell, options, x, y)
-                    }
-                }
             }
             
             // 
@@ -190,7 +146,7 @@ main :: proc () {
         
         
         rl.BeginDrawing()
-        rl.ClearBackground({0, 0x65, 0x60, 0x70})
+        rl.ClearBackground({0x54, 0x57, 0x66, 0xFF})
         
         rl.BeginMode2D(camera)
         
@@ -201,7 +157,7 @@ main :: proc () {
         
         for entry in slice(lowest_indices) {
             p := get_screen_p(entry.x, entry.y) + Pad
-            rl.DrawRectangleRec({p.x-Pad, p.y-Pad, size+Pad*2, size+Pad*2}, rl.ColorAlpha(rl.GREEN, 0.3))
+            rl.DrawRectangleRec({p.x-Pad, p.y-Pad, size+Pad*2, size+Pad*2}, rl.ColorAlpha(rl.BLUE, 0.3))
         }
         
         for y in 0..<Dim {
@@ -232,7 +188,7 @@ main :: proc () {
                             mouse := rl.GetMousePosition()
                             if mouse.x >= rect.x && mouse.y >= rect.y && mouse.x < rect.x + rect.width && mouse.y < rect.y + rect.height {
                                 if rl.IsMouseButtonPressed(.LEFT) {
-                                    cell ^= tile
+                                    collapse_cell(grid[:], cell, {x,y}, tile, &to_check)
                                 }
                             }
                             rl.DrawTexturePro(tile.texture, Tile_Size, rect, 0, 0, rl.WHITE)
@@ -245,6 +201,53 @@ main :: proc () {
         rl.EndMode2D()
         
         rl.EndDrawing()
+    }
+}
+
+collapse_cell :: proc (grid: []Cell, cell: ^Cell, index: [2]int, pick: Tile, to_check: ^Array([2]int)) {
+    options := cell.([dynamic]Tile)
+    delete(options)
+    cell ^= pick
+    
+    // for maze 
+    nexts := [4][2]int{{-1, 0}, {+1, 0}, {0, -1}, {0, +1}}
+    for n in nexts {
+        next := n + index
+        ok := true
+        
+        if ok && (next.x < 0 || next.x >= Dim || next.y < 0 || next.y >= Dim) {
+            ok = false
+        }
+        
+        if ok {
+            for entry in slice(to_check) {
+                if entry == next {
+                    ok = false
+                    break
+                }
+            }
+        }
+        
+        if ok {
+            append(to_check, next)
+        }
+    }
+    
+    //
+    // Check all effected neighbours
+    //
+    // @incomplete if needed neighbours of neighbours that changed need to be updated as well
+    
+    for next in slice(to_check) {
+        x := next.x
+        y := next.y
+        other := &grid[y*Dim + x]
+        
+        if options, ok := &other.([dynamic]Tile); ok {
+            if len(options) > 1 {
+                update_maze_cell(grid[:], other, options, x, y)
+            }
+        }
     }
 }
 
@@ -296,18 +299,6 @@ update_maze_cell :: proc (grid: []Cell, cell: ^Cell, options: ^[dynamic]Tile, x,
             builtin.unordered_remove(options, index)
         }
     }
-}
-
-// @premature_optimization
-reduce_to_value :: proc (options: bit_set[$E]) -> (result: E) {
-    assert(card(options) == 1)
     
-    for tile in E {
-        if tile in options {
-            result = tile
-            break
-        }
-    }
-    
-    return result
+    // @incompletet handle that we could have removed all options leaving the cell invalid and the grid unsolvable
 }
