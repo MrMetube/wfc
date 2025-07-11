@@ -1,9 +1,10 @@
-#+vet !unused-procedures
+#+vet !unused-procedures !unused-imports
 package main
 
 import "base:intrinsics"
 import "base:builtin"
 import "core:math"
+import "core:simd"
 
 ////////////////////////////////////////////////
 // Types

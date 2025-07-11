@@ -53,7 +53,6 @@ main :: proc () {
     camera := rl.Camera2D { zoom = 1 }
     
     the_font = rl.LoadFontEx(`.\Caladea-Regular.ttf`, font_scale, &cps[0], len(cps))
-    // the_font = rl.LoadFontEx(`.\VictorMonoNerdFont-Regular.ttf`, font_scale, &cps[0], len(cps))
     
     arena: Arena
     init_arena(&arena, make([]u8, 1*Gigabyte))
@@ -200,7 +199,7 @@ main :: proc () {
         x, y: f32 = 10, 10
         text := format_string(buffer[:], "Update: pick % collect % total %", pick, collect, update, flags = {.AppendZero})
         rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} + {2,2}, font_scale, 2, rl.BLACK)
-        rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y}        , font_scale, 2, rl.WHITE)
+        rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y}        , font_scale, 2, cast(f32) time.duration_seconds(update) < rl.GetFrameTime() ? rl.WHITE : rl.RED)
         y += font_scale
         text = format_string(buffer[:], "Render %", render, flags = {.AppendZero})
         rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} + {2,2}, font_scale, 2, rl.BLACK)
@@ -211,10 +210,11 @@ main :: proc () {
 }
 
 draw_options :: proc (grid: Array(Cell), tiles: Array(Tile), value: [dynamic]int, p: v2, size: v2) -> (should_collapse: b32, target: Tile) {
+    count: u32
     when false {
         for tile, i in slice(tiles) {
             present: b32
-            for it in value do if it == tile { present = true; break }
+            for it in value do if tiles.data[it] == tile { present = true; break }
             if !present do continue
             
             factor := square_root(cast(f32) count)
@@ -233,8 +233,7 @@ draw_options :: proc (grid: Array(Cell), tiles: Array(Tile), value: [dynamic]int
             
             // rl.DrawRectangleRec(option_rect, tile.color)
         }
-    } else {
-        count: u32
+    } else when false {
         sum: [4]u32
         for tile in slice(tiles) {
             present: b32
@@ -246,6 +245,9 @@ draw_options :: proc (grid: Array(Cell), tiles: Array(Tile), value: [dynamic]int
         
         color := cast(rl.Color) vec_cast(u8, (sum/count) / {1,1,1,4})
         rl.DrawRectangleRec({p.x, p.y, size.x, size.y}, color)
+    } else {
+        // nothing
+        unused(count)
     }
     
     return should_collapse, target
