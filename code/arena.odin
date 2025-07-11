@@ -96,6 +96,18 @@ copy_string :: proc(arena: ^Arena, s: string) -> (result: string) {
     
     return result
 }
+@(require_results)
+copy_cstring :: proc(arena: ^Arena, s: string) -> (result: cstring) {
+    buffer := push_slice(arena, u8, len(s)+1, no_clear())
+    bytes  := transmute([]u8) s
+    for r, i in bytes {
+        buffer[i] = r
+    }
+    buffer[len(buffer)-1] = 0
+    result = cast(cstring) &buffer[0]
+    
+    return result
+}
 
 
 arena_has_room :: proc { arena_has_room_slice, arena_has_room_struct, arena_has_room_size }

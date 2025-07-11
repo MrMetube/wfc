@@ -138,17 +138,7 @@ main :: proc () {
     }
     
     grid := make_array(&arena, Cell, Dim*Dim)
-    init_grid :: proc(grid: ^Array(Cell), tiles: []Tile) {
-        clear(grid)
-        
-        for _ in 0..<len(grid.data) {
-            options := make([dynamic]Tile)
-            for tile in tiles {
-                builtin.append(&options, tile)
-            }
-            append(grid, options)
-        }
-    }
+    
     
     init_grid(&grid, slice(tiles))
     
@@ -300,6 +290,17 @@ main :: proc () {
         rl.DrawText(cast(cstring) raw_data(text), 10,  10, 20, rl.RED)
         
         rl.EndDrawing()
+    }
+}
+init_grid :: proc(grid: ^Array(Cell), tiles: []Tile) {
+    clear(grid)
+    
+    for _ in 0..<len(grid.data) {
+        options := make([dynamic]Tile)
+        for tile in tiles {
+            builtin.append(&options, tile)
+        }
+        append(grid, options)
     }
 }
 

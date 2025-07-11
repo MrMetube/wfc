@@ -33,35 +33,22 @@ view_memory_size :: proc(#any_int value: u64) -> (u64, string) {
     return value , "?"
 }
 
-view_order_of_magnitude :: proc(value: $T, format: View = {}) -> (result: View, magnitude: string) {
-    result = format
-    
+view_order_of_magnitude :: proc(value: $T, width: Maybe(u16) = 5, precision: Maybe(u8) = 2) -> (result: View, magnitude: string) {
     v: f64
     v, magnitude = order_of_magnitude(value)
     
-    result.kind = .Float
-    view_number(&result, v)
-    
     when intrinsics.type_is_integer(T) {
         v = round(f64, v * 100) * 0.01
-        if !result.precision_set {
-            result.precision_set = true
-            result.precision = 2
-        }
     }
-    
-    if !result.width_set {
-        result.width_set = true
-        result.width = 5
-    }
-    
+
+    result = view_float(v, width = width, precision = precision)
     
     return result, magnitude
 }
 
 view_percentage :: proc { view_percentage_parts, view_percentage_ratio }
 view_percentage_parts :: proc(a, b: $N)   -> (result: View) { return view_percentage(cast(f64) a / cast(f64) b) }
-view_percentage_ratio :: proc(value: f64) -> (result: View) {
+view_percentage_ratio :: proc(value: $F) -> (result: View) {
     result = view_float(value * 100, precision = 0, width = 2)
     return result
 }

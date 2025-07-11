@@ -27,7 +27,7 @@ build_exe_path :: `.\build\build.exe`
 build_dir :: `.\build\`
 data_dir  :: `.\data`
 
-odin      :: `C:\tools\odin\odin.exe` // @cleanup Could this be ODIN_COMPILER or whatever its called?
+odin      :: ODIN_ROOT + `odin.exe`
 code_dir  :: `..\code` 
 
 main :: proc() {

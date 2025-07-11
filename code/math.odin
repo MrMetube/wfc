@@ -230,7 +230,7 @@ Rect3 :: proc(xy: $R/Rectangle([2]$E), z_min, z_max: E) -> Rectangle([3]E) {
 }
 
 V4 :: proc { V4_x_yzw, V4_xy_zw, V4_xyz_w, V4_x_y_zw, V4_x_yz_w, V4_xy_z_w }
-V4_x_yzw  :: proc(x: $T, yzw: [2]T) -> (result: [4]T) {
+V4_x_yzw  :: proc(x: $T, yzw: [3]T) -> (result: [4]T) {
     result.x = x
     result.yzw = yzw
     return result
@@ -240,7 +240,7 @@ V4_xy_zw  :: proc(xy: [2]$T, zw: [2]T) -> (result: [4]T) {
     result.zw = zw
     return result
 }
-V4_xyz_w  :: proc(xyz: [2]$T, w: T) -> (result: [4]T) {
+V4_xyz_w  :: proc(xyz: [3]$T, w: T) -> (result: [4]T) {
     result.xyz = xyz
     result.w = w
     return result
