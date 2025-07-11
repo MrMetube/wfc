@@ -57,7 +57,7 @@ main :: proc () {
     arena: Arena
     init_arena(&arena, make([]u8, 1*Gigabyte))
     
-    city := rl.LoadImage("./dungeon.png")
+    city := rl.LoadImage("./city.png")
     tiles := make_array(&arena, Tile, 256)
     
     extract_tiles(city, &tiles)
@@ -128,19 +128,23 @@ main :: proc () {
             // 
             collect_start := time.now()
             
-            for y in 0..<Dim {
+            loop: for y in 0..<Dim {
                 for x in 0..<Dim {
                     index := y*Dim + x
                     cell := &grid.data[index]
                     
                     if options, ok := cell.([dynamic]int); ok {
                         cardinality := cast(u32) len(options)
-                        if cardinality > 0 && cardinality < lowest_cardinality {
+                        if cardinality < lowest_cardinality {
                             lowest_cardinality = cardinality
                             clear(&lowest_indices)
                         }
-                        if cardinality > 0 && cardinality <= lowest_cardinality {
+                        if cardinality <= lowest_cardinality {
                             append(&lowest_indices, [2]int{x,y})
+                        }
+                        if lowest_cardinality == 0 {
+                            init_grid(&grid, slice(tiles))
+                            break loop
                         }
                     }
                 }
@@ -253,7 +257,7 @@ draw_options :: proc (grid: Array(Cell), tiles: Array(Tile), value: [dynamic]int
     return should_collapse, target
 }
 
-extract_tiles :: proc (city: rl.Image, tiles: ^Array(Tile) ) {
+extract_tiles :: proc (city: rl.Image, tiles: ^Array(Tile)) {
     assert(city.format == .UNCOMPRESSED_R8G8B8A8)
     pixels := (cast([^]Color4) city.data)[:city.width * city.height]
     
@@ -271,63 +275,53 @@ extract_tiles :: proc (city: rl.Image, tiles: ^Array(Tile) ) {
                 }
             }
             
-            sub_image := rl.Image {
-                data   = &sub_pixels.data[0],
-                width  = Kernel, height = Kernel,
-                format = .UNCOMPRESSED_R8G8B8,
-                mipmaps = 1,
+            tile: Tile
+            pixels := sub_pixels.data
+            
+            w := Kernel
+            h := Kernel
+            // east
+            for y in 0..<h {
+                x := w-1
+                m := x-1
+                tile.sockets[0].center[y] = pixels[y*w + m]
+                tile.sockets[0].side[y]   = pixels[y*w + x]
+            }
+            // north
+            for x in 0..<w {
+                y := 0
+                m := y+1
+                tile.sockets[1].center[x] = pixels[m*w + x]
+                tile.sockets[1].side[x]   = pixels[y*w + x]
             }
             
-            tile: Tile
+            // west
+            for y in 0..<h {
+                x := 0
+                m := x+1
+                tile.sockets[2].center[y] = pixels[y*w + m]
+                tile.sockets[2].side[y]   = pixels[y*w + x]
+            }
+            
+            // south
+            for x in 0..<w {
+                y := h-1
+                m := y-1
+                tile.sockets[3].center[x] = pixels[m*w + x]
+                tile.sockets[3].side[x]   = pixels[y*w + x]
+            }
+            
             {
-                img := sub_image
-                pixels := (cast([^]Color3) img.data)[:img.width * img.height]
+                center := sub_pixels.data[1*Kernel+1]
+                c := hash.djb2((cast([^]u8) &center)[:size_of(center)])
+                e := hash.djb2((cast([^]u8) &tile.sockets[0])[:size_of(tile.sockets)])
+                n := hash.djb2((cast([^]u8) &tile.sockets[1])[:size_of(tile.sockets)])
+                w := hash.djb2((cast([^]u8) &tile.sockets[2])[:size_of(tile.sockets)])
+                s := hash.djb2((cast([^]u8) &tile.sockets[3])[:size_of(tile.sockets)])
                 
-                w := cast(int) img.width
-                h := cast(int) img.height
-                // east
-                for y in 0..<h {
-                    x := w-1
-                    m := x-1
-                    tile.sockets[0].center[y] = pixels[y*w + m]
-                    tile.sockets[0].side[y]   = pixels[y*w + x]
-                }
-                // north
-                for x in 0..<w {
-                    y := 0
-                    m := y+1
-                    tile.sockets[1].center[x] = pixels[m*w + x]
-                    tile.sockets[1].side[x]   = pixels[y*w + x]
-                }
+                hash_0 := [?]u32{c, n, e, s, w}
                 
-                // west
-                for y in 0..<h {
-                    x := 0
-                    m := x+1
-                    tile.sockets[2].center[y] = pixels[y*w + m]
-                    tile.sockets[2].side[y]   = pixels[y*w + x]
-                }
-                
-                // south
-                for x in 0..<w {
-                    y := h-1
-                    m := y-1
-                    tile.sockets[3].center[x] = pixels[m*w + x]
-                    tile.sockets[3].side[x]   = pixels[y*w + x]
-                }
-                
-                {
-                    center := sub_pixels.data[1*Kernel+1]
-                    c := hash.djb2((cast([^]u8) &center)[:size_of(center)])
-                    e := hash.djb2((cast([^]u8) &tile.sockets[0])[:size_of(tile.sockets)])
-                    n := hash.djb2((cast([^]u8) &tile.sockets[1])[:size_of(tile.sockets)])
-                    w := hash.djb2((cast([^]u8) &tile.sockets[2])[:size_of(tile.sockets)])
-                    s := hash.djb2((cast([^]u8) &tile.sockets[3])[:size_of(tile.sockets)])
-                    
-                    hash_0 := [?]u32{c, n, e, s, w}
-                    
-                    tile.hash = hash.djb2((cast([^]u8) &hash_0)[:size_of(hash_0)])
-                }
+                tile.hash = hash.djb2((cast([^]u8) &hash_0)[:size_of(hash_0)])
             }
             
             present: ^Tile
@@ -409,7 +403,7 @@ collapse_cell :: proc (grid: []Cell, tiles: Array(Tile), cell: ^Cell, index: [2]
         other := &grid[y*Dim + x]
         
         if options, ok := &other.([dynamic]int); ok {
-            if update_maze_cell(grid[:], tiles, other, options, x, y) && next.depth > 0 {
+            if update_cell(grid[:], tiles, other, options, x, y) && next.depth > 0 {
                 add_neighbours(to_check, {x, y}, next.depth)
             }
         }
@@ -423,7 +417,7 @@ get_screen_p :: proc (x, y: int) -> (result: v2) {
     return result
 }
 
-update_maze_cell :: proc (grid: []Cell, tiles: Array(Tile), cell: ^Cell, options: ^[dynamic]int, x, y: int) -> (changed: b32) {
+update_cell :: proc (grid: []Cell, tiles: Array(Tile), cell: ^Cell, options: ^[dynamic]int, x, y: int) -> (changed: b32) {
     #reverse for tile_index, index in options {
         ok := true
         option := tiles.data[tile_index]
