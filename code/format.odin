@@ -5,7 +5,6 @@ package main
 This is a copy the original is in the handmade project
  */
 
-import "core:fmt"     // @Cleanup
 import "core:time"
 
 import "base:intrinsics"
@@ -240,7 +239,7 @@ view_character :: proc(value: u8) -> (result: View) {
 view_string :: proc(value: string) -> (result: View) {
     result = {
         kind  = .String, 
-        value = { bytes = transmute([]u8) value }
+        value = { bytes = transmute([]u8) value },
     }
     return result
 }
@@ -281,7 +280,7 @@ view_set_data :: proc(view: ^View, value: $T, kind: ViewKind) {
     view.kind = kind
 }
 
-view_set_number :: proc (view: ^View, flags: FormatNumberFlags = {}, positive_sign: FormatNumberSign = .Never,) {
+view_set_number :: proc (view: ^View, flags: FormatNumberFlags = {}, positive_sign: FormatNumberSign = .Never) {
     view.flags = flags
     view.positive_sign = positive_sign
 }
@@ -806,12 +805,12 @@ format_float_with_ryu :: proc(dest: ^StringBuilder, float: $F, view: ^View) {
     
     
     // @todo(viktor): handle .Uppercase in view.flags
-        
-    buffer := rest(dest^)
     when size_of(F) == 8 {
+        buffer := rest(dest^)
         result := d2fixed_buffered(float, precision, buffer)
         dest.count += auto_cast len(result)
     } else when size_of(F) == 4 {
+        buffer := rest(dest^)
         result := f2s_buffered(float, buffer)
         dest.count += auto_cast len(result)
     } else when size_of(F) == 2 {

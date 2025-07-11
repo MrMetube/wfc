@@ -23,6 +23,7 @@
 // - the removal of the HAS_64_BIT_INTRINSICS
 // - the removal of the ryu_generic code
 // - the removal of the RYU_DEBUG define and any debug prints
+#+vet !semicolon !unused-procedures
 package main
 
 import "base:intrinsics"

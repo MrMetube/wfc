@@ -1,8 +1,6 @@
 #+vet !unused-procedures
 package main
 
-import "base:runtime"
-
 Arena :: struct {
     storage:    []u8, // :Array
     used:       u64,

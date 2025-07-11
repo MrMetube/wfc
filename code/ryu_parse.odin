@@ -16,6 +16,7 @@
 // Unless required by applicable law or agreed to in writing, this software
 // is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 // KIND, either express or implied.
+#+vet !semicolon !unused-procedures
 package main
 
 import "base:intrinsics"
@@ -227,7 +228,7 @@ s2d_n :: proc ( buffer: []u8, len: int, result: ^f64) -> Status {
 
 s2d :: proc (buffer: string) -> (f64) {
     result: f64
-    status := s2d_n(transmute([]u8) buffer, len(buffer), &result);
+    _= s2d_n(transmute([]u8) buffer, len(buffer), &result);
     return result
 }
 
