@@ -4,7 +4,7 @@ import "core:time"
 import rl "vendor:raylib"
 
 Screen_Size :: [2]i32{1920, 1080}
-Dim :: 100
+Dim :: 200
 
         
 Draw_Size := min(Screen_Size.x, Screen_Size.y) / (Dim+1)
@@ -24,11 +24,11 @@ cps := [?]rune {
     '1','2','3','4','5','6','7','8','9','0',
 }
 
-_update, _render, _collapse, _add_neighbours, _matches, _matches_tile, _collect: time.Duration
+_total, _update, _render, _collapse, _add_neighbours, _matches, _matches_tile, _collect: time.Duration
 main :: proc () {
     rl.SetTraceLogLevel(.WARNING)
     rl.InitWindow(Screen_Size.x, Screen_Size.y, "Wave Function Collapse")
-    rl.SetTargetFPS(144)
+    rl.SetTargetFPS(60)
     
     camera := rl.Camera2D { zoom = 1 }
     
@@ -37,26 +37,26 @@ main :: proc () {
     arena: Arena
     init_arena(&arena, make([]u8, 1*Gigabyte))
     
-    city := rl.LoadImage("./flower.png")
+    city := rl.LoadImage("./city.png")
     collapse: Collapse
-
-    collapse.tiles = make_array(&arena, Tile, 256)
-    collapse.grid  = make_array(&arena, Cell, Dim*Dim)
     
+    collapse.tiles    = make_array(&arena, Tile,  256)
+    collapse.grid     = make_array(&arena, Cell,  Dim*Dim)
+    collapse.to_check = make_array(&arena, Check, Dim*Dim)
+    
+    _total_start := time.now()
     extract_tiles(&collapse, city)
     
     entangle_grid(&collapse)
     
-    entropy := seed_random_series()//0x75658663)
+    entropy := seed_random_series(0x75658663)
     
     lowest_indices := make_array(&arena, [2]int, Dim*Dim)
     lowest_cardinality := max(u32)
-    to_check := make_array(&arena, Check, Dim*Dim)
     
     using collapse
     
     for !rl.WindowShouldClose() {
-        
         update_start := time.now()
         _collapse = 0
         _collect = 0
@@ -64,7 +64,7 @@ main :: proc () {
         _matches = 0
         _matches_tile = 0
         
-        for cast(f32) time.duration_seconds(time.since(update_start)) < 0.00694 {
+        for cast(f32) time.duration_seconds(time.since(update_start)) < 0.016 {
             //
             // Pick a cell to collapse
             //
@@ -81,11 +81,10 @@ main :: proc () {
                     }
                     
                     for index in slice(lowest_indices) {
-                        cell  := &grid.data[index.y * Dim + index.x]
-                        add_neighbours(&to_check, index)
+                        add_neighbours(&collapse, index)
                     }
                     
-                    check_all_neighbours(& collapse, &to_check)
+                    check_all_neighbours(& collapse)
                 } else {
                     lowest_index := random_choice(&entropy, slice(lowest_indices))^
                     lowest_cell  := &grid.data[lowest_index.y * Dim + lowest_index.x]
@@ -104,7 +103,7 @@ main :: proc () {
                         }
                         choice -= option.frequency
                     }
-                    collapse_cell_and_check_all_neighbours(&collapse, lowest_cell, lowest_index, pick, &to_check)
+                    collapse_cell_and_check_all_neighbours(&collapse, lowest_cell, lowest_index, pick)
                 }
                 
                 clear(&lowest_indices)
@@ -162,7 +161,9 @@ main :: proc () {
             color := lowest_cardinality == 1 ? rl.PURPLE : rl.BLUE
             rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(color, 0.6))
         }
-
+        
+        
+        all_done := true
         for y in 0..<Dim {
             for x in 0..<Dim {
                 cell := &grid.data[y*Dim + x]
@@ -174,16 +175,21 @@ main :: proc () {
                     rl.DrawRectangleRec({p.x, p.y, size, size}, value.color)
                     
                   case [dynamic]int:
+                    all_done = false
                     if len(value) == 0 {
                         rl.DrawRectangleRec({p.x, p.y, size, size}, rl.RED)
                     } else {
                         should_collapse, tile := draw_options(&collapse, value, p, size)
                         if should_collapse {
-                            collapse_cell_and_check_all_neighbours(&collapse, cell, {x,y}, tile, &to_check)
+                            collapse_cell_and_check_all_neighbours(&collapse, cell, {x,y}, tile)
                         }
                     }
                 }
             }
+        }
+        
+        if _total == 0 && all_done {
+            _total = time.since(_total_start)
         }
         
         rl.EndMode2D()
@@ -210,6 +216,10 @@ main :: proc () {
             rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, rl.WHITE)
         y += font_scale
             text = format_string(buffer[:], "Render %", _render, flags = {.AppendZero})
+            rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, rl.WHITE)
+        y += font_scale
+        y += font_scale
+            text = format_string(buffer[:], "Total %", _total, flags = {.AppendZero})
             rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, rl.WHITE)
         
         rl.EndDrawing()

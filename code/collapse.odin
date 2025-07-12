@@ -10,7 +10,7 @@ Kernel :: 3
 Collapse :: struct {
     grid:  Array(Cell), 
     tiles: Array(Tile),
-    // adjacency: map[Key]bool,
+    to_check: Array(Check),
 }
 
 Cell :: union {
@@ -132,11 +132,11 @@ extract_tiles :: proc (using collapse: ^Collapse, city: rl.Image) {
             }
         }
     }
-
 }
 
 entangle_grid :: proc(using collapse: ^Collapse) {
     clear(&grid)
+    clear(&to_check)
     
     for _ in 0..<len(grid.data) {
         options := make([dynamic]int)
@@ -147,10 +147,10 @@ entangle_grid :: proc(using collapse: ^Collapse) {
     }
 }
 
-collapse_cell_and_check_all_neighbours :: proc (using collapse: ^Collapse, cell: ^Cell, index: [2]int, pick: Tile, to_check: ^Array(Check), depth: u32 = 20) {
+collapse_cell_and_check_all_neighbours :: proc (using collapse: ^Collapse, cell: ^Cell, index: [2]int, pick: Tile, depth: u32 = 100000) {
     collapse_cell(cell, pick)
-    add_neighbours(to_check, index, depth)
-    check_all_neighbours(collapse, to_check)
+    add_neighbours(collapse, index, depth)
+    check_all_neighbours(collapse)
 }
 collapse_cell :: proc (cell: ^Cell, pick: Tile) {
     options := cell.([dynamic]int)
@@ -159,7 +159,7 @@ collapse_cell :: proc (cell: ^Cell, pick: Tile) {
 }
 
 
-add_neighbours :: proc (to_check: ^Array(Check), index: [2]int, depth: u32 = 20) {
+add_neighbours :: proc (using collapse: ^Collapse, index: [2]int, depth: u32 = 100000) {
     start := time.now()
     defer _add_neighbours += time.since(start)
     
@@ -178,12 +178,12 @@ add_neighbours :: proc (to_check: ^Array(Check), index: [2]int, depth: u32 = 20)
         }
         
         if ok {
-            append(to_check, Check {next, depth-1})
+            append(&to_check, Check {next, depth-1})
         }
     }
 }
 
-check_all_neighbours :: proc (using collapse: ^Collapse, to_check: ^Array(Check)) {
+check_all_neighbours :: proc (using collapse: ^Collapse) {
     for index: i64; index < to_check.count; index += 1 {
         next := to_check.data[index]
         x := next.index.x
@@ -192,7 +192,7 @@ check_all_neighbours :: proc (using collapse: ^Collapse, to_check: ^Array(Check)
         
         if options, ok := &other.([dynamic]int); ok {
             if reduce_entropy(collapse, other, options, {x, y}) && next.depth > 0 {
-                add_neighbours(to_check, {x, y}, next.depth)
+                add_neighbours(collapse, {x, y}, next.depth)
             }
         }
     }
@@ -217,7 +217,7 @@ reduce_entropy :: proc (using collapse: ^Collapse, cell: ^Cell, options: ^[dynam
     return changed
 }
 
-matches :: proc(using collapse: ^Collapse, a: Tile, p: [2]int, direction: Direction) -> (result: b32) {
+matches :: proc(using collapse: ^Collapse, a: Tile, p: [2]int, direction: Direction) -> (result: bool) {
     start := time.now()
     defer _matches += time.since(start)
     
@@ -225,22 +225,22 @@ matches :: proc(using collapse: ^Collapse, a: Tile, p: [2]int, direction: Direct
     p += Delta[direction]
     p = (p + Dim) % Dim
     next := grid.data[p.y*Dim + p.x]
-    
+
     switch &value in next {
       case [dynamic]int: 
         result = false 
         for index in value {
             b := tiles.data[index]
-            result ||= matches_tile(collapse, a, b, direction)
+            result ||= matches_tile(a.sockets, b.sockets, direction)
         }
       case Tile:
-        result = matches_tile(collapse, a, value, direction)
+        result = matches_tile(a.sockets, value.sockets, direction)
     }
     
     return result
 }
 
-matches_tile :: proc(using collapse: ^Collapse, a, b: Tile, direction: Direction) -> (result: b32) {
+matches_tile :: proc(a, b: [4]Socket, direction: Direction) -> (result: bool) {
     start := time.now()
     defer _matches_tile += time.since(start)
     
@@ -253,8 +253,8 @@ matches_tile :: proc(using collapse: ^Collapse, a, b: Tile, direction: Direction
     }
     
     result = true
-    result &&= a.sockets[a_side].side   == b.sockets[b_side].center
-    result &&= a.sockets[a_side].center == b.sockets[b_side].side
+    result &&= a[a_side].side   == b[b_side].center
+    result &&= a[a_side].center == b[b_side].side
     
     return result
 }
