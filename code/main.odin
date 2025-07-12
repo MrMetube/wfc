@@ -10,11 +10,17 @@ Screen_Size :: [2]i32{1920, 1080}
 Dim :: 100
 
         
-Draw_Size   := min(Screen_Size.x, Screen_Size.y) / (Dim+1)
-size := cast(f32) Draw_Size
+Draw_Size := min(Screen_Size.x, Screen_Size.y) / (Dim+1)
+size      := cast(f32) Draw_Size
 
 Kernel :: 3
 Tile_Size :: rl.Rectangle{0,0,Kernel,Kernel}
+
+Collapse :: struct {
+    grid:  Array(Cell), 
+    tiles: Array(Tile),
+    // adjacency: map[Key]bool,
+}
 
 Cell :: union {
     Tile,
@@ -33,6 +39,15 @@ Socket :: struct {
 }
 Color3 :: [3]u8
 Color4 :: [4]u8
+
+Delta := [Direction] [2]int {
+    .West  = {-1,  0},
+    .North = { 0, -1},
+    .East  = {+1,  0},
+    .South = { 0, +1},
+}
+
+Direction :: enum { East, North, South, West }
 
 the_font: rl.Font
 font_scale :: 32
@@ -58,20 +73,22 @@ main :: proc () {
     init_arena(&arena, make([]u8, 1*Gigabyte))
     
     city := rl.LoadImage("./city.png")
-    tiles := make_array(&arena, Tile, 256)
+    collapse: Collapse
+
+    collapse.tiles = make_array(&arena, Tile, 256)
+    collapse.grid  = make_array(&arena, Cell, Dim*Dim)
     
-    extract_tiles(city, &tiles)
+    extract_tiles(&collapse, city)
     
-    grid := make_array(&arena, Cell, Dim*Dim)
-    
-    
-    init_grid(&grid, slice(tiles))
+    entangle_grid(&collapse)
     
     entropy := seed_random_series()//0x75658663)
     
     lowest_indices := make_array(&arena, [2]int, Dim*Dim)
     lowest_cardinality := max(u32)
     to_check := make_array(&arena, Check, Dim*Dim)
+    
+    using collapse
     
     update, render, pick, collect: time.Duration
     for !rl.WindowShouldClose() {
@@ -92,9 +109,9 @@ main :: proc () {
                         cell  := &grid.data[index.y * Dim + index.x]
                         options := cell.([dynamic]int)
                         if len(options) == 0 {
-                            init_grid(&grid, slice(tiles))
+                            entangle_grid(&collapse)
                         } else {
-                            collapse_cell(slice(grid), tiles, cell, index, tiles.data[options[0]], &to_check)
+                            collapse_cell(&collapse, cell, index, tiles.data[options[0]], &to_check)
                         }
                     }
                 } else {
@@ -115,7 +132,7 @@ main :: proc () {
                         }
                         choice -= option.frequency
                     }
-                    collapse_cell(slice(grid), tiles, lowest_cell, lowest_index, pick, &to_check)
+                    collapse_cell(&collapse, lowest_cell, lowest_index, pick, &to_check)
                 }
                 
                 clear(&lowest_indices)
@@ -143,7 +160,8 @@ main :: proc () {
                             append(&lowest_indices, [2]int{x,y})
                         }
                         if lowest_cardinality == 0 {
-                            init_grid(&grid, slice(tiles))
+                            entangle_grid(&collapse)
+                            println("Collapse failed: restarting.")
                             break loop
                         }
                     }
@@ -187,9 +205,9 @@ main :: proc () {
                     if len(value) == 0 {
                         rl.DrawRectangleRec({p.x, p.y, size, size}, rl.RED)
                     } else {
-                        should_collapse, tile := draw_options(grid, tiles, value, p, size)
+                        should_collapse, tile := draw_options(&collapse, value, p, size)
                         if should_collapse {
-                            collapse_cell(slice(grid), tiles, cell, {x,y}, tile, &to_check)
+                            collapse_cell(&collapse, cell, {x,y}, tile, &to_check)
                         }
                     }
                 }
@@ -213,7 +231,7 @@ main :: proc () {
     }
 }
 
-draw_options :: proc (grid: Array(Cell), tiles: Array(Tile), value: [dynamic]int, p: v2, size: v2) -> (should_collapse: b32, target: Tile) {
+draw_options :: proc (using collapse: ^Collapse, value: [dynamic]int, p: v2, size: v2) -> (should_collapse: b32, target: Tile) {
     count: u32
     when false {
         for tile, i in slice(tiles) {
@@ -235,9 +253,9 @@ draw_options :: proc (grid: Array(Cell), tiles: Array(Tile), value: [dynamic]int
                 }
             }
             
-            // rl.DrawRectangleRec(option_rect, tile.color)
+            rl.DrawRectangleRec(option_rect, tile.color)
         }
-    } else when false {
+    } else when !false {
         sum: [4]u32
         for tile in slice(tiles) {
             present: b32
@@ -257,7 +275,7 @@ draw_options :: proc (grid: Array(Cell), tiles: Array(Tile), value: [dynamic]int
     return should_collapse, target
 }
 
-extract_tiles :: proc (city: rl.Image, tiles: ^Array(Tile)) {
+extract_tiles :: proc (using collapse: ^Collapse, city: rl.Image) {
     assert(city.format == .UNCOMPRESSED_R8G8B8A8)
     pixels := (cast([^]Color4) city.data)[:city.width * city.height]
     
@@ -338,22 +356,22 @@ extract_tiles :: proc (city: rl.Image, tiles: ^Array(Tile)) {
                 tile.color.rgb = sub_pixels.data[1*Kernel+1]
                 tile.color.a = 255
                 tile.frequency = 1
-                append(tiles, tile)
+                append(&tiles, tile)
             }
         }
     }
 
 }
 
-init_grid :: proc(grid: ^Array(Cell), tiles: []Tile) {
-    clear(grid)
+entangle_grid :: proc(using collapse: ^Collapse) {
+    clear(&grid)
     
     for _ in 0..<len(grid.data) {
         options := make([dynamic]int)
-        for _, i in tiles {
+        for _, i in slice(tiles) {
             builtin.append(&options, i)
         }
-        append(grid, options)
+        append(&grid, options)
     }
 }
 
@@ -362,14 +380,13 @@ Check :: struct {
     depth: u32,
 }
 
-collapse_cell :: proc (grid: []Cell, tiles: Array(Tile), cell: ^Cell, index: [2]int, pick: Tile, to_check: ^Array(Check), depth: u32 = 20) {
+collapse_cell :: proc (using collapse: ^Collapse, cell: ^Cell, index: [2]int, pick: Tile, to_check: ^Array(Check), depth: u32 = 20) {
     options := cell.([dynamic]int)
     cell ^= pick
     delete(options)
     
     add_neighbours :: proc (to_check: ^Array(Check), index: [2]int, depth: u32) {
-        nexts := [4][2]int{{-1, 0}, {+1, 0}, {0, -1}, {0, +1}} 
-        for n in nexts {
+        for n in Delta {
             next := n + index
             ok := true
             
@@ -394,16 +411,16 @@ collapse_cell :: proc (grid: []Cell, tiles: Array(Tile), cell: ^Cell, index: [2]
     add_neighbours(to_check, index, depth)
     
     //
-    // Check all effected neighbours
+    // Check all neighbours
     //
     for index: i64; index < to_check.count; index += 1 {
         next := to_check.data[index]
         x := next.index.x
         y := next.index.y
-        other := &grid[y*Dim + x]
+        other := &grid.data[y*Dim + x]
         
         if options, ok := &other.([dynamic]int); ok {
-            if update_cell(grid[:], tiles, other, options, x, y) && next.depth > 0 {
+            if reduce_entropy(collapse, other, options, {x, y}) && next.depth > 0 {
                 add_neighbours(to_check, {x, y}, next.depth)
             }
         }
@@ -417,29 +434,30 @@ get_screen_p :: proc (x, y: int) -> (result: v2) {
     return result
 }
 
-update_cell :: proc (grid: []Cell, tiles: Array(Tile), cell: ^Cell, options: ^[dynamic]int, x, y: int) -> (changed: b32) {
+reduce_entropy :: proc (using collapse: ^Collapse, cell: ^Cell, options: ^[dynamic]int, p: [2]int) -> (changed: b32) {
+    x, y: int = p.x, p.y
     #reverse for tile_index, index in options {
         ok := true
         option := tiles.data[tile_index]
         sockets := option.sockets
         // west
         if x-1 >= 0  {
-            n := grid[(y)*Dim + (x-1)]
+            n := grid.data[(y)*Dim + (x-1)]
             ok &&= matches(tiles, sockets, n, 2, 0)
         }
         // north
         if y-1 >= 0  {
-            n := grid[(y-1)*Dim + (x)]
+            n := grid.data[(y-1)*Dim + (x)]
             ok &&= matches(tiles, sockets, n, 1, 3)
         }
         // east
         if x+1 < Dim {
-            n := grid[(y)*Dim + (x+1)]
+            n := grid.data[(y)*Dim + (x+1)]
             ok &&= matches(tiles, sockets, n, 0, 2)
         }
         // south
         if y+1 < Dim {
-            n := grid[(y+1)*Dim + (x)]
+            n := grid.data[(y+1)*Dim + (x)]
             ok &&= matches(tiles, sockets, n, 3, 1)
         }
         
