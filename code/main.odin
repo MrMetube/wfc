@@ -20,12 +20,11 @@ cps := [?]rune {
     'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
     'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
     ',',';','.',':','-','_','#','\'','+','*','~','´','`','?','\\','=','}',')',']','(','[','/','{','&','%','$','§','"','!','^','°',' ',
-    'µ',
+    'µ','@','€','²','³',
     '1','2','3','4','5','6','7','8','9','0',
-    'Α', 'α', 'Β', 'β', 'Γ', 'γ', 'Δ', 'δ', 'Ε', 'ε', 'Ζ', 'ζ', 'Η', 'η', 'Θ', 'θ', 'Ι', 'ι', 'Κ', 'κ', 'Λ', 'λ', 'Μ', 'μ', 'Ν', 'ν', 'Ξ', 'ξ', 'Ο', 'ο', 'Π', 'π', 'Ρ', 'ρ', 'Σ', 'σ', 'ς', 'Τ', 'τ', 'Υ', 'υ', 'Φ', 'φ', 'Χ', 'χ', 'Ψ', 'ψ', 'Ω', 'ω',
 }
 
-neighbours, update, render, pick_and_collapse, collect: time.Duration
+_update, _render, _collapse, _add_neighbours, _matches, _matches_tile, _collect: time.Duration
 main :: proc () {
     rl.SetTraceLogLevel(.WARNING)
     rl.InitWindow(Screen_Size.x, Screen_Size.y, "Wave Function Collapse")
@@ -59,9 +58,11 @@ main :: proc () {
     for !rl.WindowShouldClose() {
         
         update_start := time.now()
-        pick_and_collapse = 0
-        collect = 0
-        neighbours = 0
+        _collapse = 0
+        _collect = 0
+        _add_neighbours = 0
+        _matches = 0
+        _matches_tile = 0
         
         for cast(f32) time.duration_seconds(time.since(update_start)) < 0.00694 {
             //
@@ -76,8 +77,15 @@ main :: proc () {
                         cell  := &grid.data[index.y * Dim + index.x]
                         options := cell.([dynamic]int)
                         assert(len(options) != 0)
-                        collapse_cell(&collapse, cell, index, tiles.data[options[0]], &to_check)
+                        collapse_cell(cell, tiles.data[options[0]])
                     }
+                    
+                    for index in slice(lowest_indices) {
+                        cell  := &grid.data[index.y * Dim + index.x]
+                        add_neighbours(&to_check, index)
+                    }
+                    
+                    check_all_neighbours(& collapse, &to_check)
                 } else {
                     lowest_index := random_choice(&entropy, slice(lowest_indices))^
                     lowest_cell  := &grid.data[lowest_index.y * Dim + lowest_index.x]
@@ -96,14 +104,14 @@ main :: proc () {
                         }
                         choice -= option.frequency
                     }
-                    collapse_cell(&collapse, lowest_cell, lowest_index, pick, &to_check)
+                    collapse_cell_and_check_all_neighbours(&collapse, lowest_cell, lowest_index, pick, &to_check)
                 }
                 
                 clear(&lowest_indices)
                 lowest_cardinality = max(u32)
             }
             
-            pick_and_collapse += time.since(pick_and_collapse_start)
+            _collapse += time.since(pick_and_collapse_start)
             // 
             // Collect all lowest cells
             // 
@@ -131,10 +139,10 @@ main :: proc () {
                     }
                 }
             }
-            collect += time.since(collect_start)
+            _collect += time.since(collect_start)
         }
         
-        update = time.since(update_start)
+        _update = time.since(update_start)
         // 
         // Render
         // 
@@ -171,7 +179,7 @@ main :: proc () {
                     } else {
                         should_collapse, tile := draw_options(&collapse, value, p, size)
                         if should_collapse {
-                            collapse_cell(&collapse, cell, {x,y}, tile, &to_check)
+                            collapse_cell_and_check_all_neighbours(&collapse, cell, {x,y}, tile, &to_check)
                         }
                     }
                 }
@@ -179,23 +187,29 @@ main :: proc () {
         }
         
         rl.EndMode2D()
-        render = time.since(render_start)
+        _render = time.since(render_start)
         
         buffer: [256]u8
         x, y: f32 = 10, 10
-            text := format_string(buffer[:], "Update %", update, flags = {.AppendZero})
-            rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, cast(f32) time.duration_seconds(update) < rl.GetFrameTime() ? rl.WHITE : rl.RED)
+            text := format_string(buffer[:], "Update %", _update, flags = {.AppendZero})
+            rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, cast(f32) time.duration_seconds(_update) < rl.GetFrameTime() ? rl.WHITE : rl.RED)
         y += font_scale
-            text = format_string(buffer[:], "  pick and collapse %", pick_and_collapse, flags = {.AppendZero})
-            rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, cast(f32) time.duration_seconds(update) < rl.GetFrameTime() ? rl.WHITE : rl.RED)
+            text = format_string(buffer[:], "  pick and collapse %", _collapse, flags = {.AppendZero})
+            rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, rl.WHITE)
         y += font_scale
-            text = format_string(buffer[:], "  get neighbours %", neighbours, flags = {.AppendZero})
-            rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, cast(f32) time.duration_seconds(update) < rl.GetFrameTime() ? rl.WHITE : rl.RED)
+            text = format_string(buffer[:], "  get neighbours %", _add_neighbours, flags = {.AppendZero})
+            rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, rl.WHITE)
         y += font_scale
-            text = format_string(buffer[:], "  collect %", collect, flags = {.AppendZero})
-            rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, cast(f32) time.duration_seconds(update) < rl.GetFrameTime() ? rl.WHITE : rl.RED)
+            text = format_string(buffer[:], "  matches %", _matches, flags = {.AppendZero})
+            rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, rl.WHITE)
         y += font_scale
-            text = format_string(buffer[:], "Render %", render, flags = {.AppendZero})
+            text = format_string(buffer[:], "  matches_tile %", _matches_tile, flags = {.AppendZero})
+            rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, rl.WHITE)
+        y += font_scale
+            text = format_string(buffer[:], "  collect %", _collect, flags = {.AppendZero})
+            rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, rl.WHITE)
+        y += font_scale
+            text = format_string(buffer[:], "Render %", _render, flags = {.AppendZero})
             rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, rl.WHITE)
         
         rl.EndDrawing()

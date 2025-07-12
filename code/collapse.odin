@@ -147,40 +147,43 @@ entangle_grid :: proc(using collapse: ^Collapse) {
     }
 }
 
-collapse_cell :: proc (using collapse: ^Collapse, cell: ^Cell, index: [2]int, pick: Tile, to_check: ^Array(Check), depth: u32 = 20) {
+collapse_cell_and_check_all_neighbours :: proc (using collapse: ^Collapse, cell: ^Cell, index: [2]int, pick: Tile, to_check: ^Array(Check), depth: u32 = 20) {
+    collapse_cell(cell, pick)
+    add_neighbours(to_check, index, depth)
+    check_all_neighbours(collapse, to_check)
+}
+collapse_cell :: proc (cell: ^Cell, pick: Tile) {
     options := cell.([dynamic]int)
     cell ^= pick
     delete(options)
+}
+
+
+add_neighbours :: proc (to_check: ^Array(Check), index: [2]int, depth: u32 = 20) {
+    start := time.now()
+    defer _add_neighbours += time.since(start)
     
-    add_neighbours :: proc (to_check: ^Array(Check), index: [2]int, depth: u32) {
-        neighbours_start := time.now()
-        defer neighbours += time.since(neighbours_start)
+    for n in Delta {
+        next := n + index
+        next = (next + Dim) % Dim
         
-        for n in Delta {
-            next := n + index
-            next = (next + Dim) % Dim
-            
-            ok := true
-            if ok {
-                for entry in slice(to_check) {
-                    if entry.index == next {
-                        ok = false
-                        break
-                    }
+        ok := true
+        if ok {
+            for entry in slice(to_check) {
+                if entry.index == next {
+                    ok = false
+                    break
                 }
             }
-            
-            if ok {
-                append(to_check, Check {next, depth-1})
-            }
+        }
+        
+        if ok {
+            append(to_check, Check {next, depth-1})
         }
     }
-    
-    add_neighbours(to_check, index, depth)
-    
-    //
-    // Check all neighbours
-    //
+}
+
+check_all_neighbours :: proc (using collapse: ^Collapse, to_check: ^Array(Check)) {
     for index: i64; index < to_check.count; index += 1 {
         next := to_check.data[index]
         x := next.index.x
@@ -194,7 +197,6 @@ collapse_cell :: proc (using collapse: ^Collapse, cell: ^Cell, index: [2]int, pi
         }
     }
 }
-
 
 reduce_entropy :: proc (using collapse: ^Collapse, cell: ^Cell, options: ^[dynamic]int, p: [2]int) -> (changed: b32) {
     #reverse for tile_index, index in options {
@@ -216,12 +218,12 @@ reduce_entropy :: proc (using collapse: ^Collapse, cell: ^Cell, options: ^[dynam
 }
 
 matches :: proc(using collapse: ^Collapse, a: Tile, p: [2]int, direction: Direction) -> (result: b32) {
+    start := time.now()
+    defer _matches += time.since(start)
+    
     p := p
     p += Delta[direction]
     p = (p + Dim) % Dim
-    
-    assert(!(p.x < 0 || p.x >= Dim || p.y < 0 || p.y >= Dim))
-    if p.x < 0 || p.x >= Dim || p.y < 0 || p.y >= Dim do return true
     next := grid.data[p.y*Dim + p.x]
     
     switch &value in next {
@@ -239,6 +241,9 @@ matches :: proc(using collapse: ^Collapse, a: Tile, p: [2]int, direction: Direct
 }
 
 matches_tile :: proc(using collapse: ^Collapse, a, b: Tile, direction: Direction) -> (result: b32) {
+    start := time.now()
+    defer _matches_tile += time.since(start)
+    
     a_side, b_side: int = ---, ---
     switch direction {
       case .West:  a_side, b_side = 2, 0
