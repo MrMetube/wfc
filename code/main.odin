@@ -388,12 +388,11 @@ collapse_cell :: proc (using collapse: ^Collapse, cell: ^Cell, index: [2]int, pi
     add_neighbours :: proc (to_check: ^Array(Check), index: [2]int, depth: u32) {
         for n in Delta {
             next := n + index
+            next = (next + Dim) % Dim
+            
+            assert(!(next.x < 0 || next.x >= Dim || next.y < 0 || next.y >= Dim))
+            
             ok := true
-            
-            if ok && (next.x < 0 || next.x >= Dim || next.y < 0 || next.y >= Dim) {
-                ok = false
-            }
-            
             if ok {
                 for entry in slice(to_check) {
                     if entry.index == next {
@@ -427,39 +426,16 @@ collapse_cell :: proc (using collapse: ^Collapse, cell: ^Cell, index: [2]int, pi
     }
 }
 
-get_screen_p :: proc (x, y: int) -> (result: v2) {
-    result = vec_cast(f32, x, y) * cast(f32) Draw_Size
-    result.x += (cast(f32) Screen_Size.x - (size * Dim)) * 0.5
-    result.y += size * 0.5
-    return result
-}
-
 reduce_entropy :: proc (using collapse: ^Collapse, cell: ^Cell, options: ^[dynamic]int, p: [2]int) -> (changed: b32) {
-    x, y: int = p.x, p.y
     #reverse for tile_index, index in options {
         ok := true
         option := tiles.data[tile_index]
         sockets := option.sockets
-        // west
-        if x-1 >= 0  {
-            n := grid.data[(y)*Dim + (x-1)]
-            ok &&= matches(tiles, sockets, n, 2, 0)
-        }
-        // north
-        if y-1 >= 0  {
-            n := grid.data[(y-1)*Dim + (x)]
-            ok &&= matches(tiles, sockets, n, 1, 3)
-        }
-        // east
-        if x+1 < Dim {
-            n := grid.data[(y)*Dim + (x+1)]
-            ok &&= matches(tiles, sockets, n, 0, 2)
-        }
-        // south
-        if y+1 < Dim {
-            n := grid.data[(y+1)*Dim + (x)]
-            ok &&= matches(tiles, sockets, n, 3, 1)
-        }
+        
+        ok &&= matches(collapse, sockets, p, .West)
+        ok &&= matches(collapse, sockets, p, .North)
+        ok &&= matches(collapse, sockets, p, .East)
+        ok &&= matches(collapse, sockets, p, .South)
         
         if !ok {
             changed = true
@@ -470,18 +446,50 @@ reduce_entropy :: proc (using collapse: ^Collapse, cell: ^Cell, options: ^[dynam
     return changed
 }
 
-matches :: proc(tiles: Array(Tile), sockets: [4]Socket, next: Cell, a_side, b_side: int) -> (result: b32) {
+matches :: proc(using collapse: ^Collapse, sockets: [4]Socket, p: [2]int, direction: Direction) -> (result: b32) {
+    p := p
+    p += Delta[direction]
+    p = (p + Dim) % Dim
+    
+    assert(!(p.x < 0 || p.x >= Dim || p.y < 0 || p.y >= Dim))
+    if p.x < 0 || p.x >= Dim || p.y < 0 || p.y >= Dim do return true
+    next := grid.data[p.y*Dim + p.x]
+    
     switch &value in next {
       case [dynamic]int: 
         result = false 
         for index in value {
-            option := tiles.data[index]
-            result ||= matches(tiles, sockets, option, a_side, b_side)
+            tile := tiles.data[index]
+            result ||= matches_tile(collapse, sockets, tile, direction)
         }
       case Tile:
-        result = true
-        result &&= sockets[a_side].side   == value.sockets[b_side].center
-        result &&= sockets[a_side].center == value.sockets[b_side].side
+        result = matches_tile(collapse, sockets, value, direction)
     }
+    
+    return result
+}
+
+matches_tile :: proc(using collapse: ^Collapse, sockets: [4]Socket, tile: Tile, direction: Direction) -> (result: b32) {
+    a_side, b_side: int = ---, ---
+    switch direction {
+      case .West:  a_side, b_side = 2, 0
+      case .North: a_side, b_side = 1, 3
+      case .East:  a_side, b_side = 0, 2
+      case .South: a_side, b_side = 3, 1
+    }
+    
+    result = true
+    result &&= sockets[a_side].side   == tile.sockets[b_side].center
+    result &&= sockets[a_side].center == tile.sockets[b_side].side
+    
+    return result
+}
+
+get_screen_p :: proc (x, y: int) -> (result: v2) {
+    result = vec_cast(f32, x, y) * cast(f32) Draw_Size
+    
+    result.x += (cast(f32) Screen_Size.x - (size * Dim)) * 0.5
+    result.y += size * 0.5
+    
     return result
 }
