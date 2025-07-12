@@ -157,3 +157,9 @@ slice_from_parts_direct :: proc "contextless" (data: ^$T, #any_int count: i64) -
     // :PointerArithmetic
     return (cast([^]T)data)[:count]
 }
+
+                
+to_bytes :: proc (value: ^$T) -> (result: []u8) {
+    result = (cast([^]u8) value)[:size_of(T)]
+    return result
+}
