@@ -60,6 +60,7 @@ cps := [?]rune {
     'Α', 'α', 'Β', 'β', 'Γ', 'γ', 'Δ', 'δ', 'Ε', 'ε', 'Ζ', 'ζ', 'Η', 'η', 'Θ', 'θ', 'Ι', 'ι', 'Κ', 'κ', 'Λ', 'λ', 'Μ', 'μ', 'Ν', 'ν', 'Ξ', 'ξ', 'Ο', 'ο', 'Π', 'π', 'Ρ', 'ρ', 'Σ', 'σ', 'ς', 'Τ', 'τ', 'Υ', 'υ', 'Φ', 'φ', 'Χ', 'χ', 'Ψ', 'ψ', 'Ω', 'ω',
 }
 
+neighbours, update, render, pick_and_collapse, collect: time.Duration
 main :: proc () {
     rl.SetTraceLogLevel(.WARNING)
     rl.InitWindow(Screen_Size.x, Screen_Size.y, "Wave Function Collapse")
@@ -90,17 +91,18 @@ main :: proc () {
     
     using collapse
     
-    update, render, pick, collect: time.Duration
     for !rl.WindowShouldClose() {
         
         update_start := time.now()
-        pick = 0
+        pick_and_collapse = 0
         collect = 0
+        neighbours = 0
+        
         for cast(f32) time.duration_seconds(time.since(update_start)) < 0.00694 {
             //
             // Pick a cell to collapse
             //
-            pick_start := time.now()
+            pick_and_collapse_start := time.now()
             clear(&to_check)
             
             if lowest_indices.count != 0 {
@@ -139,7 +141,7 @@ main :: proc () {
                 lowest_cardinality = max(u32)
             }
             
-            pick += time.since(pick_start)
+            pick_and_collapse += time.since(pick_and_collapse_start)
             // 
             // Collect all lowest cells
             // 
@@ -219,13 +221,20 @@ main :: proc () {
         
         buffer: [256]u8
         x, y: f32 = 10, 10
-        text := format_string(buffer[:], "Update: pick % collect % total %", pick, collect, update, flags = {.AppendZero})
-        rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} + {2,2}, font_scale, 2, rl.BLACK)
-        rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y}        , font_scale, 2, cast(f32) time.duration_seconds(update) < rl.GetFrameTime() ? rl.WHITE : rl.RED)
+        text := format_string(buffer[:], "Update %", update, flags = {.AppendZero})
+        rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, cast(f32) time.duration_seconds(update) < rl.GetFrameTime() ? rl.WHITE : rl.RED)
+        y += font_scale
+        text = format_string(buffer[:], "  pick and collapse %", pick_and_collapse, flags = {.AppendZero})
+        y += font_scale
+        rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, cast(f32) time.duration_seconds(update) < rl.GetFrameTime() ? rl.WHITE : rl.RED)
+        text = format_string(buffer[:], "  get neighbours %", neighbours, flags = {.AppendZero})
+        rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, cast(f32) time.duration_seconds(update) < rl.GetFrameTime() ? rl.WHITE : rl.RED)
+        y += font_scale
+        text = format_string(buffer[:], "  collect %", collect, flags = {.AppendZero})
+        rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, cast(f32) time.duration_seconds(update) < rl.GetFrameTime() ? rl.WHITE : rl.RED)
         y += font_scale
         text = format_string(buffer[:], "Render %", render, flags = {.AppendZero})
-        rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} + {2,2}, font_scale, 2, rl.BLACK)
-        rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y}        , font_scale, 2, rl.WHITE)
+        rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, rl.WHITE)
         
         rl.EndDrawing()
     }
@@ -332,10 +341,10 @@ extract_tiles :: proc (using collapse: ^Collapse, city: rl.Image) {
             {
                 center := sub_pixels.data[1*Kernel+1]
                 c := hash.djb2((cast([^]u8) &center)[:size_of(center)])
-                e := hash.djb2((cast([^]u8) &tile.sockets[0])[:size_of(tile.sockets)])
-                n := hash.djb2((cast([^]u8) &tile.sockets[1])[:size_of(tile.sockets)])
-                w := hash.djb2((cast([^]u8) &tile.sockets[2])[:size_of(tile.sockets)])
-                s := hash.djb2((cast([^]u8) &tile.sockets[3])[:size_of(tile.sockets)])
+                e := hash.djb2((cast([^]u8) &tile.sockets[0])[:size_of(tile.sockets[0])])
+                n := hash.djb2((cast([^]u8) &tile.sockets[1])[:size_of(tile.sockets[1])])
+                w := hash.djb2((cast([^]u8) &tile.sockets[2])[:size_of(tile.sockets[2])])
+                s := hash.djb2((cast([^]u8) &tile.sockets[3])[:size_of(tile.sockets[3])])
                 
                 hash_0 := [?]u32{c, n, e, s, w}
                 
@@ -386,11 +395,12 @@ collapse_cell :: proc (using collapse: ^Collapse, cell: ^Cell, index: [2]int, pi
     delete(options)
     
     add_neighbours :: proc (to_check: ^Array(Check), index: [2]int, depth: u32) {
+        neighbours_start := time.now()
+        defer neighbours += time.since(neighbours_start)
+        
         for n in Delta {
             next := n + index
             next = (next + Dim) % Dim
-            
-            assert(!(next.x < 0 || next.x >= Dim || next.y < 0 || next.y >= Dim))
             
             ok := true
             if ok {
@@ -407,6 +417,7 @@ collapse_cell :: proc (using collapse: ^Collapse, cell: ^Cell, index: [2]int, pi
             }
         }
     }
+    
     add_neighbours(to_check, index, depth)
     
     //
@@ -428,14 +439,13 @@ collapse_cell :: proc (using collapse: ^Collapse, cell: ^Cell, index: [2]int, pi
 
 reduce_entropy :: proc (using collapse: ^Collapse, cell: ^Cell, options: ^[dynamic]int, p: [2]int) -> (changed: b32) {
     #reverse for tile_index, index in options {
-        ok := true
         option := tiles.data[tile_index]
-        sockets := option.sockets
         
-        ok &&= matches(collapse, sockets, p, .West)
-        ok &&= matches(collapse, sockets, p, .North)
-        ok &&= matches(collapse, sockets, p, .East)
-        ok &&= matches(collapse, sockets, p, .South)
+        ok := true
+        ok &&= matches(collapse, option, p, .West)
+        ok &&= matches(collapse, option, p, .North)
+        ok &&= matches(collapse, option, p, .East)
+        ok &&= matches(collapse, option, p, .South)
         
         if !ok {
             changed = true
@@ -446,7 +456,7 @@ reduce_entropy :: proc (using collapse: ^Collapse, cell: ^Cell, options: ^[dynam
     return changed
 }
 
-matches :: proc(using collapse: ^Collapse, sockets: [4]Socket, p: [2]int, direction: Direction) -> (result: b32) {
+matches :: proc(using collapse: ^Collapse, a: Tile, p: [2]int, direction: Direction) -> (result: b32) {
     p := p
     p += Delta[direction]
     p = (p + Dim) % Dim
@@ -459,17 +469,17 @@ matches :: proc(using collapse: ^Collapse, sockets: [4]Socket, p: [2]int, direct
       case [dynamic]int: 
         result = false 
         for index in value {
-            tile := tiles.data[index]
-            result ||= matches_tile(collapse, sockets, tile, direction)
+            b := tiles.data[index]
+            result ||= matches_tile(collapse, a, b, direction)
         }
       case Tile:
-        result = matches_tile(collapse, sockets, value, direction)
+        result = matches_tile(collapse, a, value, direction)
     }
     
     return result
 }
 
-matches_tile :: proc(using collapse: ^Collapse, sockets: [4]Socket, tile: Tile, direction: Direction) -> (result: b32) {
+matches_tile :: proc(using collapse: ^Collapse, a, b: Tile, direction: Direction) -> (result: b32) {
     a_side, b_side: int = ---, ---
     switch direction {
       case .West:  a_side, b_side = 2, 0
@@ -479,8 +489,8 @@ matches_tile :: proc(using collapse: ^Collapse, sockets: [4]Socket, tile: Tile, 
     }
     
     result = true
-    result &&= sockets[a_side].side   == tile.sockets[b_side].center
-    result &&= sockets[a_side].center == tile.sockets[b_side].side
+    result &&= a.sockets[a_side].side   == b.sockets[b_side].center
+    result &&= a.sockets[a_side].center == b.sockets[b_side].side
     
     return result
 }
