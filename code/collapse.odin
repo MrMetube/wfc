@@ -2,14 +2,17 @@ package main
 
 import "base:builtin"
 import "core:hash"
+import "core:math"
 import "core:time"
 import rl "vendor:raylib"
 
 Kernel :: 3
 
 Collapse :: struct {
-    grid:  Array(Cell), 
-    tiles: Array(Tile),
+    grid:    Array(Cell), 
+    tiles:   Array(Tile),
+    sockets: map[Socket]u32,
+    next_socket_index: u32,
     
     to_check: Array(Check),
     lowest_indices: Array([2]int),
@@ -27,10 +30,10 @@ Wave :: struct {
 }
 
 Tile :: struct {
-    color:     rl.Color,
-    sockets:   [4]Socket,
-    frequency: u32,
-    hash:      u32,
+    color:         rl.Color,
+    sockets_index: [4]u32,
+    frequency:     u32,
+    hash:          u32,
 }
 
 Socket :: struct {
@@ -76,45 +79,52 @@ extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
             
             w := Kernel
             h := Kernel
+            tile_sockets: [4]Socket
+            
             // east
             for y in 0..<h {
                 x := w-1
                 m := x-1
-                tile.sockets[0].center[y] = pixels[y*w + m]
-                tile.sockets[0].side[y]   = pixels[y*w + x]
+                tile_sockets[0].center[y] = pixels[y*w + m]
+                tile_sockets[0].side[y]   = pixels[y*w + x]
             }
             // north
             for x in 0..<w {
                 y := 0
                 m := y+1
-                tile.sockets[1].center[x] = pixels[m*w + x]
-                tile.sockets[1].side[x]   = pixels[y*w + x]
+                tile_sockets[1].center[x] = pixels[m*w + x]
+                tile_sockets[1].side[x]   = pixels[y*w + x]
             }
+            
+            // @note(viktor): Side and center are swapped here, so that we don't need to swap when matching.
+            // To see if a tile's east socket matches anothers west, we need to check east.side == west.center
+            // and east.center == west.side as they need to overlap.
+            // This allows us to assign each unique socket an index and only compare those indices later on.
             
             // west
             for y in 0..<h {
                 x := 0
                 m := x+1
-                tile.sockets[2].center[y] = pixels[y*w + m]
-                tile.sockets[2].side[y]   = pixels[y*w + x]
+                tile_sockets[2].side[y]   = pixels[y*w + m]
+                tile_sockets[2].center[y] = pixels[y*w + x]
             }
             
             // south
             for x in 0..<w {
                 y := h-1
                 m := y-1
-                tile.sockets[3].center[x] = pixels[m*w + x]
-                tile.sockets[3].side[x]   = pixels[y*w + x]
+                tile_sockets[3].side[x]   = pixels[m*w + x]
+                tile_sockets[3].center[x] = pixels[y*w + x]
             }
             
             {
                 // @cleanup why is there no way to hash a bunch of values with begin -> hash.. -> end?
                 center := sub_pixels.data[1*Kernel+1]
                 c := hash.djb2(to_bytes(&center))
-                e := hash.djb2(to_bytes(&tile.sockets[0]))
-                n := hash.djb2(to_bytes(&tile.sockets[1]))
-                w := hash.djb2(to_bytes(&tile.sockets[2]))
-                s := hash.djb2(to_bytes(&tile.sockets[3]))
+                e := hash.djb2(to_bytes(&tile_sockets[0]))
+                n := hash.djb2(to_bytes(&tile_sockets[1]))
+                w := hash.djb2(to_bytes(&tile_sockets[2]))
+                s := hash.djb2(to_bytes(&tile_sockets[3]))
                 
                 hash_0 := [?]u32{c, n, e, s, w}
                 
@@ -135,6 +145,16 @@ extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
                 tile.color.rgb = sub_pixels.data[1*Kernel+1]
                 tile.color.a = 255
                 tile.frequency = 1
+                
+                for socket, index in tile_sockets {
+                    if socket not_in sockets {
+                        sockets[socket] = next_socket_index
+                        next_socket_index += 1
+                    }
+                    
+                    tile.sockets_index[index] = sockets[socket]
+                }
+                                
                 append(&tiles, tile)
             }
         }
@@ -152,6 +172,91 @@ entangle_grid :: proc(using collapse: ^Collapse) {
         }
         append(&grid, Wave { options = options })
     }
+}
+
+step_observe :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (result: bool) {
+    lowest_entropy := PositiveInfinity
+    //
+    // Pick a cell to collapse
+    //
+    collapse_start := time.now()
+    clear(&to_check)
+    
+    if lowest_indices.count != 0 {
+        lowest_index := random_choice(entropy, slice(lowest_indices))^
+        lowest_cell  := &grid.data[lowest_index.y * Dim + lowest_index.x]
+        
+        wave := lowest_cell.(Wave)
+        total_freq: u32
+        for index in wave.options do total_freq += tiles.data[index].frequency
+        choice := random_between_u32(entropy, 0, total_freq)
+        
+        pick: Tile
+        for index in wave.options {
+            option := tiles.data[index]
+            if choice <= option.frequency {
+                pick = option
+                break
+            }
+            choice -= option.frequency
+        }
+        
+        collapse_cell_and_check_all_neighbours(collapse, lowest_cell, lowest_index, pick)
+        
+        clear(&lowest_indices)
+        lowest_entropy = max(f32)
+    }
+    
+    _collapse += time.since(collapse_start)
+    // 
+    // Collect all lowest cells
+    // 
+    collect_start := time.now()
+    
+    result = true
+    loop: for y in 0..<Dim {
+        for x in 0..<Dim {
+            index := y*Dim + x
+            cell := &grid.data[index]
+            
+            if wave, ok := cell.(Wave); ok {
+                if len(wave.options) == 0 {
+                    result = false
+                    break loop
+                }
+                
+                if wave.options_count_when_entropy_was_calculated != len(wave.options) {
+                    wave.options_count_when_entropy_was_calculated = len(wave.options)
+                    
+                    total_frequency: f32
+                    for option in wave.options {
+                        total_frequency += cast(f32) tiles.data[option].frequency
+                    }
+                    
+                    wave.entropy = 0
+                    for option in wave.options {
+                        frequency := cast(f32) tiles.data[option].frequency
+                        probability := frequency / total_frequency
+                        // Shannon entropy is the negative sum of P * log2(P)
+                        wave.entropy -= probability * math.log2(probability)
+                    }
+                }
+                
+                
+                if lowest_entropy > wave.entropy {
+                    lowest_entropy = wave.entropy
+                    clear(&lowest_indices)
+                }
+                
+                if lowest_entropy >= wave.entropy {
+                    append(&lowest_indices, [2]int{x,y})
+                }
+            }
+        }
+    }
+    
+    _collect += time.since(collect_start)
+    return result
 }
 
 collapse_cell_and_check_all_neighbours :: proc (using collapse: ^Collapse, cell: ^Cell, index: [2]int, pick: Tile, depth: u32 = 100000) {
@@ -213,14 +318,13 @@ reduce_entropy :: proc (using collapse: ^Collapse, cell: ^Cell, wave: ^Wave, p: 
         option := tiles.data[tile_index]
         
         ok := true
-        ok &&= matches(collapse, option, p, .West)
-        ok &&= matches(collapse, option, p, .North)
-        ok &&= matches(collapse, option, p, .East)
-        ok &&= matches(collapse, option, p, .South)
-        
-        if !ok {
-            changed = true
-            builtin.unordered_remove(&wave.options, index)
+        for direction in Direction {
+            ok &&= matches(collapse, option, p, direction)
+            if !ok {
+                changed = true
+                builtin.unordered_remove(&wave.options, index)
+                break
+            }
         }
     }
     
@@ -241,19 +345,19 @@ matches :: proc(using collapse: ^Collapse, a: Tile, p: [2]int, direction: Direct
         result = false 
         for index in value.options {
             b := tiles.data[index]
-            result ||= matches_tile(a.sockets, b.sockets, direction)
+            result ||= matches_tile(a, b, direction)
             _matches_count += 1
             if result do break
         }
       case Tile:
-        result = matches_tile(a.sockets, value.sockets, direction)
+        result = matches_tile(a, value, direction)
         _matches_count += 1
     }
     
     return result
 }
 
-matches_tile :: proc(a, b: [4]Socket, direction: Direction) -> (result: bool) {
+matches_tile :: proc(a, b: Tile, direction: Direction) -> (result: bool) {
     a_side, b_side: int = ---, ---
     switch direction {
       case .West:  a_side, b_side = 2, 0
@@ -262,9 +366,7 @@ matches_tile :: proc(a, b: [4]Socket, direction: Direction) -> (result: bool) {
       case .South: a_side, b_side = 3, 1
     }
     
-    result = true
-    result &&= a[a_side].side   == b[b_side].center
-    result &&= a[a_side].center == b[b_side].side
+    result = a.sockets_index[a_side] == b.sockets_index[b_side]
     
     return result
 }

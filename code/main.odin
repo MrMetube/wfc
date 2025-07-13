@@ -18,7 +18,7 @@ cps := [?]rune {
     'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
     'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
     ',',';','.',':','-','_','#','\'','+','*','~','´','`','?','\\','=','}',')',']','(','[','/','{','&','%','$','§','"','!','^','°',' ',
-    'µ','@','€','²','³',
+    'µ','@','€','²','³','<','>','|',
     '1','2','3','4','5','6','7','8','9','0',
 }
 
@@ -36,7 +36,7 @@ main :: proc () {
     arena: Arena
     init_arena(&arena, make([]u8, 1*Gigabyte))
     
-    city := rl.LoadImage("./city.png")
+    city := rl.LoadImage("./dungeon.png")
     collapse: Collapse
     
     collapse.tiles    = make_array(&arena, Tile,  256)
@@ -49,109 +49,44 @@ main :: proc () {
     
     entangle_grid(&collapse)
     
-    entropy := seed_random_series()//0x75658663)
+    entropy := seed_random_series(0x75658663)
     
     using collapse
-    
+    should_restart: b32
+    t_restart: f32
     for !rl.WindowShouldClose() {
-        update_start := time.now()
         _collapse = 0
         _collect = 0
         _add_neighbours = 0
         _matches = 0
         _matches_count = 0
         
-        for cast(f32) time.duration_seconds(time.since(update_start)) < 0.016 {
-            lowest_entropy := PositiveInfinity
-            //
-            // Pick a cell to collapse
-            //
-            collapse_start := time.now()
-            clear(&to_check)
-            
-            if lowest_indices.count != 0 {
-                lowest_index := random_choice(&entropy, slice(lowest_indices))^
-                lowest_cell  := &grid.data[lowest_index.y * Dim + lowest_index.x]
-                
-                wave := lowest_cell.(Wave)
-                total_freq: u32
-                for index in wave.options do total_freq += tiles.data[index].frequency
-                choice := random_between_u32(&entropy, 0, total_freq)
-                
-                pick: Tile
-                for index in wave.options {
-                    option := tiles.data[index]
-                    if choice <= option.frequency {
-                        pick = option
-                        break
-                    }
-                    choice -= option.frequency
-                }
-                
-                collapse_cell_and_check_all_neighbours(&collapse, lowest_cell, lowest_index, pick)
-                
-                clear(&lowest_indices)
-                lowest_entropy = max(f32)
-            }
-            
-            _collapse += time.since(collapse_start)
-            // 
-            // Collect all lowest cells
-            // 
-            collect_start := time.now()
-            
-            loop: for y in 0..<Dim {
-                for x in 0..<Dim {
-                    index := y*Dim + x
-                    cell := &grid.data[index]
-                    
-                    if wave, ok := cell.(Wave); ok {
-                        if len(wave.options) == 0 {
-                            entangle_grid(&collapse)
-                            println("Collapse failed: restarting.")
-                            break loop
-                        }
-                        
-                        if wave.options_count_when_entropy_was_calculated != len(wave.options) {
-                            wave.options_count_when_entropy_was_calculated = len(wave.options)
-                            
-                            total_frequency: f32
-                            for option in wave.options {
-                                total_frequency += cast(f32) tiles.data[option].frequency
-                            }
-                            
-                            wave.entropy = 0
-                            for option in wave.options {
-                                frequency := cast(f32) tiles.data[option].frequency
-                                probability := frequency / total_frequency
-                                // Shannon entropy is the negative sum of P * log2(P)
-                                wave.entropy -= probability * math.log2(probability)
-                            }
-                        }
-                        
-                        
-                        if lowest_entropy > wave.entropy {
-                            lowest_entropy = wave.entropy
-                            clear(&lowest_indices)
-                        }
-                        
-                        if lowest_entropy >= wave.entropy {
-                            append(&lowest_indices, [2]int{x,y})
-                        }
-                    }
+        update_start := time.now()
+        if !should_restart {
+            for cast(f32) time.duration_seconds(time.since(update_start)) < 0.016 {
+                if !step_observe(&collapse, &entropy) {
+                    should_restart = true
+                    t_restart = 5
                 }
             }
-            _collect += time.since(collect_start)
+        }
+        _update = time.since(update_start)
+        
+        if should_restart {
+            t_restart -= rl.GetFrameTime()
+            if t_restart <= 0 {
+                t_restart = 0
+                should_restart = false
+                entangle_grid(&collapse)
+            }
         }
         
-        _update = time.since(update_start)
         // 
         // Render
         // 
         render_start := time.now()
         rl.BeginDrawing()
         rl.ClearBackground({0x54, 0x57, 0x66, 0xFF})
-        
         rl.BeginMode2D(camera)
         
         for entry in slice(to_check) {
@@ -164,7 +99,6 @@ main :: proc () {
             color := rl.PURPLE
             rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(color, 0.6))
         }
-        
         
         all_done := true
         for y in 0..<Dim {
@@ -198,31 +132,29 @@ main :: proc () {
         rl.EndMode2D()
         _render = time.since(render_start)
         
-        draw_line :: proc (text: string, p: ^v2, line_advance: f32) {
-            rl.DrawTextEx(the_font, cast(cstring) raw_data(text), p^, font_scale, 2, rl.WHITE)
-            p.y += line_advance
-        }
         buffer: [256]u8
-        line_p: v2 = 10
-        text := format_string(buffer[:], "Update %", _update, flags = {.AppendZero})
-        draw_line(text, &line_p, font_scale)
-        text = format_string(buffer[:], "  pick and collapse %", _collapse, flags = {.AppendZero})
-        draw_line(text, &line_p, font_scale)
-        text = format_string(buffer[:], "  get neighbours %", _add_neighbours, flags = {.AppendZero})
-        draw_line(text, &line_p, font_scale)
+        line_p := v2 {10, 10}
+        draw_line(format_cstring(buffer[:], "Update %", _update), &line_p, font_scale, cast(f32) time.duration_seconds(_update) > rl.GetFrameTime() ? rl.RED : rl.WHITE)
+        draw_line(format_cstring(buffer[:], "  collapse % %", view_time_duration(_collapse)), &line_p, font_scale)
+        draw_line(format_cstring(buffer[:], "  get neighbours % %", view_time_duration(_add_neighbours)), &line_p, font_scale)
         denom := cast(time.Duration) _matches_count
         if denom == 0 do denom = 1
-        text = format_string(buffer[:], "  matches % % * % = %", view_order_of_magnitude(_matches_count), _matches / denom, _matches, flags = {.AppendZero})
-        draw_line(text, &line_p, font_scale)
-        text = format_string(buffer[:], "  collect %", _collect, flags = {.AppendZero})
-        draw_line(text, &line_p, font_scale)
-        text = format_string(buffer[:], "Render %", _render, flags = {.AppendZero})
-        draw_line(text, &line_p, font_scale)
-        text = format_string(buffer[:], "Total %", _total, flags = {.AppendZero})
-        draw_line(text, &line_p, font_scale)
+        draw_line(format_cstring(buffer[:], "  matches % % * % % = % %", view_order_of_magnitude(_matches_count), view_time_duration(_matches / denom), view_time_duration(_matches)), &line_p, font_scale)
+        draw_line(format_cstring(buffer[:], "  collect % %", view_time_duration(_collect)), &line_p, font_scale)
+        draw_line(format_cstring(buffer[:], "Render % %",    view_time_duration(_render)),  &line_p, font_scale)
+        draw_line(format_cstring(buffer[:], "Total % %",     view_time_duration(_total)),   &line_p, font_scale)
+        
+        if should_restart {
+            draw_line(format_cstring(buffer[:], "Collapse failed: restarting in % %", view_duration(cast(f64) t_restart, precision = 3)), &line_p, font_scale, rl.RED)
+        }
         
         rl.EndDrawing()
     }
+}
+
+draw_line :: proc (text: cstring, p: ^v2, line_advance: f32, color:= rl.WHITE) {
+    rl.DrawTextEx(the_font, text, p^, font_scale, 2, color)
+    p.y += line_advance
 }
 
 draw_wave :: proc (using collapse: ^Collapse, wave: Wave, p: v2, size: v2) -> (should_collapse: b32, target: Tile) {
