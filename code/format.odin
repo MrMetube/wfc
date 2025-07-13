@@ -306,16 +306,6 @@ FormatContext :: struct {
 
 ////////////////////////////////////////////////
 
-/* 
-_print 
-  1M
-formatstring 
-  4.6M base
-  800k dont clear temp
-  1.1M reenable odins floats
-  1M compact View 84 -> 32 bytes
-  750k bad floats
-*/
 @(private="file")
 temp_buffer:  [1024]u8
 
@@ -332,7 +322,7 @@ begin_formatting :: proc (buffer: []u8, flags: FormatContextFlags) -> (result: F
 }
 
 end_formatting :: proc (ctx: ^FormatContext) -> (result: string) {
-    /* @todo(viktor): 
+    /* @incomplete
         StringFormat DoubleQuoted_Escaped,
     */
     
@@ -340,50 +330,54 @@ end_formatting :: proc (ctx: ^FormatContext) -> (result: string) {
 }
 
 @(printlike)
+format_cstring :: proc (buffer: []u8, format: string, args: ..any, flags := FormatContextFlags{ .AppendZero }) -> (result: cstring) {
+    result = cast(cstring) raw_data(format_string(buffer, format, ..args, flags = flags))
+    return result
+}
+
+@(printlike)
 format_string :: proc (buffer: []u8, format: string, args: ..any, flags := FormatContextFlags{}) -> (result: string) {
     ctx := begin_formatting(buffer, flags)
     
-    { 
-        start_of_text: int
-        arg_index: u32
-        // :PrintlikeChecking @volatile the loop structure is copied in the metaprogram to check the arg count, any changes here
-        // need to be propagated to there
-        for index: int; index < len(format); index += 1 {
-            if format[index] == '%' {
-                part := format[start_of_text:index]
-                if part != "" {
-                    format_view(&ctx, view_string(part))
-                }
-                start_of_text = index+1
+    // :PrintlikeChecking @volatile 
+    // the loop structure is copied in the metaprogram to check the arg count, any changes here
+    // need to be propagated to there
+    arg_index: u32
+    start_of_text: int
+    for index: int; index < len(format); index += 1 {
+        if format[index] == '%' {
+            part := format[start_of_text:index]
+            if part != "" {
+                format_view(&ctx, view_string(part))
+            }
+            start_of_text = index+1
+            
+            if index+1 < len(format) && format[index+1] == '%' {
+                index += 1
+                // @note(viktor): start_of_text now points at the percent sign and will append it next time saving processing one view
+            } else {
+                arg := args[arg_index]
+                arg_index += 1
                 
-                if index+1 < len(format) && format[index+1] == '%' {
-                    index += 1
-                    // @note(viktor): start_of_text now points at the percent sign and will append it next time saving processing one view
-                } else {
-                    arg := args[arg_index]
-                    arg_index += 1
-                    
-                    // @todo(viktor): Would be ever want to display a raw View? if so put in a flag to make it use the normal path
-                    switch format in arg {
-                    case View: format_view(&ctx, format)
-                    case:      format_any(&ctx, arg)
-                    }
+                // @incomplete Would be ever want to display a raw View? if so put in a flag to make it use the normal path
+                switch format in arg {
+                  case View: format_view(&ctx, format)
+                  case:      format_any(&ctx, arg)
                 }
             }
         }
-        end := format[start_of_text:]
-        if end != "" {
-            format_view(&ctx, view_string(end))
-        }
-        
-        assert(arg_index == auto_cast len(args))
-        
-        if .AppendNewlineToResult in flags {
-            format_view(&ctx, view_character('\n'))
-        }
-        if .AppendZero in flags {
-            format_view(&ctx, view_character(0))
-        }
+    }
+    
+    end := format[start_of_text:]
+    format_view(&ctx, view_string(end))
+    
+    assert(arg_index == auto_cast len(args))
+    
+    if .AppendNewlineToResult in flags {
+        format_view(&ctx, view_character('\n'))
+    }
+    if .AppendZero in flags {
+        format_view(&ctx, view_character(0))
     }
     
     return end_formatting(&ctx)
@@ -392,7 +386,7 @@ format_string :: proc (buffer: []u8, format: string, args: ..any, flags := Forma
 format_view :: proc (ctx: ^FormatContext, view: View) {
     view := view
     temp := StringBuilder { data = temp_buffer[:] }
-            
+    
     switch view.kind {
       case .Indent:
         assert(.Multiline in ctx.flags)
