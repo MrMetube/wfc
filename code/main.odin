@@ -1,16 +1,14 @@
 package main
 
+import "core:math"
 import "core:time"
 import rl "vendor:raylib"
 
 Screen_Size :: [2]i32{1920, 1080}
-Dim :: 200
+Dim :: 50
 
-        
 Draw_Size := min(Screen_Size.x, Screen_Size.y) / (Dim+1)
 size      := cast(f32) Draw_Size
-
-Tile_Size :: rl.Rectangle{0,0,Kernel,Kernel}
 
 Color4 :: [4]u8
 
@@ -24,7 +22,8 @@ cps := [?]rune {
     '1','2','3','4','5','6','7','8','9','0',
 }
 
-_total, _update, _render, _collapse, _add_neighbours, _matches, _matches_tile, _collect: time.Duration
+_total, _update, _render, _collapse, _add_neighbours, _matches, _collect: time.Duration
+_matches_count: int
 main :: proc () {
     rl.SetTraceLogLevel(.WARNING)
     rl.InitWindow(Screen_Size.x, Screen_Size.y, "Wave Function Collapse")
@@ -43,16 +42,14 @@ main :: proc () {
     collapse.tiles    = make_array(&arena, Tile,  256)
     collapse.grid     = make_array(&arena, Cell,  Dim*Dim)
     collapse.to_check = make_array(&arena, Check, Dim*Dim)
+    collapse.lowest_indices = make_array(&arena, [2]int, Dim*Dim)
     
     _total_start := time.now()
     extract_tiles(&collapse, city)
     
     entangle_grid(&collapse)
     
-    entropy := seed_random_series(0x75658663)
-    
-    lowest_indices := make_array(&arena, [2]int, Dim*Dim)
-    lowest_cardinality := max(u32)
+    entropy := seed_random_series()//0x75658663)
     
     using collapse
     
@@ -62,55 +59,42 @@ main :: proc () {
         _collect = 0
         _add_neighbours = 0
         _matches = 0
-        _matches_tile = 0
+        _matches_count = 0
         
         for cast(f32) time.duration_seconds(time.since(update_start)) < 0.016 {
+            lowest_entropy := PositiveInfinity
             //
             // Pick a cell to collapse
             //
-            pick_and_collapse_start := time.now()
+            collapse_start := time.now()
             clear(&to_check)
             
             if lowest_indices.count != 0 {
-                if lowest_cardinality == 1 {
-                    for index in slice(lowest_indices) {
-                        cell  := &grid.data[index.y * Dim + index.x]
-                        options := cell.([dynamic]int)
-                        assert(len(options) != 0)
-                        collapse_cell(cell, tiles.data[options[0]])
+                lowest_index := random_choice(&entropy, slice(lowest_indices))^
+                lowest_cell  := &grid.data[lowest_index.y * Dim + lowest_index.x]
+                
+                wave := lowest_cell.(Wave)
+                total_freq: u32
+                for index in wave.options do total_freq += tiles.data[index].frequency
+                choice := random_between_u32(&entropy, 0, total_freq)
+                
+                pick: Tile
+                for index in wave.options {
+                    option := tiles.data[index]
+                    if choice <= option.frequency {
+                        pick = option
+                        break
                     }
-                    
-                    for index in slice(lowest_indices) {
-                        add_neighbours(&collapse, index)
-                    }
-                    
-                    check_all_neighbours(& collapse)
-                } else {
-                    lowest_index := random_choice(&entropy, slice(lowest_indices))^
-                    lowest_cell  := &grid.data[lowest_index.y * Dim + lowest_index.x]
-                    
-                    options := lowest_cell.([dynamic]int)
-                    total_freq: u32
-                    for index in options do total_freq += tiles.data[index].frequency
-                    choice := random_between_u32(&entropy, 0, total_freq)
-                    
-                    pick: Tile
-                    for index in options {
-                        option := tiles.data[index]
-                        if choice <= option.frequency {
-                            pick = option
-                            break
-                        }
-                        choice -= option.frequency
-                    }
-                    collapse_cell_and_check_all_neighbours(&collapse, lowest_cell, lowest_index, pick)
+                    choice -= option.frequency
                 }
                 
+                collapse_cell_and_check_all_neighbours(&collapse, lowest_cell, lowest_index, pick)
+                
                 clear(&lowest_indices)
-                lowest_cardinality = max(u32)
+                lowest_entropy = max(f32)
             }
             
-            _collapse += time.since(pick_and_collapse_start)
+            _collapse += time.since(collapse_start)
             // 
             // Collect all lowest cells
             // 
@@ -121,19 +105,38 @@ main :: proc () {
                     index := y*Dim + x
                     cell := &grid.data[index]
                     
-                    if options, ok := cell.([dynamic]int); ok {
-                        cardinality := cast(u32) len(options)
-                        if cardinality < lowest_cardinality {
-                            lowest_cardinality = cardinality
-                            clear(&lowest_indices)
-                        }
-                        if cardinality <= lowest_cardinality {
-                            append(&lowest_indices, [2]int{x,y})
-                        }
-                        if lowest_cardinality == 0 {
+                    if wave, ok := cell.(Wave); ok {
+                        if len(wave.options) == 0 {
                             entangle_grid(&collapse)
                             println("Collapse failed: restarting.")
                             break loop
+                        }
+                        
+                        if wave.options_count_when_entropy_was_calculated != len(wave.options) {
+                            wave.options_count_when_entropy_was_calculated = len(wave.options)
+                            
+                            total_frequency: f32
+                            for option in wave.options {
+                                total_frequency += cast(f32) tiles.data[option].frequency
+                            }
+                            
+                            wave.entropy = 0
+                            for option in wave.options {
+                                frequency := cast(f32) tiles.data[option].frequency
+                                probability := frequency / total_frequency
+                                // Shannon entropy is the negative sum of P * log2(P)
+                                wave.entropy -= probability * math.log2(probability)
+                            }
+                        }
+                        
+                        
+                        if lowest_entropy > wave.entropy {
+                            lowest_entropy = wave.entropy
+                            clear(&lowest_indices)
+                        }
+                        
+                        if lowest_entropy >= wave.entropy {
+                            append(&lowest_indices, [2]int{x,y})
                         }
                     }
                 }
@@ -158,7 +161,7 @@ main :: proc () {
         
         for entry in slice(lowest_indices) {
             p := get_screen_p(entry.x, entry.y)
-            color := lowest_cardinality == 1 ? rl.PURPLE : rl.BLUE
+            color := rl.PURPLE
             rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(color, 0.6))
         }
         
@@ -174,12 +177,12 @@ main :: proc () {
                   case Tile:
                     rl.DrawRectangleRec({p.x, p.y, size, size}, value.color)
                     
-                  case [dynamic]int:
+                  case Wave:
                     all_done = false
-                    if len(value) == 0 {
+                    if len(value.options) == 0 {
                         rl.DrawRectangleRec({p.x, p.y, size, size}, rl.RED)
                     } else {
-                        should_collapse, tile := draw_options(&collapse, value, p, size)
+                        should_collapse, tile := draw_wave(&collapse, value, p, size)
                         if should_collapse {
                             collapse_cell_and_check_all_neighbours(&collapse, cell, {x,y}, tile)
                         }
@@ -195,43 +198,39 @@ main :: proc () {
         rl.EndMode2D()
         _render = time.since(render_start)
         
+        draw_line :: proc (text: string, p: ^v2, line_advance: f32) {
+            rl.DrawTextEx(the_font, cast(cstring) raw_data(text), p^, font_scale, 2, rl.WHITE)
+            p.y += line_advance
+        }
         buffer: [256]u8
-        x, y: f32 = 10, 10
-            text := format_string(buffer[:], "Update %", _update, flags = {.AppendZero})
-            rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, cast(f32) time.duration_seconds(_update) < rl.GetFrameTime() ? rl.WHITE : rl.RED)
-        y += font_scale
-            text = format_string(buffer[:], "  pick and collapse %", _collapse, flags = {.AppendZero})
-            rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, rl.WHITE)
-        y += font_scale
-            text = format_string(buffer[:], "  get neighbours %", _add_neighbours, flags = {.AppendZero})
-            rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, rl.WHITE)
-        y += font_scale
-            text = format_string(buffer[:], "  matches %", _matches, flags = {.AppendZero})
-            rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, rl.WHITE)
-        y += font_scale
-            text = format_string(buffer[:], "  matches_tile %", _matches_tile, flags = {.AppendZero})
-            rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, rl.WHITE)
-        y += font_scale
-            text = format_string(buffer[:], "  collect %", _collect, flags = {.AppendZero})
-            rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, rl.WHITE)
-        y += font_scale
-            text = format_string(buffer[:], "Render %", _render, flags = {.AppendZero})
-            rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, rl.WHITE)
-        y += font_scale
-        y += font_scale
-            text = format_string(buffer[:], "Total %", _total, flags = {.AppendZero})
-            rl.DrawTextEx(the_font, cast(cstring) raw_data(text), {x, y} , font_scale, 2, rl.WHITE)
+        line_p: v2 = 10
+        text := format_string(buffer[:], "Update %", _update, flags = {.AppendZero})
+        draw_line(text, &line_p, font_scale)
+        text = format_string(buffer[:], "  pick and collapse %", _collapse, flags = {.AppendZero})
+        draw_line(text, &line_p, font_scale)
+        text = format_string(buffer[:], "  get neighbours %", _add_neighbours, flags = {.AppendZero})
+        draw_line(text, &line_p, font_scale)
+        denom := cast(time.Duration) _matches_count
+        if denom == 0 do denom = 1
+        text = format_string(buffer[:], "  matches % % * % = %", view_order_of_magnitude(_matches_count), _matches / denom, _matches, flags = {.AppendZero})
+        draw_line(text, &line_p, font_scale)
+        text = format_string(buffer[:], "  collect %", _collect, flags = {.AppendZero})
+        draw_line(text, &line_p, font_scale)
+        text = format_string(buffer[:], "Render %", _render, flags = {.AppendZero})
+        draw_line(text, &line_p, font_scale)
+        text = format_string(buffer[:], "Total %", _total, flags = {.AppendZero})
+        draw_line(text, &line_p, font_scale)
         
         rl.EndDrawing()
     }
 }
 
-draw_options :: proc (using collapse: ^Collapse, value: [dynamic]int, p: v2, size: v2) -> (should_collapse: b32, target: Tile) {
+draw_wave :: proc (using collapse: ^Collapse, wave: Wave, p: v2, size: v2) -> (should_collapse: b32, target: Tile) {
     count: u32
     when false {
         for tile, i in slice(tiles) {
             present: b32
-            for it in value do if tiles.data[it] == tile { present = true; break }
+            for it in wave.options do if tiles.data[it] == tile { present = true; break }
             if !present do continue
             
             factor := square_root(cast(f32) count)
@@ -254,7 +253,7 @@ draw_options :: proc (using collapse: ^Collapse, value: [dynamic]int, p: v2, siz
         sum: [4]u32
         for tile in slice(tiles) {
             present: b32
-            for index in value do if tiles.data[index] == tile { present = true; break }
+            for index in wave.options do if tiles.data[index] == tile { present = true; break }
             if !present do continue
             count += tile.frequency
             sum += tile.frequency * vec_cast(u32, cast([4]u8) tile.color)

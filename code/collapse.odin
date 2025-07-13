@@ -10,12 +10,20 @@ Kernel :: 3
 Collapse :: struct {
     grid:  Array(Cell), 
     tiles: Array(Tile),
+    
     to_check: Array(Check),
+    lowest_indices: Array([2]int),
 }
 
 Cell :: union {
     Tile,
-    [dynamic]int,
+    Wave,
+}
+
+Wave :: struct {
+    entropy: f32,
+    options_count_when_entropy_was_calculated: int,
+    options: [dynamic]int,
 }
 
 Tile :: struct {
@@ -24,7 +32,6 @@ Tile :: struct {
     frequency: u32,
     hash:      u32,
 }
-
 
 Socket :: struct {
     center: [3]Color3,
@@ -46,20 +53,20 @@ Check :: struct {
     depth: u32,
 }
 
-extract_tiles :: proc (using collapse: ^Collapse, city: rl.Image) {
-    assert(city.format == .UNCOMPRESSED_R8G8B8A8)
-    pixels := (cast([^]Color4) city.data)[:city.width * city.height]
+extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
+    assert(img.format == .UNCOMPRESSED_R8G8B8A8)
+    pixels := (cast([^]Color4) img.data)[:img.width * img.height]
     
-    for min_y in 0..<city.height {
-        for min_x in 0..<city.width {
+    for min_y in 0..<img.height {
+        for min_x in 0..<img.width {
             sub_pixels: FixedArray(cast(i64) (Kernel*Kernel), Color3)
             
             for dy in 0..<Kernel {
                 for dx in 0..<Kernel {
-                    x := (min_x + cast(i32) dx) % city.width
-                    y := (min_y + cast(i32) dy) % city.height
+                    x := (min_x + cast(i32) dx) % img.width
+                    y := (min_y + cast(i32) dy) % img.height
                     
-                    pixel := pixels[y * city.width + x].rgb
+                    pixel := pixels[y * img.width + x].rgb
                     append(&sub_pixels, pixel)
                 }
             }
@@ -143,7 +150,7 @@ entangle_grid :: proc(using collapse: ^Collapse) {
         for _, i in slice(tiles) {
             builtin.append(&options, i)
         }
-        append(&grid, options)
+        append(&grid, Wave { options = options })
     }
 }
 
@@ -152,10 +159,11 @@ collapse_cell_and_check_all_neighbours :: proc (using collapse: ^Collapse, cell:
     add_neighbours(collapse, index, depth)
     check_all_neighbours(collapse)
 }
+
 collapse_cell :: proc (cell: ^Cell, pick: Tile) {
-    options := cell.([dynamic]int)
+    wave := cell.(Wave)
     cell ^= pick
-    delete(options)
+    delete(wave.options)
 }
 
 
@@ -188,18 +196,20 @@ check_all_neighbours :: proc (using collapse: ^Collapse) {
         next := to_check.data[index]
         x := next.index.x
         y := next.index.y
-        other := &grid.data[y*Dim + x]
+        cell := &grid.data[y*Dim + x]
         
-        if options, ok := &other.([dynamic]int); ok {
-            if reduce_entropy(collapse, other, options, {x, y}) && next.depth > 0 {
-                add_neighbours(collapse, {x, y}, next.depth)
+        if wave, ok := &cell.(Wave); ok {
+            if reduce_entropy(collapse, cell, wave, {x, y}) {
+                if next.depth > 0 {
+                    add_neighbours(collapse, {x, y}, next.depth)
+                }
             }
         }
     }
 }
 
-reduce_entropy :: proc (using collapse: ^Collapse, cell: ^Cell, options: ^[dynamic]int, p: [2]int) -> (changed: b32) {
-    #reverse for tile_index, index in options {
+reduce_entropy :: proc (using collapse: ^Collapse, cell: ^Cell, wave: ^Wave, p: [2]int) -> (changed: b32) {
+    #reverse for tile_index, index in wave.options {
         option := tiles.data[tile_index]
         
         ok := true
@@ -210,7 +220,7 @@ reduce_entropy :: proc (using collapse: ^Collapse, cell: ^Cell, options: ^[dynam
         
         if !ok {
             changed = true
-            builtin.unordered_remove(options, index)
+            builtin.unordered_remove(&wave.options, index)
         }
     }
     
@@ -227,23 +237,23 @@ matches :: proc(using collapse: ^Collapse, a: Tile, p: [2]int, direction: Direct
     next := grid.data[p.y*Dim + p.x]
 
     switch &value in next {
-      case [dynamic]int: 
+      case Wave:
         result = false 
-        for index in value {
+        for index in value.options {
             b := tiles.data[index]
             result ||= matches_tile(a.sockets, b.sockets, direction)
+            _matches_count += 1
+            if result do break
         }
       case Tile:
         result = matches_tile(a.sockets, value.sockets, direction)
+        _matches_count += 1
     }
     
     return result
 }
 
 matches_tile :: proc(a, b: [4]Socket, direction: Direction) -> (result: bool) {
-    start := time.now()
-    defer _matches_tile += time.since(start)
-    
     a_side, b_side: int = ---, ---
     switch direction {
       case .West:  a_side, b_side = 2, 0

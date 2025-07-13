@@ -6,6 +6,8 @@ import "base:intrinsics"
 
 order_of_magnitude :: proc(value: $T) -> (f64, string) {
     value := cast(f64) value
+    
+    if value == 0   do return value,        ""
     if value < 1e-9 do return value * 1e12, "p"
     if value < 1e-6 do return value * 1e9,  "n"
     if value < 1e-3 do return value * 1e6,  "μ"
@@ -23,6 +25,7 @@ order_of_magnitude :: proc(value: $T) -> (f64, string) {
 
 
 view_memory_size :: proc(#any_int value: u64) -> (u64, string) {
+    if value == 0       do return value,            ""
     if value < Kilobyte do return value,            " b"
     if value < Megabyte do return value / Kilobyte, "kb"
     if value < Gigabyte do return value / Megabyte, "Mb"
@@ -38,6 +41,8 @@ view_order_of_magnitude :: proc(value: $T, width: Maybe(u16) = 5, precision: May
     v, magnitude = order_of_magnitude(value)
     
     when intrinsics.type_is_integer(T) {
+        precision := precision
+        if v == cast(f64) value do precision = 0
         v = round(f64, v * 100) * 0.01
     }
 

@@ -153,13 +153,15 @@ go_rebuild_yourself :: proc() -> Error {
         }
     }
     
+    // @todo(viktor): do we still need the old one? 
+    old_path := fmt.tprintf("%s-old", build_exe_path)
+    remove_if_exists(old_path)
+    
     if needs_rebuild {
         fmt.println("Rebuilding!") 
         
         pdb_path, _ := strings.replace_all(build_exe_path, ".exe", ".pdb")
         remove_if_exists(pdb_path)
-        // @todo(viktor): do we still need the old one? 
-        old_path := fmt.tprintf("%s-old", build_exe_path)
         os.rename(build_exe_path, old_path) or_return
         
         args: [dynamic]string
@@ -170,8 +172,6 @@ go_rebuild_yourself :: proc() -> Error {
         if !run_command(odin, args[:]) {
             os.rename(old_path, build_exe_path) or_return
         }
-        
-        remove_if_exists(old_path)
         
         os.exit(0)
     }
