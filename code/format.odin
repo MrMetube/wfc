@@ -5,7 +5,7 @@ package main
 This is a copy the original is in the handmade project
  */
 
-import "core:time"
+import "core:fmt"
 
 import "base:intrinsics"
 import "base:runtime"
@@ -707,19 +707,24 @@ format_float_with_ryu :: proc(dest: ^StringBuilder, float: $F, view: ^View) {
     precision: u32 = 6
     if .Precision in view.settings do precision = cast(u32) view.precision
     
-    
-    // @todo(viktor): handle .Uppercase in view.flags
+    buffer := rest(dest^)
     when size_of(F) == 8 {
-        buffer := rest(dest^)
         result := d2fixed_buffered(float, precision, buffer)
         dest.count += auto_cast len(result)
     } else when size_of(F) == 4 {
-        buffer := rest(dest^)
         result := f2s_buffered(float, buffer)
         dest.count += auto_cast len(result)
     } else when size_of(F) == 2 {
         unimplemented()
     } else do #panic("convert the general algorithm from ryu you laze bum")
+    
+    if .Uppercase in view.flags {
+        for r, i in string(buffer) {
+            if r >= 'a' && r <= 'z' {
+                buffer[i] = cast(u8) ('A' + (r-'a'))
+            }
+        }
+    }
 }
 
 format_float_badly :: proc(dest: ^StringBuilder, float: $F, view: ^View) {

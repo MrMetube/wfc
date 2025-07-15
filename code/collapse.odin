@@ -14,8 +14,12 @@ Collapse :: struct {
     sockets: map[Socket]u32,
     next_socket_index: u32,
     
+    dimension: int,
+    
     to_check: Array(Check),
     lowest_indices: Array([2]int),
+    wrap_x: b32,
+    wrap_y: b32,
 }
 
 Cell :: union {
@@ -54,6 +58,19 @@ Delta := [Direction] [2]int {
 Check :: struct {
     index: [2]int,
     depth: u32,
+}
+
+init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, tile_count: u32, dimension: int, wrap_x, wrap_y: b32) {
+    collapse.wrap_x = wrap_x
+    collapse.wrap_y = wrap_y
+    
+    collapse.dimension = dimension
+    cell_count := square(collapse.dimension)
+    collapse.tiles          = make_array(arena, Tile,   tile_count)
+    collapse.grid           = make_array(arena, Cell,   cell_count)
+    collapse.to_check       = make_array(arena, Check,  cell_count)
+    collapse.lowest_indices = make_array(arena, [2]int, cell_count)
+    
 }
 
 extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
@@ -184,7 +201,7 @@ step_observe :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (res
     
     if lowest_indices.count != 0 {
         lowest_index := random_choice(entropy, slice(lowest_indices))^
-        lowest_cell  := &grid.data[lowest_index.y * Dim + lowest_index.x]
+        lowest_cell  := &grid.data[lowest_index.y * dimension + lowest_index.x]
         
         wave := lowest_cell.(Wave)
         total_freq: u32
@@ -202,9 +219,6 @@ step_observe :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (res
         }
         
         collapse_cell_and_check_all_neighbours(collapse, lowest_cell, lowest_index, pick)
-        
-        clear(&lowest_indices)
-        lowest_entropy = max(f32)
     }
     
     _collapse += time.since(collapse_start)
@@ -212,11 +226,13 @@ step_observe :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (res
     // Collect all lowest cells
     // 
     collect_start := time.now()
+    clear(&lowest_indices)
+    lowest_entropy = max(f32)
     
     result = true
-    loop: for y in 0..<Dim {
-        for x in 0..<Dim {
-            index := y*Dim + x
+    loop: for y in 0..<dimension {
+        for x in 0..<dimension {
+            index := y*dimension + x
             cell := &grid.data[index]
             
             if wave, ok := cell.(Wave); ok {
@@ -278,9 +294,23 @@ add_neighbours :: proc (using collapse: ^Collapse, index: [2]int, depth: u32 = 1
     
     for n in Delta {
         next := n + index
-        next = (next + Dim) % Dim
-        
+
         ok := true
+        if wrap_x {
+            next.x = (next.x + dimension) % dimension
+        } else {
+            if next.x >= dimension || next.x < 0 {
+                ok = false
+            }
+        }
+        if wrap_y {
+            next.y = (next.y + dimension) % dimension
+        } else {
+            if next.y >= dimension || next.y < 0 {
+                ok = false
+            }
+        }
+        
         if ok {
             for entry in slice(to_check) {
                 if entry.index == next {
@@ -301,7 +331,7 @@ check_all_neighbours :: proc (using collapse: ^Collapse) {
         next := to_check.data[index]
         x := next.index.x
         y := next.index.y
-        cell := &grid.data[y*Dim + x]
+        cell := &grid.data[y*dimension + x]
         
         if wave, ok := &cell.(Wave); ok {
             if reduce_entropy(collapse, cell, wave, {x, y}) {
@@ -337,8 +367,21 @@ matches :: proc(using collapse: ^Collapse, a: Tile, p: [2]int, direction: Direct
     
     p := p
     p += Delta[direction]
-    p = (p + Dim) % Dim
-    next := grid.data[p.y*Dim + p.x]
+    if wrap_x {
+        p.x = (p.x + dimension) % dimension
+    } else {
+        if p.x < 0 || p.x >= dimension {
+            return true
+        }
+    }
+    if wrap_y {
+        p.y = (p.y + dimension) % dimension
+    } else {
+        if p.y < 0 || p.y >= dimension {
+            return true
+        }
+    }
+    next := grid.data[p.y*dimension + p.x]
 
     switch &value in next {
       case Wave:

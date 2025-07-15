@@ -5,16 +5,12 @@ import "core:time"
 import rl "vendor:raylib"
 
 Screen_Size :: [2]i32{1920, 1080}
-Dim :: 50
-
-Draw_Size := min(Screen_Size.x, Screen_Size.y) / (Dim+1)
-size      := cast(f32) Draw_Size
 
 Color4 :: [4]u8
 
 the_font: rl.Font
 font_scale :: 32
-cps := [?]rune {
+code_points := [?]rune {
     'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
     'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
     ',',';','.',':','-','_','#','\'','+','*','~','´','`','?','\\','=','}',')',']','(','[','/','{','&','%','$','§','"','!','^','°',' ',
@@ -25,31 +21,31 @@ cps := [?]rune {
 _total, _update, _render, _collapse, _add_neighbours, _matches, _collect: time.Duration
 _matches_count: int
 main :: proc () {
+    Dim :: 50
+    Draw_Size := min(Screen_Size.x, Screen_Size.y) / (Dim+1)
+    size      := cast(f32) Draw_Size
+
     rl.SetTraceLogLevel(.WARNING)
     rl.InitWindow(Screen_Size.x, Screen_Size.y, "Wave Function Collapse")
     rl.SetTargetFPS(60)
     
     camera := rl.Camera2D { zoom = 1 }
     
-    the_font = rl.LoadFontEx(`.\Caladea-Regular.ttf`, font_scale, &cps[0], len(cps))
+    the_font = rl.LoadFontEx(`.\Caladea-Regular.ttf`, font_scale, raw_data(code_points[:]), len(code_points))
     
     arena: Arena
     init_arena(&arena, make([]u8, 1*Gigabyte))
     
-    city := rl.LoadImage("./dungeon.png")
+    city := rl.LoadImage("./flower.png")
     collapse: Collapse
-    
-    collapse.tiles    = make_array(&arena, Tile,  256)
-    collapse.grid     = make_array(&arena, Cell,  Dim*Dim)
-    collapse.to_check = make_array(&arena, Check, Dim*Dim)
-    collapse.lowest_indices = make_array(&arena, [2]int, Dim*Dim)
+    init_collapse(&collapse, &arena, 256, Dim, true, true)
     
     _total_start := time.now()
     extract_tiles(&collapse, city)
     
     entangle_grid(&collapse)
     
-    entropy := seed_random_series(0x75658663)
+    entropy := seed_random_series()//0x75658663)
     
     using collapse
     should_restart: b32
@@ -66,7 +62,7 @@ main :: proc () {
             for cast(f32) time.duration_seconds(time.since(update_start)) < 0.016 {
                 if !step_observe(&collapse, &entropy) {
                     should_restart = true
-                    t_restart = 5
+                    t_restart = 3
                 }
             }
         }
@@ -90,12 +86,12 @@ main :: proc () {
         rl.BeginMode2D(camera)
         
         for entry in slice(to_check) {
-            p := get_screen_p(entry.index.x, entry.index.y)
+            p := get_screen_p(Draw_Size, collapse.dimension, size, entry.index.x, entry.index.y)
             rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(rl.YELLOW, 0.3))
         }
         
         for entry in slice(lowest_indices) {
-            p := get_screen_p(entry.x, entry.y)
+            p := get_screen_p(Draw_Size, collapse.dimension, size, entry.x, entry.y)
             color := rl.PURPLE
             rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(color, 0.6))
         }
@@ -105,7 +101,7 @@ main :: proc () {
             for x in 0..<Dim {
                 cell := &grid.data[y*Dim + x]
                 
-                p := get_screen_p(x, y)
+                p := get_screen_p(Draw_Size, collapse.dimension, size, x, y)
                 
                 switch value in cell^ {
                   case Tile:
@@ -134,7 +130,7 @@ main :: proc () {
         
         buffer: [256]u8
         line_p := v2 {10, 10}
-        draw_line(format_cstring(buffer[:], `Update %`,            _update), &line_p, font_scale, cast(f32) time.duration_seconds(_update) > rl.GetFrameTime() ? rl.RED : rl.WHITE)
+        draw_line(format_cstring(buffer[:], `Update %`,            _update), &line_p, font_scale, cast(f32) time.duration_seconds(_update) > rl.GetFrameTime() ? rl.ORANGE : rl.WHITE)
         draw_line(format_cstring(buffer[:], "  collapse %",        _collapse), &line_p, font_scale)
         draw_line(format_cstring(buffer[:], "  get neighbours %",  _add_neighbours), &line_p, font_scale)
         denom := cast(time.Duration) _matches_count
@@ -145,7 +141,7 @@ main :: proc () {
         draw_line(format_cstring(buffer[:], "Total %",             _total),   &line_p, font_scale)
         
         if should_restart {
-            draw_line(format_cstring(buffer[:], "Collapse failed: restarting in %", view_seconds(t_restart, precision = 3)), &line_p, font_scale, rl.RED)
+            draw_line(format_cstring(buffer[:], "Collapse failed: restarting in %", view_seconds(t_restart, precision = 3)), &line_p, font_scale, rl.ORANGE)
         }
         
         rl.EndDrawing()
@@ -201,10 +197,10 @@ draw_wave :: proc (using collapse: ^Collapse, wave: Wave, p: v2, size: v2) -> (s
     return should_collapse, target
 }
 
-get_screen_p :: proc (x, y: int) -> (result: v2) {
+get_screen_p :: proc (Draw_Size: i32, dimension: int, size: f32, x, y: int) -> (result: v2) {
     result = vec_cast(f32, x, y) * cast(f32) Draw_Size
     
-    result.x += (cast(f32) Screen_Size.x - (size * Dim)) * 0.5
+    result.x += (cast(f32) Screen_Size.x - (size * cast(f32) dimension)) * 0.5
     result.y += size * 0.5
     
     return result
