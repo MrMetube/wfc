@@ -6,7 +6,7 @@ import "core:math"
 import "core:time"
 import rl "vendor:raylib"
 
-Center :: 1
+Center :: 2
 Kernel :: 3
 
 Collapse :: struct {
@@ -34,24 +34,27 @@ Wave :: struct {
     options: [dynamic]int,
 }
 
-PixelCell :: [Center*Center]rl.Color
-
 Tile :: struct {
-    color:         PixelCell,
-    sockets_index: [4]u32,
+    center:        [Center*Center]rl.Color,
+    sockets_index: [Direction]u32,
     frequency:     u32,
 }
 
 Socket :: struct {
-    center: [Kernel]PixelCell,
-    side:   [Kernel]PixelCell,
+    pixels: [2*Center * Kernel*Center]rl.Color,
 }
 
-Direction :: enum { East, North, South, West }
+Direction :: enum { East=0, North=1, South=2, West=3 }
+Opposite_Direction := [Direction] Direction {
+    .East  = .West,
+    .North = .South,
+    .West  = .East,
+    .South = .North,
+}
 Delta := [Direction] [2]int {
-    .West  = {-1,  0},
-    .North = { 0, -1},
     .East  = {+1,  0},
+    .North = { 0, -1},
+    .West  = {-1,  0},
     .South = { 0, +1},
 }
 
@@ -72,33 +75,6 @@ init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, tile_count: u32, dime
     collapse.lowest_indices = make_array(arena, [2]int, cell_count)
 }
 
-looped_rect_copy :: proc (dest: []$T, source: []T, dest_rect: Rectangle2i, source_min: [2]i32, source_stride, width, height: i32) {
-    dim := get_dimension(dest_rect)
-    
-    for y in 0..<dim.y {
-        for x in 0..<dim.x {
-            dx := x + dest_rect.min.x
-            dy := y + dest_rect.min.y
-            sx := (x + source_min.x) % width
-            sy := (y + source_min.y) % height
-            dest[dy*dim.x + dx] = source[sy*source_stride+ sx]
-        }
-    }
-}
-
-rect_copy :: proc (dest: []$T, source: []T, dest_rect: Rectangle2i, source_min: [2]i32, source_stride: i32) {
-    dim := get_dimension(dest_rect)
-    
-    for y in 0..<dim.y {
-        for x in 0..<dim.x {
-            dx := x + dest_rect.min.x
-            dy := y + dest_rect.min.y
-            sx := x + source_min.x
-            sy := y + source_min.y
-            dest[dy*dim.x + dx] = source[sy*source_stride+ sx]
-        }
-    }
-}
 
 extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
     assert(img.format == .UNCOMPRESSED_R8G8B8A8)
@@ -108,76 +84,78 @@ extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
     
     for min_y in 0..<img.height/Center {
         for min_x in 0..<img.width/Center {
+            surroundings: FixedArray(Kernel*Center * Kernel*Center, rl.Color)
             
-            surroundings: FixedArray(Kernel*Kernel, PixelCell)
-            
-            for ky in i32(0)..<Kernel {
-                for kx in i32(0)..<Kernel {
-                    next_cell: PixelCell
-                    looped_rect_copy(next_cell[:], pixels, cell_rect, {min_x, min_y}*Center + {kx, ky}, img.width, img.width, img.height)
-                    append(&surroundings, next_cell)
+            for ky in i32(0)..<Kernel*Center {
+                for kx in i32(0)..<Kernel*Center {
+                    x := (min_x*Center + kx) % img.width
+                    y := (min_y*Center + ky) % img.height
+                    pixel := pixels[y*img.width+x]
+                    append(&surroundings, pixel)
                 }
             }
+            
+            raw_sur := slice(&surroundings)
             
             tile: Tile
-            w := Kernel
-            h := Kernel
-            tile_sockets: [4]Socket
-            
-            // east
-            for y in 0..<h {
-                x := w-1
-                m := x-1
-                
-                tile_sockets[0].center[y] = surroundings.data[y*w + m]
-                tile_sockets[0].side  [y] = surroundings.data[y*w + x]
-            }
-
-            // north
-            for x in 0..<w {
-                y := 0
-                m := y+1
-                
-                tile_sockets[1].center[x] = surroundings.data[m*w + x]
-                tile_sockets[1].side  [x] = surroundings.data[y*w + x]
-            }
-            
-            // @note(viktor): Side and center are swapped here, so that we don't need to swap when matching.
-            // To see if a tile's east socket matches anothers west, we need to check east.side == west.center
-            // and east.center == west.side as they need to overlap.
-            // This allows us to assign each unique socket an index and only compare those indices later on.
-            
-            // west
-            for y in 0..<h {
-                x := 0
-                m := x+1
-             
-                tile_sockets[2].side  [y] = surroundings.data[y*w + m]
-                tile_sockets[2].center[y] = surroundings.data[y*w + x]
-            }
-            
-            // south
-            for x in 0..<w {
-                y := h-1
-                m := y-1
-                tile_sockets[3].side  [x] = surroundings.data[m*w + x]
-                tile_sockets[3].center[x] = surroundings.data[y*w + x]
-            }
-            
-            tile.color = surroundings.data[1*w+1]
-            
-            for socket, index in tile_sockets {
-                if socket not_in sockets {
-                    sockets[socket] = next_socket_index
-                    next_socket_index += 1
+            rw :: 3 * Center
+            {
+                west, east: Socket
+                sw :: 2 * Center
+                for y in 0..<3 * Center {
+                    for x in 0..<sw {
+                        west.pixels[y*sw + x] = raw_sur[y*rw + x]
+                        east.pixels[y*sw + x] = raw_sur[y*rw + x+Center]
+                    }
                 }
                 
-                tile.sockets_index[index] = sockets[socket]
+                if west not_in sockets {
+                    sockets[west] = next_socket_index
+                    next_socket_index += 1
+                }
+                tile.sockets_index[Direction.West] = sockets[west]
+                
+                if east not_in sockets {
+                    sockets[east] = next_socket_index
+                    next_socket_index += 1
+                }
+                tile.sockets_index[Direction.East] = sockets[east]
+            }
+            
+            {
+                south, north: Socket
+                sw :: 3 * Center
+                for y in 0..<2 * Center {
+                    for x in 0..<sw {
+                        south.pixels[y*sw + x] = raw_sur[(y+Center)*rw + x]
+                        north.pixels[y*sw + x] = raw_sur[y*rw + x]
+                    }
+                }
+                
+                if north not_in sockets {
+                    sockets[north] = next_socket_index
+                    next_socket_index += 1
+                }
+                tile.sockets_index[Direction.North] = sockets[north]
+                
+                if south not_in sockets {
+                    sockets[south] = next_socket_index
+                    next_socket_index += 1
+                }
+                tile.sockets_index[Direction.South] = sockets[south]
+            }
+            
+            {
+                for y in 0..<Center {
+                    for x in 0..<Center {
+                        tile.center[y*Center+x] = raw_sur[(y+Kernel)*(Center*Kernel)+(x+Kernel)]
+                    }
+                }
             }
             
             present: ^Tile
             loop: for &it in slice(tiles) {
-                if tile.color == it.color && tile.sockets_index == it.sockets_index {
+                if tile.center == it.center && tile.sockets_index == it.sockets_index {
                     present = &it
                     break loop
                 }
@@ -440,13 +418,7 @@ matches :: proc(using collapse: ^Collapse, a: Tile, p: [2]int, direction: Direct
 }
 
 matches_tile :: proc(a, b: Tile, direction: Direction) -> (result: bool) {
-    a_side, b_side: int = ---, ---
-    switch direction {
-      case .West:  a_side, b_side = 2, 0
-      case .North: a_side, b_side = 1, 3
-      case .East:  a_side, b_side = 0, 2
-      case .South: a_side, b_side = 3, 1
-    }
+    a_side, b_side := direction, Opposite_Direction[direction]
     
     result = a.sockets_index[a_side] == b.sockets_index[b_side]
     

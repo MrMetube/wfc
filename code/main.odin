@@ -61,29 +61,40 @@ main :: proc () {
     using collapse
     should_restart: b32
     t_restart: f32
+    paused_update: b32
     for !rl.WindowShouldClose() {
-        _collapse = 0
-        _collect = 0
-        _add_neighbours = 0
-        _matches = 0
+        if rl.IsKeyPressed(.SPACE) {
+            paused_update = !paused_update
+        }
+        if rl.IsKeyPressed(.R) {
+            should_restart = true
+            t_restart = 0.3
+        }
         
-        update_start := time.now()
-        if !should_restart {
-            for cast(f32) time.duration_seconds(time.since(update_start)) < 0.016 {
-                if !step_observe(&collapse, &entropy) {
-                    should_restart = true
-                    t_restart = 3
+        if !paused_update {
+            _collapse = 0
+            _collect = 0
+            _add_neighbours = 0
+            _matches = 0
+            
+            update_start := time.now()
+            if !should_restart {
+                for cast(f32) time.duration_seconds(time.since(update_start)) < 0.016 {
+                    if !step_observe(&collapse, &entropy) {
+                        should_restart = true
+                        t_restart = 3
+                    }
                 }
             }
-        }
-        _update = time.since(update_start)
-        
-        if should_restart {
-            t_restart -= rl.GetFrameTime()
-            if t_restart <= 0 {
-                t_restart = 0
-                should_restart = false
-                entangle_grid(&collapse)
+            _update = time.since(update_start)
+            
+            if should_restart {
+                t_restart -= rl.GetFrameTime()
+                if t_restart <= 0 {
+                    t_restart = 0
+                    should_restart = false
+                    entangle_grid(&collapse)
+                }
             }
         }
         
@@ -118,7 +129,7 @@ main :: proc () {
                     for cy in 0..<Center {
                         for cx in 0..<Center {
                             rect := rl.Rectangle {p.x+ cast(f32)cx*size/Center, p.y + cast(f32) cy*size/Center, size/Center, size/Center}
-                            rl.DrawRectangleRec(rect, value.color[cy*Center+cx])
+                            rl.DrawRectangleRec(rect, value.center[cy*Center+cx])
                         }
                     }
                     
@@ -145,14 +156,19 @@ main :: proc () {
         
         buffer: [256]u8
         line_p := v2 {10, 10}
-        draw_line(format_cstring(buffer[:], `Update %`,            _update),         &line_p, font_scale, cast(f32) time.duration_seconds(_update) > rl.GetFrameTime() ? rl.ORANGE : rl.WHITE)
+        is_late := cast(f32) time.duration_seconds(_update) > rl.GetFrameTime()
+        if paused_update {
+            draw_line("### Paused ###", &line_p, font_scale, rl.RAYWHITE)
+        }
+        draw_line(format_cstring(buffer[:], `Update %`, _update), &line_p, font_scale, is_late ? rl.ORANGE : rl.WHITE)
         if should_restart {
             draw_line(format_cstring(buffer[:], "Collapse failed: restarting in %", view_seconds(t_restart, precision = 3)), &line_p, font_scale, rl.ORANGE)
+        } else {
+            draw_line(format_cstring(buffer[:], "  collapse %",        _collapse),       &line_p, font_scale)
+            draw_line(format_cstring(buffer[:], "  get neighbours %",  _add_neighbours), &line_p, font_scale)
+            draw_line(format_cstring(buffer[:], "  matches %",         _matches),        &line_p, font_scale)
+            draw_line(format_cstring(buffer[:], "  collect %",         _collect),        &line_p, font_scale)
         }
-        draw_line(format_cstring(buffer[:], "  collapse %",        _collapse),       &line_p, font_scale)
-        draw_line(format_cstring(buffer[:], "  get neighbours %",  _add_neighbours), &line_p, font_scale)
-        draw_line(format_cstring(buffer[:], "  matches %",         _matches),        &line_p, font_scale)
-        draw_line(format_cstring(buffer[:], "  collect %",         _collect),        &line_p, font_scale)
         
         draw_line(format_cstring(buffer[:], "Render %", _render),         &line_p, font_scale)
         draw_line(format_cstring(buffer[:], "Total %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)),          &line_p, font_scale)
