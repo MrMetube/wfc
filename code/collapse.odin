@@ -6,6 +6,7 @@ import "core:math"
 import "core:time"
 import rl "vendor:raylib"
 
+Center :: 1
 Kernel :: 3
 
 Collapse :: struct {
@@ -33,17 +34,18 @@ Wave :: struct {
     options: [dynamic]int,
 }
 
+PixelCell :: [Center*Center]rl.Color
+
 Tile :: struct {
-    color:         rl.Color,
+    color:         PixelCell,
     sockets_index: [4]u32,
     frequency:     u32,
 }
 
 Socket :: struct {
-    center: [3]Color3,
-    side:   [3]Color3,
+    center: [Kernel]PixelCell,
+    side:   [Kernel]PixelCell,
 }
-Color3 :: [3]u8
 
 Direction :: enum { East, North, South, West }
 Delta := [Direction] [2]int {
@@ -52,7 +54,6 @@ Delta := [Direction] [2]int {
     .East  = {+1,  0},
     .South = { 0, +1},
 }
-
 
 Check :: struct {
     index: [2]int,
@@ -69,30 +70,56 @@ init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, tile_count: u32, dime
     collapse.grid           = make_array(arena, Cell,   cell_count)
     collapse.to_check       = make_array(arena, Check,  cell_count)
     collapse.lowest_indices = make_array(arena, [2]int, cell_count)
+}
+
+looped_rect_copy :: proc (dest: []$T, source: []T, dest_rect: Rectangle2i, source_min: [2]i32, source_stride, width, height: i32) {
+    dim := get_dimension(dest_rect)
     
+    for y in 0..<dim.y {
+        for x in 0..<dim.x {
+            dx := x + dest_rect.min.x
+            dy := y + dest_rect.min.y
+            sx := (x + source_min.x) % width
+            sy := (y + source_min.y) % height
+            dest[dy*dim.x + dx] = source[sy*source_stride+ sx]
+        }
+    }
+}
+
+rect_copy :: proc (dest: []$T, source: []T, dest_rect: Rectangle2i, source_min: [2]i32, source_stride: i32) {
+    dim := get_dimension(dest_rect)
+    
+    for y in 0..<dim.y {
+        for x in 0..<dim.x {
+            dx := x + dest_rect.min.x
+            dy := y + dest_rect.min.y
+            sx := x + source_min.x
+            sy := y + source_min.y
+            dest[dy*dim.x + dx] = source[sy*source_stride+ sx]
+        }
+    }
 }
 
 extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
     assert(img.format == .UNCOMPRESSED_R8G8B8A8)
-    pixels := (cast([^]Color4) img.data)[:img.width * img.height]
+    pixels := (cast([^]rl.Color) img.data)[:img.width * img.height]
     
-    for min_y in 0..<img.height {
-        for min_x in 0..<img.width {
-            sub_pixels: FixedArray(cast(i64) (Kernel*Kernel), Color3)
+    cell_rect := rectangle_min_dimension(i32(0), 0, Center, Center)
+    
+    for min_y in 0..<img.height/Center {
+        for min_x in 0..<img.width/Center {
             
-            for dy in 0..<Kernel {
-                for dx in 0..<Kernel {
-                    x := (min_x + cast(i32) dx) % img.width
-                    y := (min_y + cast(i32) dy) % img.height
-                    
-                    pixel := pixels[y * img.width + x].rgb
-                    append(&sub_pixels, pixel)
+            surroundings: FixedArray(Kernel*Kernel, PixelCell)
+            
+            for ky in i32(0)..<Kernel {
+                for kx in i32(0)..<Kernel {
+                    next_cell: PixelCell
+                    looped_rect_copy(next_cell[:], pixels, cell_rect, {min_x, min_y}*Center + {kx, ky}, img.width, img.width, img.height)
+                    append(&surroundings, next_cell)
                 }
             }
             
             tile: Tile
-            pixels := sub_pixels.data
-            
             w := Kernel
             h := Kernel
             tile_sockets: [4]Socket
@@ -101,15 +128,18 @@ extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
             for y in 0..<h {
                 x := w-1
                 m := x-1
-                tile_sockets[0].center[y] = pixels[y*w + m]
-                tile_sockets[0].side[y]   = pixels[y*w + x]
+                
+                tile_sockets[0].center[y] = surroundings.data[y*w + m]
+                tile_sockets[0].side  [y] = surroundings.data[y*w + x]
             }
+
             // north
             for x in 0..<w {
                 y := 0
                 m := y+1
-                tile_sockets[1].center[x] = pixels[m*w + x]
-                tile_sockets[1].side[x]   = pixels[y*w + x]
+                
+                tile_sockets[1].center[x] = surroundings.data[m*w + x]
+                tile_sockets[1].side  [x] = surroundings.data[y*w + x]
             }
             
             // @note(viktor): Side and center are swapped here, so that we don't need to swap when matching.
@@ -121,20 +151,21 @@ extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
             for y in 0..<h {
                 x := 0
                 m := x+1
-                tile_sockets[2].side[y]   = pixels[y*w + m]
-                tile_sockets[2].center[y] = pixels[y*w + x]
+             
+                tile_sockets[2].side  [y] = surroundings.data[y*w + m]
+                tile_sockets[2].center[y] = surroundings.data[y*w + x]
             }
             
             // south
             for x in 0..<w {
                 y := h-1
                 m := y-1
-                tile_sockets[3].side[x]   = pixels[m*w + x]
-                tile_sockets[3].center[x] = pixels[y*w + x]
+                tile_sockets[3].side  [x] = surroundings.data[m*w + x]
+                tile_sockets[3].center[x] = surroundings.data[y*w + x]
             }
             
-            tile.color.rgb = sub_pixels.data[1*Kernel+1]
-            tile.color.a = 255
+            tile.color = surroundings.data[1*w+1]
+            
             for socket, index in tile_sockets {
                 if socket not_in sockets {
                     sockets[socket] = next_socket_index

@@ -6,8 +6,6 @@ import rl "vendor:raylib"
 
 Screen_Size :: [2]i32{1920, 1080}
 
-Color4 :: [4]u8
-
 the_font: rl.Font
 font_scale :: 32
 code_points := [?]rune {
@@ -20,9 +18,15 @@ code_points := [?]rune {
 
 _total, _update, _render, _collapse, _add_neighbours, _matches, _collect: time.Duration
 main :: proc () {
-    Dim :: 100
-    Draw_Size := min(Screen_Size.x, Screen_Size.y) / (Dim+1)
-    size      := cast(f32) Draw_Size
+    Dim :: [2]int {200, 100}
+    size: f32
+    
+    ratio := vec_cast(f32, Screen_Size) / vec_cast(f32, Dim+10)
+    if ratio.x < ratio.y {
+        size = ratio.x
+    } else {
+        size = ratio.y 
+    }
 
     rl.SetTraceLogLevel(.WARNING)
     rl.InitWindow(Screen_Size.x, Screen_Size.y, "Wave Function Collapse")
@@ -35,7 +39,8 @@ main :: proc () {
     arena: Arena
     init_arena(&arena, make([]u8, 1*Gigabyte))
     
-    input: cstring = `.\city.png`
+    // input: cstring = `.\city.png`
+    input: cstring = `.\cave.png`
     if len(os.args) == 2 {
         input = cast(cstring) raw_data(os.args[1])
     }
@@ -91,26 +96,31 @@ main :: proc () {
         rl.BeginMode2D(camera)
         
         for entry in slice(to_check) {
-            p := get_screen_p(Draw_Size, collapse.dimension, size, entry.index.x, entry.index.y)
+            p := get_screen_p(collapse.dimension, size, entry.index.x, entry.index.y)
             rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(rl.YELLOW, 0.3))
         }
         
         for entry in slice(lowest_indices) {
-            p := get_screen_p(Draw_Size, collapse.dimension, size, entry.x, entry.y)
+            p := get_screen_p(collapse.dimension, size, entry.x, entry.y)
             color := rl.PURPLE
             rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(color, 0.6))
         }
         
         all_done := true
-        for y in 0..<Dim {
-            for x in 0..<Dim {
-                cell := &grid.data[y*Dim + x]
+        for y in 0..<Dim.y {
+            for x in 0..<Dim.x {
+                cell := &grid.data[y*Dim.x + x]
                 
-                p := get_screen_p(Draw_Size, collapse.dimension, size, x, y)
+                p := get_screen_p(collapse.dimension, size, x, y)
                 
                 switch value in cell^ {
                   case Tile:
-                    rl.DrawRectangleRec({p.x, p.y, size, size}, value.color)
+                    for cy in 0..<Center {
+                        for cx in 0..<Center {
+                            rect := rl.Rectangle {p.x+ cast(f32)cx*size/Center, p.y + cast(f32) cy*size/Center, size/Center, size/Center}
+                            rl.DrawRectangleRec(rect, value.color[cy*Center+cx])
+                        }
+                    }
                     
                   case Wave:
                     all_done = false
@@ -201,11 +211,10 @@ draw_wave :: proc (using collapse: ^Collapse, wave: Wave, p: v2, size: v2) -> (s
     return should_collapse, target
 }
 
-get_screen_p :: proc (Draw_Size: i32, dimension: [2]int, size: f32, x, y: int) -> (result: v2) {
-    result = vec_cast(f32, x, y) * cast(f32) Draw_Size
+get_screen_p :: proc (dimension: [2]int, size: f32, x, y: int) -> (result: v2) {
+    result = vec_cast(f32, x, y) * size
     
-    result.x += (cast(f32) Screen_Size.x - (size * cast(f32) dimension.x)) * 0.5
-    result.y += size * 0.5
+    result += (vec_cast(f32, Screen_Size) - (size * vec_cast(f32, dimension))) * 0.5
     
     return result
 }
