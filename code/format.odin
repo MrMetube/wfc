@@ -48,16 +48,11 @@ println :: proc(format: string, args: ..any, flags: FormatContextFlags = {}) {
 
 ////////////////////////////////////////////////
 
-ViewKind :: enum u8 {
-    Bytes,
-    
-    String, Character, 
-    
-    UnsignedInteger, SignedInteger,
-    Float,
-    
-    Indent, Outdent, Linebreak,
-}
+Default_Views: map[typeid] View_Proc
+View_Proc :: proc (value: pmm) -> View_Proc_Result
+View_Proc_Result :: union{View, TempViews, any}
+
+////////////////////////////////////////////////
 
 View :: struct {
     value: struct #raw_union {
@@ -75,7 +70,7 @@ View :: struct {
     size: u8,
     kind: ViewKind,
     
-    sets: bit_set[ enum {Width, Basis, Precision}],
+    settings: bit_set[ enum {Width, Basis, Precision}],
     // General
     width:          u16,
     pad_right_side: b8,
@@ -97,6 +92,19 @@ View :: struct {
     precision:  u8,
     float_kind: FormatFloatKind,
 }
+
+ViewKind :: enum u8 {
+    Bytes,
+    
+    String, Character, 
+    
+    UnsignedInteger, SignedInteger,
+    Float,
+    
+    Indent, Outdent, Linebreak,
+}
+
+TempViews :: distinct []View
 
 FormatNumberSign   :: enum u8 { Never, Plus, Space }
 FormatFloatKind    :: enum u8 { Default, MaximumPercision, Scientific }
@@ -130,7 +138,7 @@ where intrinsics.type_is_float(F) {
     view_set_number(&result, flags, positive_sign)
     
     if precision, ok := precision.?; ok {
-        result.sets += { .Precision }
+        result.settings += { .Precision }
         result.precision = precision
     }
     result.float_kind = kind
@@ -182,7 +190,7 @@ where intrinsics.type_is_integer(I) {
     view_set_number(&result, flags, positive_sign)
     
     if basis, ok := basis.?; ok {
-        result.sets += { .Basis }
+        result.settings += { .Basis }
         result.basis = basis
     }
     
@@ -287,7 +295,7 @@ view_set_number :: proc (view: ^View, flags: FormatNumberFlags = {}, positive_si
 
 view_set_general :: proc (view: ^View, width: Maybe(u16) = nil, pad_right_side: b8 = false) {
     if width, ok := width.?; ok {
-        view.sets += { .Width }
+        view.settings += { .Width }
         view.width = width
     }
     view.pad_right_side = pad_right_side
@@ -306,8 +314,37 @@ FormatContext :: struct {
 
 ////////////////////////////////////////////////
 
-@(private="file")
-temp_buffer:  [1024]u8
+@(private="file") temp_buffer:          [1024]u8
+@(private="file") temp_view_buffer:     [1024]View
+@(private="file") temp_view_inside_block: b32
+@(private="file") temp_view_start_index: u32
+@(private="file") temp_view_next_index:  u32
+
+
+begin_temp_views :: proc (width: Maybe(u16) = nil) {
+    assert(!temp_view_inside_block)
+    temp_view_inside_block = true
+    // @incomplete what about width for TempViews, handle in format_string
+    temp_view_start_index = temp_view_next_index
+}
+
+append_temp_view :: proc (view: View) {
+    assert(temp_view_inside_block)
+
+    temp_view_buffer[temp_view_next_index] = view
+    temp_view_next_index += 1
+    assert(temp_view_next_index < len(temp_view_buffer))
+}
+
+end_temp_views :: proc () -> (result: TempViews) {
+    assert(temp_view_inside_block)
+    temp_view_inside_block = false
+    
+    result = cast(TempViews) temp_view_buffer[temp_view_start_index : temp_view_next_index]
+    return result
+}
+
+////////////////////////////////////////////////
 
 begin_formatting :: proc (buffer: []u8, flags: FormatContextFlags) -> (result: FormatContext) {
     result = { 
@@ -325,7 +362,7 @@ end_formatting :: proc (ctx: ^FormatContext) -> (result: string) {
     /* @incomplete
         StringFormat DoubleQuoted_Escaped,
     */
-    
+    temp_view_next_index = 0
     return to_string(ctx.dest)
 }
 
@@ -361,8 +398,9 @@ format_string :: proc (buffer: []u8, format: string, args: ..any, flags := Forma
                 
                 // @incomplete Would be ever want to display a raw View? if so put in a flag to make it use the normal path
                 switch format in arg {
-                  case View: format_view(&ctx, format)
-                  case:      format_any(&ctx, arg)
+                  case TempViews: for view in format do format_view(&ctx, view)
+                  case View:      format_view(&ctx, format)
+                  case:           format_any(&ctx, arg)
                 }
             }
         }
@@ -453,8 +491,8 @@ format_view :: proc (ctx: ^FormatContext, view: View) {
     }
     
     padding := max(0, cast(i32) view.width - cast(i32) temp.count)
-    if       !view.pad_right_side && .Width in view.sets do pad(&ctx.dest, padding)
-    defer if  view.pad_right_side && .Width in view.sets do pad(&ctx.dest, padding)
+    if       !view.pad_right_side && .Width in view.settings do pad(&ctx.dest, padding)
+    defer if  view.pad_right_side && .Width in view.settings do pad(&ctx.dest, padding)
     
     append(&ctx.dest, to_string(temp))
 }
@@ -516,144 +554,16 @@ format_any :: proc(ctx: ^FormatContext, arg: any) {
             format_optional_type(ctx, raw.id)
             format_pointer(ctx, data, variant.elem)
           
-          
           case runtime.Type_Info_Named:
             // @important @todo(viktor): If the struct is an alias like v4 :: [4]f32 we currently print both types. but we should only print the alias
-            // @todo(viktor): Time Duration and SourceCodeLocation should not need to be inlined. find a way for the user to hook into this process and specify custom formats like these
-            if dur, okd := value.(time.Duration); okd {
-                ffrac :: proc(buf: []byte, v: u64, precision: int) -> (nw: int, nv: u64) {
-                    v := v
-                    w := len(buf)
-                    print := false
-                    for _ in 0..<precision {
-                        digit := v % 10
-                        print = print || digit != 0
-                        if print {
-                            w -= 1
-                            buf[w] = byte(digit) + '0'
-                        }
-                        v /= 10
-                    }
-                    if print {
-                        w -= 1
-                        buf[w] = '.'
-                    }
-                    return w, v
+            // @todo(viktor): SourceCodeLocation should not need to be inlined. find a way for the user to hook into this process and specify custom formats like these
+            if default, ok := Default_Views[raw.id]; ok {
+                // @copypasta from format_string loop
+                switch format in default(value.data) {
+                  case TempViews: for view in format do format_view(ctx, view)
+                  case View:      format_view(ctx, format)
+                  case any:       format_any(ctx, format)
                 }
-                fint :: proc(buf: []byte, v: u64) -> int {
-                    v := v
-                    w := len(buf)
-                    if v == 0 {
-                        w -= 1
-                        buf[w] = '0'
-                    } else {
-                        for v > 0 {
-                            w -= 1
-                            buf[w] = byte(v%10) + '0'
-                            v /= 10
-                        }
-                    }
-                    return w
-                }
-                
-                buf: [32]byte
-                w := len(buf)
-                u := u64(dur)
-                neg := dur < 0
-                if neg {
-                    u = -u
-                }
-                
-                if u < u64(time.Second) {
-                    precision: int
-                    w -= 1
-                    buf[w] = 's'
-                    w -= 1
-                    switch {
-                      case u == 0:
-                        format_view(ctx, view_string("0s"))
-                        return
-                      case u < u64(time.Microsecond):
-                        precision = 0
-                        buf[w] = 'n'
-                      case u < u64(time.Millisecond):
-                        precision = 3
-                        // U+00B5 'µ' micro sign == 0xC2 0xB5
-                        w -= 1 // Need room for two bytes
-                        copy(buf[w:], "µ")
-                      case:
-                        precision = 6
-                        buf[w] = 'm'
-                    }
-                    w, u = ffrac(buf[:w], u, precision)
-                    w = fint(buf[:w], u)
-                } else {
-                    w -= 1
-                    buf[w] = 's'
-                    w, u = ffrac(buf[:w], u, 9)
-                    w = fint(buf[:w], u%60)
-                    u /= 60
-                    if u > 0 {
-                        w -= 1
-                        buf[w] = 'm'
-                        w = fint(buf[:w], u%60)
-                        u /= 60
-                        if u > 0 {
-                            w -= 1
-                            buf[w] = 'h'
-                            w = fint(buf[:w], u)
-                        }
-                    }
-                }
-                
-                if neg {
-                    w -= 1
-                    buf[w] = '-'
-                }
-                
-                format_view(ctx, view_string(string(buf[w:])))
-            } else if tim, okt := value.(time.Time); okt {
-                t := tim
-                y, mon, d := time.date(t)
-                h, min, s := time.clock(t)
-                ns := (t._nsec - (t._nsec/1e9 + time.UNIX_TO_ABSOLUTE)*1e9) % 1e9
-                format_view(ctx, view_integer(cast(i64) y,   width = 4))
-                format_view(ctx, view_character('-'))
-                format_view(ctx, view_integer(cast(i64) mon, width = 2))
-                format_view(ctx, view_character('-'))
-                format_view(ctx, view_integer(cast(i64) d,   width = 2))
-                format_view(ctx, view_character(' '))
-
-                format_view(ctx, view_integer(cast(i64) h,   width = 2))
-                format_view(ctx, view_character(':'))
-                format_view(ctx, view_integer(cast(i64) min, width = 2))
-                format_view(ctx, view_character(':'))
-                format_view(ctx, view_integer(cast(i64) s,   width = 2))
-                format_view(ctx, view_character('.'))
-                format_view(ctx, view_integer((ns),          width = 9))
-                format_view(ctx, view_string(" +0000 UTC"))
-            } else if loc, okl := value.(runtime.Source_Code_Location); okl {
-                format_view(ctx, view_string(loc.file_path))
-            
-                when ODIN_ERROR_POS_STYLE == .Default {
-                    open  :: '(' 
-                    close :: ')'
-                } else when ODIN_ERROR_POS_STYLE == .Unix {
-                    open  :: ':' 
-                    close :: ':'
-                } else {
-                    #panic("Unhandled ODIN_ERROR_POS_STYLE")
-                }
-                
-                format_view(ctx, view_character(open))
-                defer format_view(ctx, view_character(close))
-                
-                format_view(ctx, view_integer(u64(loc.line)))
-                if loc.column != 0 {
-                    format_view(ctx, view_character(':'))
-                    format_view(ctx, view_integer(u64(loc.column)))
-                }
-                
             } else {
                 format_view(ctx, view_string(variant.name))
                 format_view(ctx, view_character(' '))
@@ -795,7 +705,7 @@ DigitsUppercase := "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 format_float_with_ryu :: proc(dest: ^StringBuilder, float: $F, view: ^View) {
     precision: u32 = 6
-    if .Precision in view.sets do precision = cast(u32) view.precision
+    if .Precision in view.settings do precision = cast(u32) view.precision
     
     
     // @todo(viktor): handle .Uppercase in view.flags
@@ -818,7 +728,7 @@ format_float_badly :: proc(dest: ^StringBuilder, float: $F, view: ^View) {
     format_signed_integer(dest, cast(i64) integer, view)
     
     precision: u8 = 6
-    if .Precision in view.sets do precision = view.precision
+    if .Precision in view.settings do precision = view.precision
     
     if fraction != 0 && precision != 0 {
         append(dest, '.')
@@ -849,11 +759,13 @@ format_signed_integer :: proc(dest: ^StringBuilder, integer: i64, view: ^View) {
     format_unsigned_integer(dest, cast(u64) abs(integer), view)
 }
 
+// @todo(viktor): if we specify a width and .LeadingZero, we should limit those zeros to the width i guess
+// example: integer = 2 width = 2 -> "02" and not "00000002"
 format_unsigned_integer :: proc(dest: ^StringBuilder, integer: u64, view: ^View) {
     digits := .Uppercase in view.flags ? DigitsUppercase : DigitsLowercase
     
     basis: u64 = 10
-    if .Basis in view.sets do basis = cast(u64) view.basis
+    if .Basis in view.settings do basis = cast(u64) view.basis
     assert(view.basis < auto_cast len(digits))
     
     integer := integer
@@ -868,15 +780,15 @@ format_unsigned_integer :: proc(dest: ^StringBuilder, integer: u64, view: ^View)
         }
     }
     
-    show_leading_zero := .LeadingZero in view.flags
+    show_leading_zeros := .LeadingZero in view.flags
     max_integer: u64
-    if show_leading_zero {
+    if show_leading_zeros {
         for _ in 0..<view.size do max_integer = (max_integer<<8) | 0xFF
     } else {
         max_integer = integer
     }
     
-    power :u64= 1
+    power: u64 = 1
     for power < max_integer {
         power *= basis
         if max_integer / power < basis do break
@@ -886,8 +798,8 @@ format_unsigned_integer :: proc(dest: ^StringBuilder, integer: u64, view: ^View)
         div := integer / power
         integer -= div * power
         
-        if show_leading_zero || div != 0 || integer == 0 {
-            show_leading_zero = true
+        if show_leading_zeros || div != 0 || integer == 0 {
+            show_leading_zeros = true
             append(dest, digits[div])
         }
     }

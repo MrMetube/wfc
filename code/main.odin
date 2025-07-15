@@ -134,18 +134,18 @@ main :: proc () {
         
         buffer: [256]u8
         line_p := v2 {10, 10}
-        draw_line(format_cstring(buffer[:], "Update %", _update), &line_p, font_scale, cast(f32) time.duration_seconds(_update) > rl.GetFrameTime() ? rl.RED : rl.WHITE)
-        draw_line(format_cstring(buffer[:], "  collapse % %", view_time_duration(_collapse)), &line_p, font_scale)
-        draw_line(format_cstring(buffer[:], "  get neighbours % %", view_time_duration(_add_neighbours)), &line_p, font_scale)
+        draw_line(format_cstring(buffer[:], `Update %`,            _update), &line_p, font_scale, cast(f32) time.duration_seconds(_update) > rl.GetFrameTime() ? rl.RED : rl.WHITE)
+        draw_line(format_cstring(buffer[:], "  collapse %",        _collapse), &line_p, font_scale)
+        draw_line(format_cstring(buffer[:], "  get neighbours %",  _add_neighbours), &line_p, font_scale)
         denom := cast(time.Duration) _matches_count
         if denom == 0 do denom = 1
-        draw_line(format_cstring(buffer[:], "  matches % % * % % = % %", view_order_of_magnitude(_matches_count), view_time_duration(_matches / denom), view_time_duration(_matches)), &line_p, font_scale)
-        draw_line(format_cstring(buffer[:], "  collect % %", view_time_duration(_collect)), &line_p, font_scale)
-        draw_line(format_cstring(buffer[:], "Render % %",    view_time_duration(_render)),  &line_p, font_scale)
-        draw_line(format_cstring(buffer[:], "Total % %",     view_time_duration(_total)),   &line_p, font_scale)
+        draw_line(format_cstring(buffer[:], "  matches % * % = %", view_order_of_magnitude(_matches_count), _matches / denom, _matches), &line_p, font_scale)
+        draw_line(format_cstring(buffer[:], "  collect %",         _collect), &line_p, font_scale)
+        draw_line(format_cstring(buffer[:], "Render %",            _render),  &line_p, font_scale)
+        draw_line(format_cstring(buffer[:], "Total %",             _total),   &line_p, font_scale)
         
         if should_restart {
-            draw_line(format_cstring(buffer[:], "Collapse failed: restarting in % %", view_duration(cast(f64) t_restart, precision = 3)), &line_p, font_scale, rl.RED)
+            draw_line(format_cstring(buffer[:], "Collapse failed: restarting in %", view_seconds(t_restart, precision = 3)), &line_p, font_scale, rl.RED)
         }
         
         rl.EndDrawing()
