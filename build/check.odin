@@ -151,13 +151,13 @@ visit_and_check_printlikes :: proc(visitor: ^ast.Visitor, node: ^ast.Node) -> ^a
         
             format := read_pos_or_fail(format_arg.pos, format_arg.end)
             indices: [dynamic]int
-            get_expected_format_string_arg_count(format, &indices)
+            format_string_ok := get_expected_format_string_arg_count(format, &indices)
             expected := len(indices)
             
             we_know_the_actual_arg_count := true
             
             actual: int
-            if expected != 0 && printlike.args_index < len(call.args) {
+            if format_string_ok && printlike.args_index < len(call.args) {
                 args := call.args[printlike.args_index]
                 if _, set_parameter_by_name := args.derived_expr.(^ast.Field_Value); set_parameter_by_name do return visitor
                 
@@ -237,7 +237,10 @@ report_printlike_error :: proc (call: ^ast.Call_Expr, expected, actual: int) {
         }
     }
     
-    fmt.printfln("%v\n\tThe percent signs that consume an argument in the format string are highlighted.\n", Reset)
+    fmt.printfln("%v\n", Reset)
+    if expected != 0 {
+        fmt.printfln("\tThe percent signs that consume an argument in the format string are highlighted.\n")
+    }
 }
 
 report_unchecked_printlike_call :: proc (call: ^ast.Call_Expr) {
@@ -271,16 +274,22 @@ report_unchecked_printlike_call :: proc (call: ^ast.Call_Expr) {
 }
 
 // :PrintlikeChecking @copypasta the loop structure must be the same as in format_string 
-get_expected_format_string_arg_count :: proc(format: string, indices: ^[dynamic]int) {
-    for index: int; index < len(format); index += 1 {
-        if format[index] == '%' {
-            if index+1 < len(format) && format[index+1] == '%' {
-                index += 1
-            } else {
-                append(indices, index)
+get_expected_format_string_arg_count :: proc(format: string, indices: ^[dynamic]int) -> (ok: bool) {
+    if format[0] == '"' || format[0] == '`' {
+        ok = true
+        
+        for index: int; index < len(format); index += 1 {
+            if format[index] == '%' {
+                if index+1 < len(format) && format[index+1] == '%' {
+                    index += 1
+                } else {
+                    append(indices, index)
+                }
             }
         }
     }
+    
+    return ok
 }
 
 collect_declarations_with_attribute :: proc(target: string, attributes: []^ast.Attribute, pos, end: tokenizer.Pos) -> (name, name_and_body: string, result: ^ast.Attribute) {
