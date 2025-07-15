@@ -1,6 +1,6 @@
 package main
 
-import "core:math"
+import "core:os"
 import "core:time"
 import rl "vendor:raylib"
 
@@ -19,9 +19,8 @@ code_points := [?]rune {
 }
 
 _total, _update, _render, _collapse, _add_neighbours, _matches, _collect: time.Duration
-_matches_count: int
 main :: proc () {
-    Dim :: 50
+    Dim :: 100
     Draw_Size := min(Screen_Size.x, Screen_Size.y) / (Dim+1)
     size      := cast(f32) Draw_Size
 
@@ -36,9 +35,16 @@ main :: proc () {
     arena: Arena
     init_arena(&arena, make([]u8, 1*Gigabyte))
     
-    city := rl.LoadImage("./flower.png")
+    input: cstring = `.\city.png`
+    if len(os.args) == 2 {
+        input = cast(cstring) raw_data(os.args[1])
+    }
+    city := rl.LoadImage(input)
+    // city := rl.LoadImage(`.\diagonals.png`)
+    // city := rl.LoadImage(`.\cave.png`)
+    // city := rl.LoadImage(`.\brown_bricks.png`)
     collapse: Collapse
-    init_collapse(&collapse, &arena, 256, Dim, true, true)
+    init_collapse(&collapse, &arena, 2048, Dim, false, false)
     
     _total_start := time.now()
     extract_tiles(&collapse, city)
@@ -55,7 +61,6 @@ main :: proc () {
         _collect = 0
         _add_neighbours = 0
         _matches = 0
-        _matches_count = 0
         
         update_start := time.now()
         if !should_restart {
@@ -121,7 +126,7 @@ main :: proc () {
             }
         }
         
-        if _total == 0 && all_done {
+        if !all_done {
             _total = time.since(_total_start)
         }
         
@@ -130,19 +135,18 @@ main :: proc () {
         
         buffer: [256]u8
         line_p := v2 {10, 10}
-        draw_line(format_cstring(buffer[:], `Update %`,            _update), &line_p, font_scale, cast(f32) time.duration_seconds(_update) > rl.GetFrameTime() ? rl.ORANGE : rl.WHITE)
-        draw_line(format_cstring(buffer[:], "  collapse %",        _collapse), &line_p, font_scale)
-        draw_line(format_cstring(buffer[:], "  get neighbours %",  _add_neighbours), &line_p, font_scale)
-        denom := cast(time.Duration) _matches_count
-        if denom == 0 do denom = 1
-        draw_line(format_cstring(buffer[:], "  matches % * % = %", view_order_of_magnitude(_matches_count), _matches / denom, _matches), &line_p, font_scale)
-        draw_line(format_cstring(buffer[:], "  collect %",         _collect), &line_p, font_scale)
-        draw_line(format_cstring(buffer[:], "Render %",            _render),  &line_p, font_scale)
-        draw_line(format_cstring(buffer[:], "Total %",             _total),   &line_p, font_scale)
-        
+        draw_line(format_cstring(buffer[:], `Update %`,            _update),         &line_p, font_scale, cast(f32) time.duration_seconds(_update) > rl.GetFrameTime() ? rl.ORANGE : rl.WHITE)
         if should_restart {
             draw_line(format_cstring(buffer[:], "Collapse failed: restarting in %", view_seconds(t_restart, precision = 3)), &line_p, font_scale, rl.ORANGE)
         }
+        draw_line(format_cstring(buffer[:], "  collapse %",        _collapse),       &line_p, font_scale)
+        draw_line(format_cstring(buffer[:], "  get neighbours %",  _add_neighbours), &line_p, font_scale)
+        draw_line(format_cstring(buffer[:], "  matches %",         _matches),        &line_p, font_scale)
+        draw_line(format_cstring(buffer[:], "  collect %",         _collect),        &line_p, font_scale)
+        
+        draw_line(format_cstring(buffer[:], "Render %", _render),         &line_p, font_scale)
+        draw_line(format_cstring(buffer[:], "Total %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)),          &line_p, font_scale)
+        
         
         rl.EndDrawing()
     }
@@ -197,10 +201,10 @@ draw_wave :: proc (using collapse: ^Collapse, wave: Wave, p: v2, size: v2) -> (s
     return should_collapse, target
 }
 
-get_screen_p :: proc (Draw_Size: i32, dimension: int, size: f32, x, y: int) -> (result: v2) {
+get_screen_p :: proc (Draw_Size: i32, dimension: [2]int, size: f32, x, y: int) -> (result: v2) {
     result = vec_cast(f32, x, y) * cast(f32) Draw_Size
     
-    result.x += (cast(f32) Screen_Size.x - (size * cast(f32) dimension)) * 0.5
+    result.x += (cast(f32) Screen_Size.x - (size * cast(f32) dimension.x)) * 0.5
     result.y += size * 0.5
     
     return result

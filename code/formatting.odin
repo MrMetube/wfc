@@ -61,6 +61,7 @@ view_memory_size :: proc(#any_int value: u64) -> (u64, string) {
     return value , "?"
 }
 
+// @todo(viktor): take some inspiration from view_duration scale/decimal stuff
 view_order_of_magnitude :: proc(value: $T, width: Maybe(u16) = 5, precision: Maybe(u8) = 2) -> (result: TempViews) {
     v, magnitude := order_of_magnitude(value)
     

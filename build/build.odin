@@ -11,12 +11,12 @@ import "core:time"
 
 import win "core:sys/windows"
 
-optimizations := false ? ` -o:speed ` : ` -o:none `
+optimizations := !false ? ` -o:speed ` : ` -o:none `
 Pedantic      :: false
 
 flags    :: ` -error-pos-style:unix -vet-cast -vet-shadowing -ignore-vs-search -use-single-module -microarch:native -target:windows_amd64`
 debug    :: ` -debug `
-windows  :: ` -subsystem:console `
+windows  :: ` -subsystem:windows `
 pedantic :: ` -warnings-as-errors -vet-unused-imports -vet-semicolon -vet-unused-variables -vet-style -vet-packages:main -vet-unused-procedures` 
 check    :: ` -custom-attribute:printlike `
 

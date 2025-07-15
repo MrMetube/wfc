@@ -14,7 +14,7 @@ Collapse :: struct {
     sockets: map[Socket]u32,
     next_socket_index: u32,
     
-    dimension: int,
+    dimension: [2]int,
     
     to_check: Array(Check),
     lowest_indices: Array([2]int),
@@ -37,7 +37,6 @@ Tile :: struct {
     color:         rl.Color,
     sockets_index: [4]u32,
     frequency:     u32,
-    hash:          u32,
 }
 
 Socket :: struct {
@@ -60,12 +59,12 @@ Check :: struct {
     depth: u32,
 }
 
-init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, tile_count: u32, dimension: int, wrap_x, wrap_y: b32) {
+init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, tile_count: u32, dimension: [2]int, wrap_x, wrap_y: b32) {
     collapse.wrap_x = wrap_x
     collapse.wrap_y = wrap_y
     
     collapse.dimension = dimension
-    cell_count := square(collapse.dimension)
+    cell_count := collapse.dimension.x * collapse.dimension.y
     collapse.tiles          = make_array(arena, Tile,   tile_count)
     collapse.grid           = make_array(arena, Cell,   cell_count)
     collapse.to_check       = make_array(arena, Check,  cell_count)
@@ -134,23 +133,20 @@ extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
                 tile_sockets[3].center[x] = pixels[y*w + x]
             }
             
-            {
-                // @cleanup why is there no way to hash a bunch of values with begin -> hash.. -> end?
-                center := sub_pixels.data[1*Kernel+1]
-                c := hash.djb2(to_bytes(&center))
-                e := hash.djb2(to_bytes(&tile_sockets[0]))
-                n := hash.djb2(to_bytes(&tile_sockets[1]))
-                w := hash.djb2(to_bytes(&tile_sockets[2]))
-                s := hash.djb2(to_bytes(&tile_sockets[3]))
+            tile.color.rgb = sub_pixels.data[1*Kernel+1]
+            tile.color.a = 255
+            for socket, index in tile_sockets {
+                if socket not_in sockets {
+                    sockets[socket] = next_socket_index
+                    next_socket_index += 1
+                }
                 
-                hash_0 := [?]u32{c, n, e, s, w}
-                
-                tile.hash = hash.djb2((cast([^]u8) &hash_0)[:size_of(hash_0)])
+                tile.sockets_index[index] = sockets[socket]
             }
             
             present: ^Tile
             loop: for &it in slice(tiles) {
-                if tile.hash == it.hash {
+                if tile.color == it.color && tile.sockets_index == it.sockets_index {
                     present = &it
                     break loop
                 }
@@ -159,19 +155,7 @@ extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
             if present != nil {
                 present.frequency += 1
             } else {
-                tile.color.rgb = sub_pixels.data[1*Kernel+1]
-                tile.color.a = 255
                 tile.frequency = 1
-                
-                for socket, index in tile_sockets {
-                    if socket not_in sockets {
-                        sockets[socket] = next_socket_index
-                        next_socket_index += 1
-                    }
-                    
-                    tile.sockets_index[index] = sockets[socket]
-                }
-                                
                 append(&tiles, tile)
             }
         }
@@ -201,7 +185,7 @@ step_observe :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (res
     
     if lowest_indices.count != 0 {
         lowest_index := random_choice(entropy, slice(lowest_indices))^
-        lowest_cell  := &grid.data[lowest_index.y * dimension + lowest_index.x]
+        lowest_cell  := &grid.data[lowest_index.y * dimension.x + lowest_index.x]
         
         wave := lowest_cell.(Wave)
         total_freq: u32
@@ -222,6 +206,23 @@ step_observe :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (res
     }
     
     _collapse += time.since(collapse_start)
+    // // 
+    // // Collapse all cells with only 1 options left
+    // // 
+    // for y in 0..<dimension {
+    //     for x in 0..<dimension {
+    //         index := y*dimension + x
+    //         cell := &grid.data[index]
+            
+    //         if wave, ok := cell.(Wave); ok {
+    //             if len(wave.options) == 1 {
+    //                 collapse_cell(cell, tiles.data[(cell^).(Wave).options[0]])
+    //                 add_neighbours(collapse, index, 10000)
+    //             }
+    //         }
+    //     }
+    // }
+    // check_all_neighbours(collapse)
     // 
     // Collect all lowest cells
     // 
@@ -230,9 +231,10 @@ step_observe :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (res
     lowest_entropy = max(f32)
     
     result = true
-    loop: for y in 0..<dimension {
-        for x in 0..<dimension {
-            index := y*dimension + x
+    
+    loop: for y in 0..<dimension.y {
+        for x in 0..<dimension.x {
+            index := y*dimension.x + x
             cell := &grid.data[index]
             
             if wave, ok := cell.(Wave); ok {
@@ -243,29 +245,32 @@ step_observe :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (res
                 
                 if wave.options_count_when_entropy_was_calculated != len(wave.options) {
                     wave.options_count_when_entropy_was_calculated = len(wave.options)
-                    
-                    total_frequency: f32
-                    for option in wave.options {
-                        total_frequency += cast(f32) tiles.data[option].frequency
+                    when false  {
+                        total_frequency: f32
+                        for option in wave.options {
+                            total_frequency += cast(f32) tiles.data[option].frequency
+                        }
+                        
+                        wave.entropy = 0
+                        for option in wave.options {
+                            frequency := cast(f32) tiles.data[option].frequency
+                            probability := frequency / total_frequency
+                            // Shannon entropy is the negative sum of P * log2(P)
+                            wave.entropy -= probability * math.log2(probability)
+                        }
+                    } else {
+                        wave.entropy = cast(f32) len(wave.options)
+                    }
+                        
+                        
+                    if lowest_entropy > wave.entropy {
+                        lowest_entropy = wave.entropy
+                        clear(&lowest_indices)
                     }
                     
-                    wave.entropy = 0
-                    for option in wave.options {
-                        frequency := cast(f32) tiles.data[option].frequency
-                        probability := frequency / total_frequency
-                        // Shannon entropy is the negative sum of P * log2(P)
-                        wave.entropy -= probability * math.log2(probability)
+                    if lowest_entropy >= wave.entropy {
+                        append(&lowest_indices, [2]int{x,y})
                     }
-                }
-                
-                
-                if lowest_entropy > wave.entropy {
-                    lowest_entropy = wave.entropy
-                    clear(&lowest_indices)
-                }
-                
-                if lowest_entropy >= wave.entropy {
-                    append(&lowest_indices, [2]int{x,y})
                 }
             }
         }
@@ -297,16 +302,16 @@ add_neighbours :: proc (using collapse: ^Collapse, index: [2]int, depth: u32 = 1
 
         ok := true
         if wrap_x {
-            next.x = (next.x + dimension) % dimension
+            next.x = (next.x + dimension.x) % dimension.x
         } else {
-            if next.x >= dimension || next.x < 0 {
+            if next.x >= dimension.x || next.x < 0 {
                 ok = false
             }
         }
         if wrap_y {
-            next.y = (next.y + dimension) % dimension
+            next.y = (next.y + dimension.y) % dimension.y
         } else {
-            if next.y >= dimension || next.y < 0 {
+            if next.y >= dimension.y || next.y < 0 {
                 ok = false
             }
         }
@@ -331,7 +336,7 @@ check_all_neighbours :: proc (using collapse: ^Collapse) {
         next := to_check.data[index]
         x := next.index.x
         y := next.index.y
-        cell := &grid.data[y*dimension + x]
+        cell := &grid.data[y*dimension.x + x]
         
         if wave, ok := &cell.(Wave); ok {
             if reduce_entropy(collapse, cell, wave, {x, y}) {
@@ -344,13 +349,15 @@ check_all_neighbours :: proc (using collapse: ^Collapse) {
 }
 
 reduce_entropy :: proc (using collapse: ^Collapse, cell: ^Cell, wave: ^Wave, p: [2]int) -> (changed: b32) {
+    // @todo(viktor): @speed O(n*m)
+    // n := len(wave.options) and m := [1..4]*len(next.options) with next := grid[n+direction]
+    // 
+    // 
     #reverse for tile_index, index in wave.options {
         option := tiles.data[tile_index]
         
-        ok := true
         for direction in Direction {
-            ok &&= matches(collapse, option, p, direction)
-            if !ok {
+            if !matches(collapse, option, p, direction) {
                 changed = true
                 builtin.unordered_remove(&wave.options, index)
                 break
@@ -368,33 +375,34 @@ matches :: proc(using collapse: ^Collapse, a: Tile, p: [2]int, direction: Direct
     p := p
     p += Delta[direction]
     if wrap_x {
-        p.x = (p.x + dimension) % dimension
+        p.x = (p.x + dimension.x) % dimension.x
     } else {
-        if p.x < 0 || p.x >= dimension {
-            return true
+        if p.x < 0 || p.x >= dimension.x {
+            result = true
         }
     }
     if wrap_y {
-        p.y = (p.y + dimension) % dimension
+        p.y = (p.y + dimension.y) % dimension.y
     } else {
-        if p.y < 0 || p.y >= dimension {
-            return true
+        if p.y < 0 || p.y >= dimension.y {
+            result = true
         }
     }
-    next := grid.data[p.y*dimension + p.x]
+    
+    if !result {
+        next := grid.data[p.y*dimension.x + p.x]
 
-    switch &value in next {
-      case Wave:
-        result = false 
-        for index in value.options {
-            b := tiles.data[index]
-            result ||= matches_tile(a, b, direction)
-            _matches_count += 1
-            if result do break
+        switch &value in next {
+          case Wave:
+            result = false 
+            for index in value.options {
+                b := tiles.data[index]
+                result ||= matches_tile(a, b, direction)
+                if result do break
+            }
+          case Tile:
+            result = matches_tile(a, value, direction)
         }
-      case Tile:
-        result = matches_tile(a, value, direction)
-        _matches_count += 1
     }
     
     return result

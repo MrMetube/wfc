@@ -5,8 +5,6 @@ package main
 This is a copy the original is in the handmade project
  */
 
-import "core:fmt"
-
 import "base:intrinsics"
 import "base:runtime"
 import "core:os"
