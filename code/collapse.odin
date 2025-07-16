@@ -146,9 +146,10 @@ extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
             }
             
             {
+                cw :: Center
                 for y in 0..<Center {
-                    for x in 0..<Center {
-                        tile.center[y*Center+x] = raw_sur[(y+Kernel)*(Center*Kernel)+(x+Kernel)]
+                    for x in 0..<cw {
+                        tile.center[y*cw + x] = raw_sur[(y+Center)*rw + x]
                     }
                 }
             }

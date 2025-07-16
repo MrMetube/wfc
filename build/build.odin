@@ -16,9 +16,10 @@ Pedantic      :: false
 
 flags    :: ` -error-pos-style:unix -vet-cast -vet-shadowing -ignore-vs-search -use-single-module -microarch:native -target:windows_amd64`
 debug    :: ` -debug `
-windows  :: ` -subsystem:windows `
+windows  := true ? ` -subsystem:windows ` : ` -subsystem:console `
 pedantic :: ` -warnings-as-errors -vet-unused-imports -vet-semicolon -vet-unused-variables -vet-style -vet-packages:main -vet-unused-procedures` 
 check    :: ` -custom-attribute:printlike `
+flags_for_imgui :: ` -extra-linker-flags:"/NODEFAULTLIB:LIBCMTD" `
 
 build_src_path :: `.\build\`   
 build_exe_path :: `.\build\build.exe`
@@ -47,6 +48,7 @@ main :: proc() {
         odin_build(&args, code_dir, `.\`+debug_exe)
         append(&args, flags)
         append(&args, debug)
+        append(&args, flags_for_imgui)
         append(&args, check)
         append(&args, windows)
         append(&args, optimizations)

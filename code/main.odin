@@ -1,13 +1,18 @@
 package main
 
 import "core:os"
+import "core:os/os2"
+import "core:strings"
 import "core:time"
 import rl "vendor:raylib"
+import imgui "../lib/odin-imgui/"
+import rlimgui "../lib/odin-imgui/examples/raylib"
 
 Screen_Size :: [2]i32{1920, 1080}
 
 the_font: rl.Font
-font_scale :: 32
+rl_font_scale :: 32
+font_scale :: 1.4
 code_points := [?]rune {
     'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
     'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
@@ -17,6 +22,7 @@ code_points := [?]rune {
 }
 
 _total, _update, _render, _collapse, _add_neighbours, _matches, _collect: time.Duration
+_total_start: time.Time
 main :: proc () {
     Dim :: [2]int {200, 100}
     size: f32
@@ -34,27 +40,52 @@ main :: proc () {
     
     camera := rl.Camera2D { zoom = 1 }
     
-    the_font = rl.LoadFontEx(`.\Caladea-Regular.ttf`, font_scale, raw_data(code_points[:]), len(code_points))
+    the_font = rl.LoadFontEx(`.\Caladea-Regular.ttf`, rl_font_scale, raw_data(code_points[:]), len(code_points))
     
     arena: Arena
     init_arena(&arena, make([]u8, 1*Gigabyte))
     
-    // input: cstring = `.\city.png`
-    input: cstring = `.\cave.png`
-    if len(os.args) == 2 {
-        input = cast(cstring) raw_data(os.args[1])
-    }
-    city := rl.LoadImage(input)
-    // city := rl.LoadImage(`.\diagonals.png`)
-    // city := rl.LoadImage(`.\cave.png`)
-    // city := rl.LoadImage(`.\brown_bricks.png`)
     collapse: Collapse
-    init_collapse(&collapse, &arena, 2048, Dim, false, false)
+    init_collapse(&collapse, &arena, 256, Dim, false, false)
     
-    _total_start := time.now()
-    extract_tiles(&collapse, city)
     
-    entangle_grid(&collapse)
+    File :: struct {
+        name: string,
+        data: []u8,
+        image: rl.Image,
+        texture: rl.Texture2D,
+        type: string,
+        read_time: time.Time,
+    }
+    images: map[string]File
+    image_dir := "./images"
+    file_type := ".png"
+    infos, err := os2.read_directory_by_path(image_dir, 0, context.temp_allocator)
+    if err != nil do print("Error reading dir %: %", image_dir, err)
+    for info in infos {
+        if info.type == .Regular {
+            if strings.ends_with(info.name, file_type) {
+                data, ferr := os2.read_entire_file(info.fullpath, context.allocator)
+                if ferr != nil do print("Error reading file %:%\n", info.name, ferr)
+                
+                
+                temp := begin_temporary_memory(&arena)
+                defer end_temporary_memory(temp)
+                _total_start = time.now()
+                cstr := copy_cstring(temp.arena, file_type)
+                
+                image := File {
+                    name = copy_string(&arena, info.name),
+                    data = data,
+                    type = file_type,
+                    read_time = time.now()
+                }
+                image.image = rl.LoadImageFromMemory(cstr, raw_data(image.data), auto_cast len(image.data))
+                image.texture = rl.LoadTextureFromImage(image.image)
+                images[info.name] = image
+            }
+        }
+    }
     
     entropy := seed_random_series()//0x75658663)
     
@@ -62,14 +93,55 @@ main :: proc () {
     should_restart: b32
     t_restart: f32
     paused_update: b32
+    
+    context_ := imgui.igCreateContext(nil)
+    imgui.igSetCurrentContext(context_)
+    
+    rlimgui.ImGui_ImplRaylib_Init()
+
+    
     for !rl.WindowShouldClose() {
-        if rl.IsKeyPressed(.SPACE) {
+        rlimgui.ImGui_ImplRaylib_NewFrame()
+        rlimgui.ImGui_ImplRaylib_ProcessEvent()
+        imgui.new_frame()
+        
+        imgui.set_window_font_scale(font_scale)
+        
+        window_size := imgui.get_window_size()
+        imgui.columns(2)
+        if imgui.button(paused_update ? "Unpause" : "Pause") {
             paused_update = !paused_update
         }
-        if rl.IsKeyPressed(.R) {
-            should_restart = true
-            t_restart = 0.3
+        imgui.next_column()
+        if !should_restart {
+            if imgui.button("Restart") {
+                should_restart = true
+                t_restart = 0.3
+            }
+        } else {
+            buffer: [256]u8
+            imgui.text(format_string(buffer[:], "%", view_seconds(t_restart, precision = 3)))
         }
+        imgui.columns(1)
+        
+        imgui.text("Load Image")
+        i: i32
+        imgui.columns(4)
+        for _, &image in images {
+            defer i += 1
+            
+            imgui.push_id(i)
+            if imgui.image_button(auto_cast &image.texture.id, clamp(window_size.x / 5, 20, 200)) {
+                // @leak
+                collapse.tiles = make_array(&arena, Tile, 512)
+                extract_tiles(&collapse, image.image)
+                
+                entangle_grid(&collapse)
+            }
+            imgui.pop_id()
+            imgui.next_column()
+        }
+        imgui.columns(1)
         
         if !paused_update {
             _collapse = 0
@@ -157,23 +229,28 @@ main :: proc () {
         buffer: [256]u8
         line_p := v2 {10, 10}
         is_late := cast(f32) time.duration_seconds(_update) > rl.GetFrameTime()
+        
+        imgui.begin("Stats")
+        imgui.set_window_font_scale(font_scale)
         if paused_update {
-            draw_line("### Paused ###", &line_p, font_scale, rl.RAYWHITE)
+            imgui.text_colored(Blue, "### Paused ###")
         }
-        draw_line(format_cstring(buffer[:], `Update %`, _update), &line_p, font_scale, is_late ? rl.ORANGE : rl.WHITE)
+        imgui.text_colored(is_late ? Orange : White, format_string(buffer[:], `Update %`, _update))
         if should_restart {
-            draw_line(format_cstring(buffer[:], "Collapse failed: restarting in %", view_seconds(t_restart, precision = 3)), &line_p, font_scale, rl.ORANGE)
+            imgui.text_colored(Orange, format_string(buffer[:], "Collapse failed: restarting in %", view_seconds(t_restart, precision = 3)))
         } else {
-            draw_line(format_cstring(buffer[:], "  collapse %",        _collapse),       &line_p, font_scale)
-            draw_line(format_cstring(buffer[:], "  get neighbours %",  _add_neighbours), &line_p, font_scale)
-            draw_line(format_cstring(buffer[:], "  matches %",         _matches),        &line_p, font_scale)
-            draw_line(format_cstring(buffer[:], "  collect %",         _collect),        &line_p, font_scale)
+            imgui.text(format_string(buffer[:], "  collapse %",        _collapse))
+            imgui.text(format_string(buffer[:], "  get neighbours %",  _add_neighbours))
+            imgui.text(format_string(buffer[:], "  matches %",         _matches))
+            imgui.text(format_string(buffer[:], "  collect %",         _collect))
         }
         
-        draw_line(format_cstring(buffer[:], "Render %", _render),         &line_p, font_scale)
-        draw_line(format_cstring(buffer[:], "Total %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)),          &line_p, font_scale)
+        imgui.text(format_string(buffer[:], "Render %", _render))
+        imgui.text(format_string(buffer[:], "Total %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)))
+        imgui.end()
         
-        
+        imgui.render()
+        rlimgui.ImGui_ImplRaylib_Render(imgui.igGetDrawData())
         rl.EndDrawing()
     }
 }

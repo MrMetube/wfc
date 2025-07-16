@@ -56,6 +56,10 @@ append_string :: proc(a: ^StringBuilder, value: string) -> (result: string) {
     return cast(string) append_array_many(a, transmute([]u8) value)
 }
 
+make_string_builds :: proc(arena: ^Arena, #any_int len: i32, params := DefaultPushParams) -> (result: StringBuilder) {
+    result.data = push_slice(arena, u8, len, params)
+    return result
+}
 make_array :: proc(arena: ^Arena, $T: typeid, #any_int len: i32, params := DefaultPushParams) -> (result: Array(T)) {
     result.data = push_slice(arena, T, len, params)
     return result
