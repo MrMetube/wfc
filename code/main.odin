@@ -12,7 +12,6 @@ Screen_Size :: [2]i32{1920, 1080}
 
 the_font: rl.Font
 rl_font_scale :: 32
-font_scale :: 1.4
 code_points := [?]rune {
     'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
     'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
@@ -107,42 +106,34 @@ main :: proc () {
         rlimgui.ImGui_ImplRaylib_ProcessEvent()
         imgui.new_frame()
         
-        imgui.set_window_font_scale(font_scale)
-        
-        window_size := imgui.get_window_size()
-        imgui.columns(2)
-        if imgui.button(paused_update ? "Unpause" : "Pause") {
-            paused_update = !paused_update
-        }
-        if !should_restart {
-            if imgui.button("Restart") {
-                should_restart = true
-                t_restart = 0.3
+        if collapse.tiles.count != 0 {
+            imgui.columns(2)
+            if imgui.button(paused_update ? "Unpause" : "Pause") {
+                paused_update = !paused_update
             }
-        } else {
-            imgui.text(format_string(buffer[:], "%", view_seconds(t_restart, precision = 3)))
+            if !should_restart {
+                if imgui.button("Restart") {
+                    should_restart = true
+                    t_restart = 0.3
+                }
+            } else {
+                if imgui.button("Restart now") {
+                    t_restart = 0
+                }
+                imgui.next_column()
+                imgui.text(format_string(buffer[:], "Restarting in %", view_seconds(t_restart, precision = 3)))
+            }
+            imgui.columns(1)
         }
-        imgui.next_column()
-        if imgui.checkbox("Loop on X Axis", cast(^bool) &collapse.wrap_x) {
-            should_restart = true
-            t_restart = 0.3
-        }
-        if imgui.checkbox("Loop on Y Axis", cast(^bool) &collapse.wrap_y) {
-            should_restart = true
-            t_restart = 0.3
-        }
-        imgui.columns(1)
-        
-        imgui.slider_int("Recursion Depth", cast(^i32) &collapse.max_depth, 1, 1000, flags = .Logarithmic)
         
         imgui.text("Choose Input Image")
         i: i32
-        imgui.columns(4)
+        imgui.columns(8)
         for _, &image in images {
             defer i += 1
             
             imgui.push_id(i)
-            if imgui.image_button(auto_cast &image.texture.id, clamp(window_size.x / 5, 20, 200)) {
+            if imgui.image_button(auto_cast &image.texture.id, 30) {
                 // @leak
                 collapse.tiles = make_array(&arena, Tile, 1<<16)
                 extract_tiles(&collapse, image.image)
@@ -154,6 +145,9 @@ main :: proc () {
             imgui.next_column()
         }
         imgui.columns(1)
+        imgui.checkbox("Loop on X Axis", cast(^bool) &collapse.wrap_x)
+        imgui.checkbox("Loop on Y Axis", cast(^bool) &collapse.wrap_y)
+        imgui.slider_int("Recursion Depth", cast(^i32) &collapse.max_depth, 1, 1000, flags = .Logarithmic)
         
         if !paused_update {
             _collapse = 0
@@ -161,26 +155,32 @@ main :: proc () {
             _add_neighbours = 0
             _matches = 0
             
-            update_start := time.now()
             if !should_restart {
+                update_start := time.now()
                 for cast(f32) time.duration_seconds(time.since(update_start)) < 0.016 {
                     if !step_observe(&collapse, &entropy) {
                         should_restart = true
                         t_restart = 3
                     }
                 }
-            }
-            _update = time.since(update_start)
-            
-            if should_restart {
-                t_restart -= rl.GetFrameTime()
-                if t_restart <= 0 {
-                    t_restart = 0
+                _update = time.since(update_start)
+            } else {
+                if collapse.tiles.count == 0 {
                     should_restart = false
-                    entangle_grid(&collapse)
+                    t_restart = 0
+                } else {
+                    t_restart -= rl.GetFrameTime()
+                    if t_restart <= 0 {
+                        t_restart = 0
+                        should_restart = false
+                        entangle_grid(&collapse)
+                    }
                 }
             }
         }
+        
+        // @todo(viktor): let user collapse manually
+        // collapse_cell_and_check_all_neighbours(&collapse, cell, {x,y}, tile)
         
         // 
         // Render
@@ -223,10 +223,7 @@ main :: proc () {
                     if len(value.options) == 0 {
                         rl.DrawRectangleRec({p.x, p.y, size, size}, rl.RED)
                     } else {
-                        should_collapse, tile := draw_wave(&collapse, value, p, size)
-                        if should_collapse {
-                            collapse_cell_and_check_all_neighbours(&collapse, cell, {x,y}, tile)
-                        }
+                        draw_wave(&collapse, value, p, size)
                     }
                 }
             }
@@ -247,9 +244,7 @@ main :: proc () {
             imgui.text_colored(Blue, "### Paused ###")
         }
         imgui.text_colored(is_late ? Orange : White, format_string(buffer[:], `Update %`, _update))
-        if should_restart {
-            imgui.text_colored(Orange, format_string(buffer[:], "Collapse failed: restarting in %", view_seconds(t_restart, precision = 3)))
-        } else {
+        if !should_restart {
             imgui.text(format_string(buffer[:], "  collapse %",        _collapse))
             imgui.text(format_string(buffer[:], "  get neighbours %",  _add_neighbours))
             imgui.text(format_string(buffer[:], "  matches %",         _matches))
@@ -261,9 +256,9 @@ main :: proc () {
         
         if collapse.tiles.count != 0 {
             imgui.begin("Tiles")
-            imgui.columns(round(i32, square_root(cast(f32)collapse.tiles.count)))
+            imgui.columns(ceil(i32, square_root(cast(f32)collapse.tiles.count)))
             for &tile, i in slice(collapse.tiles) {
-                if imgui.image_button(auto_cast &tile.texture.id, 50) {
+                if imgui.image_button(auto_cast &tile.texture.id, 25) {
                     
                 }
                 imgui.next_column()
@@ -279,12 +274,7 @@ main :: proc () {
     }
 }
 
-draw_line :: proc (text: cstring, p: ^v2, line_advance: f32, color:= rl.WHITE) {
-    rl.DrawTextEx(the_font, text, p^, font_scale, 2, color)
-    p.y += line_advance
-}
-
-draw_wave :: proc (using collapse: ^Collapse, wave: Wave, p: v2, size: v2) -> (should_collapse: b32, target: Tile) {
+draw_wave :: proc (using collapse: ^Collapse, wave: Wave, p: v2, size: v2) {
     count: u32
     when false {
         for tile, i in slice(tiles) {
@@ -298,24 +288,16 @@ draw_wave :: proc (using collapse: ^Collapse, wave: Wave, p: v2, size: v2) -> (s
             op := p + option_size * (offset+1)
             
             option_rect := rl.Rectangle {op.x, op.y, option_size.x, option_size.y}
-            mouse := rl.GetMousePosition()
-            if mouse.x >= option_rect.x && mouse.y >= option_rect.y && mouse.x < option_rect.x + option_rect.width && mouse.y < option_rect.y + option_rect.height {
-                if rl.IsMouseButtonPressed(.LEFT) {
-                    should_collapse = true
-                    target = tile
-                }
-            }
-            
             rl.DrawRectangleRec(option_rect, tile.color)
         }
     } else when false {
         sum: [4]u32
-        for tile in slice(tiles) {
+        for tile, tile_index in slice(tiles) {
             present: b32
-            for index in wave.options do if tiles.data[index] == tile { present = true; break }
+            for index in wave.options do if index == tile_index { present = true; break }
             if !present do continue
             count += tile.frequency
-            sum += tile.frequency * vec_cast(u32, cast([4]u8) tile.color)
+            // sum += tile.frequency * vec_cast(u32, cast([4]u8) tile.center)
         }
         
         color := cast(rl.Color) vec_cast(u8, (sum/count) / {1,1,1,4})
@@ -324,8 +306,6 @@ draw_wave :: proc (using collapse: ^Collapse, wave: Wave, p: v2, size: v2) -> (s
         // nothing
         unused(count)
     }
-    
-    return should_collapse, target
 }
 
 get_screen_p :: proc (dimension: [2]int, size: f32, x, y: int) -> (result: v2) {

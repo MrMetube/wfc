@@ -2,7 +2,7 @@
 package main
 
 Arena :: struct {
-    storage:    []u8, // :Array
+    storage:    []u8,
     used:       u64,
     temp_count: i32,
 }

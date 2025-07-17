@@ -80,6 +80,7 @@ init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, tile_count: u32, dime
     collapse.to_check       = make_array(arena, Check,  cell_count)
     collapse.lowest_indices = make_array(arena, [2]int, cell_count)
     collapse.center = center
+    collapse.max_depth = max_depth
 }
 
 
