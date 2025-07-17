@@ -21,6 +21,8 @@ code_points := [?]rune {
     '1','2','3','4','5','6','7','8','9','0',
 }
 
+buffer: [256]u8
+
 _total, _update, _render, _collapse, _add_neighbours, _matches, _collect: time.Duration
 _total_start: time.Time
 main :: proc () {
@@ -46,7 +48,7 @@ main :: proc () {
     init_arena(&arena, make([]u8, 1*Gigabyte))
     
     collapse: Collapse
-    init_collapse(&collapse, &arena, 256, Dim, false, false)
+    init_collapse(&collapse, &arena, 256, Dim, false, false, 50)
     
     
     File :: struct {
@@ -112,19 +114,28 @@ main :: proc () {
         if imgui.button(paused_update ? "Unpause" : "Pause") {
             paused_update = !paused_update
         }
-        imgui.next_column()
         if !should_restart {
             if imgui.button("Restart") {
                 should_restart = true
                 t_restart = 0.3
             }
         } else {
-            buffer: [256]u8
             imgui.text(format_string(buffer[:], "%", view_seconds(t_restart, precision = 3)))
+        }
+        imgui.next_column()
+        if imgui.checkbox("Loop on X Axis", cast(^bool) &collapse.wrap_x) {
+            should_restart = true
+            t_restart = 0.3
+        }
+        if imgui.checkbox("Loop on Y Axis", cast(^bool) &collapse.wrap_y) {
+            should_restart = true
+            t_restart = 0.3
         }
         imgui.columns(1)
         
-        imgui.text("Load Image")
+        imgui.slider_int("Recursion Depth", cast(^i32) &collapse.max_depth, 1, 1000, flags = .Logarithmic)
+        
+        imgui.text("Choose Input Image")
         i: i32
         imgui.columns(4)
         for _, &image in images {
@@ -133,10 +144,11 @@ main :: proc () {
             imgui.push_id(i)
             if imgui.image_button(auto_cast &image.texture.id, clamp(window_size.x / 5, 20, 200)) {
                 // @leak
-                collapse.tiles = make_array(&arena, Tile, 512)
+                collapse.tiles = make_array(&arena, Tile, 1<<16)
                 extract_tiles(&collapse, image.image)
                 
-                entangle_grid(&collapse)
+                should_restart = true
+                t_restart = 0.3
             }
             imgui.pop_id()
             imgui.next_column()
@@ -198,10 +210,11 @@ main :: proc () {
                 
                 switch value in cell^ {
                   case Tile:
-                    for cy in 0..<Center {
-                        for cx in 0..<Center {
-                            rect := rl.Rectangle {p.x+ cast(f32)cx*size/Center, p.y + cast(f32) cy*size/Center, size/Center, size/Center}
-                            rl.DrawRectangleRec(rect, value.center[cy*Center+cx])
+                    for cy in 0..<center {
+                        for cx in 0..<center {
+                            fcenter := cast(f32) center
+                            rect := rl.Rectangle {p.x+ cast(f32)cx*size/fcenter, p.y + cast(f32) cy*size/fcenter, size/fcenter, size/fcenter}
+                            rl.DrawRectangleRec(rect, value.center[cy*center+cx])
                         }
                     }
                     
@@ -226,12 +239,10 @@ main :: proc () {
         rl.EndMode2D()
         _render = time.since(render_start)
         
-        buffer: [256]u8
         line_p := v2 {10, 10}
         is_late := cast(f32) time.duration_seconds(_update) > rl.GetFrameTime()
         
         imgui.begin("Stats")
-        imgui.set_window_font_scale(font_scale)
         if paused_update {
             imgui.text_colored(Blue, "### Paused ###")
         }
@@ -244,10 +255,23 @@ main :: proc () {
             imgui.text(format_string(buffer[:], "  matches %",         _matches))
             imgui.text(format_string(buffer[:], "  collect %",         _collect))
         }
-        
         imgui.text(format_string(buffer[:], "Render %", _render))
         imgui.text(format_string(buffer[:], "Total %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)))
         imgui.end()
+        
+        if collapse.tiles.count != 0 {
+            imgui.begin("Tiles")
+            imgui.columns(round(i32, square_root(cast(f32)collapse.tiles.count)))
+            for &tile, i in slice(collapse.tiles) {
+                if imgui.image_button(auto_cast &tile.texture.id, 50) {
+                    
+                }
+                imgui.next_column()
+            }
+            imgui.columns(1)
+            imgui.end()
+        }
+        
         
         imgui.render()
         rlimgui.ImGui_ImplRaylib_Render(imgui.igGetDrawData())

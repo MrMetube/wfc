@@ -159,6 +159,12 @@ slice_from_parts_direct :: proc "contextless" (data: ^$T, #any_int count: i64) -
 }
 
                 
+slice_to_bytes :: proc (value: []$T) -> (result: []u8) {
+    data := raw_data(value)
+    len := size_of(T) * len(value)
+    result = slice_from_parts(u8, data, len)
+    return result
+}
 to_bytes :: proc (value: ^$T) -> (result: []u8) {
     result = (cast([^]u8) value)[:size_of(T)]
     return result

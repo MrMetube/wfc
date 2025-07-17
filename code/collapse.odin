@@ -6,13 +6,12 @@ import "core:math"
 import "core:time"
 import rl "vendor:raylib"
 
-Center :: 2
 Kernel :: 3
 
 Collapse :: struct {
     grid:    Array(Cell), 
     tiles:   Array(Tile),
-    sockets: map[Socket]u32,
+    sockets: map[u32]u32,
     next_socket_index: u32,
     
     dimension: [2]int,
@@ -21,6 +20,9 @@ Collapse :: struct {
     lowest_indices: Array([2]int),
     wrap_x: b32,
     wrap_y: b32,
+    max_depth:  u32,
+    
+    center: i32,
 }
 
 Cell :: union {
@@ -35,13 +37,17 @@ Wave :: struct {
 }
 
 Tile :: struct {
-    center:        [Center*Center]rl.Color,
+    center: []rl.Color, // Center*Center
+    
     sockets_index: [Direction]u32,
-    frequency:     u32,
+    frequency: u32,
+    hash:      u32,
+    
+    texture: rl.Texture,
 }
 
 Socket :: struct {
-    pixels: [2*Center * Kernel*Center]rl.Color,
+    pixels: []rl.Color, // 2*center * Kernel*center
 }
 
 Direction :: enum { East=0, North=1, South=2, West=3 }
@@ -63,7 +69,7 @@ Check :: struct {
     depth: u32,
 }
 
-init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, tile_count: u32, dimension: [2]int, wrap_x, wrap_y: b32) {
+init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, tile_count: u32, dimension: [2]int, wrap_x, wrap_y: b32, max_depth: u32, center: i32 = 1) {
     collapse.wrap_x = wrap_x
     collapse.wrap_y = wrap_y
     
@@ -73,6 +79,7 @@ init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, tile_count: u32, dime
     collapse.grid           = make_array(arena, Cell,   cell_count)
     collapse.to_check       = make_array(arena, Check,  cell_count)
     collapse.lowest_indices = make_array(arena, [2]int, cell_count)
+    collapse.center = center
 }
 
 
@@ -80,83 +87,97 @@ extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
     assert(img.format == .UNCOMPRESSED_R8G8B8A8)
     pixels := (cast([^]rl.Color) img.data)[:img.width * img.height]
     
-    cell_rect := rectangle_min_dimension(i32(0), 0, Center, Center)
-    
-    for min_y in 0..<img.height/Center {
-        for min_x in 0..<img.width/Center {
-            surroundings: FixedArray(Kernel*Center * Kernel*Center, rl.Color)
+    tile_pixels := make([dynamic]rl.Color, Kernel*center * Kernel*center, context.temp_allocator)
+    for min_y in 0..<img.height/center {
+        for min_x in 0..<img.width/center {
+            clear(&tile_pixels)
             
-            for ky in i32(0)..<Kernel*Center {
-                for kx in i32(0)..<Kernel*Center {
-                    x := (min_x*Center + kx) % img.width
-                    y := (min_y*Center + ky) % img.height
+            tile: Tile
+            for ky in i32(0)..<Kernel*center {
+                for kx in i32(0)..<Kernel*center {
+                    x := (min_x*center + kx) % img.width
+                    y := (min_y*center + ky) % img.height
                     pixel := pixels[y*img.width+x]
-                    append(&surroundings, pixel)
+                    append_elems(&tile_pixels, pixel)
                 }
             }
             
-            raw_sur := slice(&surroundings)
-            
-            tile: Tile
-            rw :: 3 * Center
+            tile_pixels := tile_pixels[:]
+            rw := 3 * center
             {
                 west, east: Socket
-                sw :: 2 * Center
-                for y in 0..<3 * Center {
+                west.pixels = make([]rl.Color, 2*center * Kernel*center)
+                east.pixels = make([]rl.Color, 2*center * Kernel*center)
+                
+                sw := 2 * center
+                for y in 0..<3 * center {
                     for x in 0..<sw {
-                        west.pixels[y*sw + x] = raw_sur[y*rw + x]
-                        east.pixels[y*sw + x] = raw_sur[y*rw + x+Center]
+                        west.pixels[y*sw + x] = tile_pixels[y*rw + x]
+                        east.pixels[y*sw + x] = tile_pixels[y*rw + x+center]
                     }
                 }
                 
-                if west not_in sockets {
-                    sockets[west] = next_socket_index
+                west_hash := hash.djb2(slice_to_bytes(west.pixels))
+                if west_hash not_in sockets {
+                    sockets[west_hash] = next_socket_index
                     next_socket_index += 1
                 }
-                tile.sockets_index[Direction.West] = sockets[west]
+                tile.sockets_index[Direction.West] = sockets[west_hash]
                 
-                if east not_in sockets {
-                    sockets[east] = next_socket_index
+                east_hash := hash.djb2(slice_to_bytes(east.pixels))
+                if east_hash not_in sockets {
+                    sockets[east_hash] = next_socket_index
                     next_socket_index += 1
                 }
-                tile.sockets_index[Direction.East] = sockets[east]
+                tile.sockets_index[Direction.East] = sockets[east_hash]
             }
             
             {
                 south, north: Socket
-                sw :: 3 * Center
-                for y in 0..<2 * Center {
+                south.pixels = make([]rl.Color, 2*center * Kernel*center)
+                north.pixels = make([]rl.Color, 2*center * Kernel*center)
+                
+                sw := 3 * center
+                for y in 0..<2 * center {
                     for x in 0..<sw {
-                        south.pixels[y*sw + x] = raw_sur[(y+Center)*rw + x]
-                        north.pixels[y*sw + x] = raw_sur[y*rw + x]
+                        south.pixels[y*sw + x] = tile_pixels[(y+center)*rw + x]
+                        north.pixels[y*sw + x] = tile_pixels[y*rw + x]
                     }
                 }
                 
-                if north not_in sockets {
-                    sockets[north] = next_socket_index
+                north_hash := hash.djb2(slice_to_bytes(north.pixels))
+                if north_hash not_in sockets {
+                    sockets[north_hash] = next_socket_index
                     next_socket_index += 1
                 }
-                tile.sockets_index[Direction.North] = sockets[north]
+                tile.sockets_index[Direction.North] = sockets[north_hash]
                 
-                if south not_in sockets {
-                    sockets[south] = next_socket_index
+                south_hash := hash.djb2(slice_to_bytes(south.pixels))
+                if south_hash not_in sockets {
+                    sockets[south_hash] = next_socket_index
                     next_socket_index += 1
                 }
-                tile.sockets_index[Direction.South] = sockets[south]
+                tile.sockets_index[Direction.South] = sockets[south_hash]
             }
             
             {
-                cw :: Center
-                for y in 0..<Center {
+                tile.center = make([]rl.Color, center*center)
+                cw := center
+                for y in 0..<center {
                     for x in 0..<cw {
-                        tile.center[y*cw + x] = raw_sur[(y+Center)*rw + x]
+                        tile.center[y*cw + x] = tile_pixels[(y+center)*rw + x]
                     }
                 }
+                
+                data := make([dynamic]u8, context.temp_allocator)
+                for &it in tile.center do append_elems(&data, ..to_bytes(&it))
+                for &it in tile.sockets_index do append_elems(&data, ..to_bytes(&it))
+                tile.hash = hash.djb2(data[:])
             }
             
             present: ^Tile
             loop: for &it in slice(tiles) {
-                if tile.center == it.center && tile.sockets_index == it.sockets_index {
+                if tile.hash == it.hash {
                     present = &it
                     break loop
                 }
@@ -166,6 +187,14 @@ extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
                 present.frequency += 1
             } else {
                 tile.frequency = 1
+                temp:= rl.Image {
+                    data    = raw_data(tile_pixels), 
+                    width   = center*Kernel, 
+                    height  = center*Kernel, 
+                    mipmaps = 1, 
+                    format = .UNCOMPRESSED_R8G8B8A8,
+                }
+                tile.texture = rl.LoadTextureFromImage(temp)
                 append(&tiles, tile)
             }
         }
@@ -290,9 +319,9 @@ step_observe :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (res
     return result
 }
 
-collapse_cell_and_check_all_neighbours :: proc (using collapse: ^Collapse, cell: ^Cell, index: [2]int, pick: Tile, depth: u32 = 100000) {
+collapse_cell_and_check_all_neighbours :: proc (using collapse: ^Collapse, cell: ^Cell, index: [2]int, pick: Tile) {
     collapse_cell(cell, pick)
-    add_neighbours(collapse, index, depth)
+    add_neighbours(collapse, index, max_depth)
     check_all_neighbours(collapse)
 }
 
@@ -303,7 +332,7 @@ collapse_cell :: proc (cell: ^Cell, pick: Tile) {
 }
 
 
-add_neighbours :: proc (using collapse: ^Collapse, index: [2]int, depth: u32 = 100000) {
+add_neighbours :: proc (using collapse: ^Collapse, index: [2]int, depth: u32) {
     start := time.now()
     defer _add_neighbours += time.since(start)
     
