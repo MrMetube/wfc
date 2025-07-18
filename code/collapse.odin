@@ -231,6 +231,7 @@ entangle_grid :: proc(using collapse: ^Collapse) {
         for &it in wave.states do it = true
         for &c in wave.compatible_states {
             c = make(SuperPosition, tiles.count)
+            for &it in c do it = true
         }
     }
     
@@ -370,23 +371,37 @@ check_all_neighbours :: proc (using collapse: ^Collapse) {
         if wave, ok := &cell.(WaveFunction); ok {
             changed: b32
             // @todo(viktor): @speed O(n*m)
-            // for &c, direction in wave.compatible_states{
-            //     for &state, tile_index in wave.states {
-            //         if !state do continue
-            //         option := tiles.data[tile_index]
-            //         c[tile_index] = matches(collapse, option, p, direction)
-                    
-            //         if !c[tile_index] {
-            //             changed = true
-            //             state = false
-            //         }
-            //     }
-            // }
+            
             for &c, direction in wave.compatible_states{
                 for &state, tile_index in wave.states {
                     if !state do continue
-                    option := tiles.data[tile_index]
-                    c[tile_index] = matches(collapse, option, p, direction)
+                    a := tiles.data[tile_index]
+                    
+                    matches: b32
+                    {
+                        start := time.now()
+                        defer _matches += time.since(start)
+                        
+                        next, ok := get_neighbour(collapse, p, direction)
+                        if ok {
+                            switch &value in next {
+                              case WaveFunction:
+                                matches = false
+                                for n_state, n_tile_index in value.states {
+                                    if !n_state do continue
+                                    b := tiles.data[n_tile_index]
+                                    matches ||= matches_tile(a, b, direction)
+                                    if matches do break
+                                }
+                              case Tile:
+                                matches = matches_tile(a, value, direction)
+                            }
+                        } else {
+                            matches = true
+                        }
+                    }
+                    
+                    c[tile_index] = matches
                     
                     if !c[tile_index] {
                         changed = true
@@ -431,31 +446,6 @@ get_neighbour :: proc (using collapse: ^Collapse, p: [2]int, direction: Directio
     return next, ok
 }
 
-matches :: proc (using collapse: ^Collapse, a: Tile, p: [2]int, direction: Direction) -> (result: b32) {
-    start := time.now()
-    defer _matches += time.since(start)
-    
-    next, ok := get_neighbour(collapse, p, direction)
-    if ok {
-        switch &value in next {
-          case WaveFunction:
-            result = false 
-            for state, tile_index in value.states {
-                if !state do continue
-                b := tiles.data[tile_index]
-                result ||= matches_tile(a, b, direction)
-                if result do break
-            }
-          case Tile:
-            result = matches_tile(a, value, direction)
-        }
-    } else {
-        result = true
-    }
-    
-    return result
-}
-
 matches_tile :: proc(a, b: Tile, direction: Direction) -> (result: b32) {
     a_side, b_side := direction, Opposite_Direction[direction]
     
@@ -465,18 +455,6 @@ matches_tile :: proc(a, b: Tile, direction: Direction) -> (result: b32) {
 }
 
 recompute_wavefunction :: proc (using collapse: ^Collapse, wave: ^WaveFunction, p: [2]int) {
-    // Update compatible_states
-    for &c, direction in wave.compatible_states {
-        for &state, tile_index in wave.states {
-            if !state {
-                c[tile_index] = false
-            } else {
-                option := tiles.data[tile_index]
-                c[tile_index] = matches(collapse, option, p, direction)
-            }
-        }
-    }
-    
     // Update entropy
     when !false {
         total_frequency: f32

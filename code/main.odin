@@ -106,29 +106,9 @@ main :: proc () {
         rlimgui.ImGui_ImplRaylib_ProcessEvent()
         imgui.new_frame()
         
-        if collapse.tiles.count != 0 {
-            imgui.columns(2)
-            if imgui.button(paused_update ? "Unpause" : "Pause") {
-                paused_update = !paused_update
-            }
-            if !should_restart {
-                if imgui.button("Restart") {
-                    should_restart = true
-                    t_restart = 0.3
-                }
-            } else {
-                if imgui.button("Restart now") {
-                    t_restart = 0
-                }
-                imgui.next_column()
-                imgui.text(format_string(buffer[:], "Restarting in %", view_seconds(t_restart, precision = 3)))
-            }
-            imgui.columns(1)
-        }
-        
         imgui.text("Choose Input Image")
         i: i32
-        imgui.columns(8)
+        imgui.columns(6)
         for _, &image in images {
             defer i += 1
             
@@ -149,6 +129,26 @@ main :: proc () {
         imgui.checkbox("Loop on Y Axis", cast(^bool) &collapse.wrap_y)
         imgui.slider_int("Recursion Depth", cast(^i32) &collapse.max_depth, 1, 1000, flags = .Logarithmic)
         
+        if collapse.tiles.count != 0 {
+            imgui.columns(2)
+            if imgui.button(paused_update ? "Unpause" : "Pause") {
+                paused_update = !paused_update
+            }
+            if !should_restart {
+                if imgui.button("Restart") {
+                    should_restart = true
+                    t_restart = 0.3
+                }
+            } else {
+                if imgui.button("Restart now") {
+                    t_restart = 0
+                }
+                imgui.next_column()
+                imgui.text(format_string(buffer[:], "Restarting in %", view_seconds(t_restart, precision = 3)))
+            }
+            imgui.columns(1)
+        }
+
         if !paused_update {
             _collapse = 0
             _collect = 0
