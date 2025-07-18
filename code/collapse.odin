@@ -208,7 +208,6 @@ extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
 }
 
 entangle_grid :: proc(using collapse: ^Collapse) {
-    // @todo(viktor):  dont delete just resize
     for &cell in grid {
         if wave, ok := cell.(WaveFunction); ok {
             delete(wave.states)
@@ -239,7 +238,6 @@ entangle_grid :: proc(using collapse: ^Collapse) {
         for x in 0..<dimension.x {
             cell := &grid[y * dimension.x + x]
             wave := &cell.(WaveFunction)
-            
             recompute_wavefunction(collapse, wave, {x,y})
         }
     }
@@ -323,6 +321,7 @@ step_observe :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (res
 
 collapse_cell_and_check_all_neighbours :: proc (using collapse: ^Collapse, cell: ^Cell, index: [2]int, pick: Tile) {
     collapse_cell(cell, pick)
+    // @todo(viktor): this will also readd the collapsed
     add_neighbours(collapse, index, max_depth)
     check_all_neighbours(collapse)
 }
@@ -338,10 +337,10 @@ add_neighbours :: proc (using collapse: ^Collapse, index: [2]int, depth: u32) {
     start := time.now()
     defer _add_neighbours += time.since(start)
     
-    for n, direction in Delta {
-        next := n + index
-
-        _, ok := get_neighbour(collapse, index, direction)
+    for direction in Direction {
+        cell, next := get_neighbour(collapse, index, direction)
+        
+        ok := cell != nil
         if ok {
             for entry in slice(to_check) {
                 if entry.index == next {
@@ -358,6 +357,7 @@ add_neighbours :: proc (using collapse: ^Collapse, index: [2]int, depth: u32) {
 }
 
 // 30s on city
+// 10s on city
 
 check_all_neighbours :: proc (using collapse: ^Collapse) {
     for index: i64; index < to_check.count; index += 1 {
@@ -382,16 +382,18 @@ check_all_neighbours :: proc (using collapse: ^Collapse) {
                         start := time.now()
                         defer _matches += time.since(start)
                         
-                        next, ok := get_neighbour(collapse, p, direction)
-                        if ok {
+                        next, _ := get_neighbour(collapse, p, direction)
+                        if next != nil {
                             switch &value in next {
                               case WaveFunction:
                                 matches = false
                                 for n_state, n_tile_index in value.states {
                                     if !n_state do continue
                                     b := tiles.data[n_tile_index]
-                                    matches ||= matches_tile(a, b, direction)
-                                    if matches do break
+                                    if matches_tile(a, b, direction) {
+                                        matches = true
+                                        break
+                                    }
                                 }
                               case Tile:
                                 matches = matches_tile(a, value, direction)
@@ -420,30 +422,28 @@ check_all_neighbours :: proc (using collapse: ^Collapse) {
     }
 }
 
-get_neighbour :: proc (using collapse: ^Collapse, p: [2]int, direction: Direction) -> (next: ^Cell, ok: b32) {
-    ok = true
-    
-    p := p
-    p += Delta[direction]
+get_neighbour :: proc (using collapse: ^Collapse, p: [2]int, direction: Direction) -> (cell: ^Cell, next: [2]int) {
+    ok := true
+    next = p + Delta[direction]
     if wrap_x {
-        p.x = (p.x + dimension.x) % dimension.x
+        next.x = (next.x + dimension.x) % dimension.x
     } else {
-        if p.x < 0 || p.x >= dimension.x {
+        if next.x < 0 || next.x >= dimension.x {
             ok = false
         }
     }
     if wrap_y {
-        p.y = (p.y + dimension.y) % dimension.y
+        next.y = (next.y + dimension.y) % dimension.y
     } else {
-        if p.y < 0 || p.y >= dimension.y {
+        if next.y < 0 || next.y >= dimension.y {
             ok = false
         }
     }
     
     if ok {
-        next = &grid[p.y*dimension.x + p.x]
+        cell = &grid[next.y*dimension.x + next.x]
     }
-    return next, ok
+    return cell, next
 }
 
 matches_tile :: proc(a, b: Tile, direction: Direction) -> (result: b32) {
