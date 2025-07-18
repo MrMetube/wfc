@@ -9,7 +9,7 @@ import rl "vendor:raylib"
 Kernel :: 3
 
 Collapse :: struct {
-    grid:    Array(Cell), 
+    grid:    []Cell, 
     tiles:   Array(Tile),
     sockets: map[u32]u32,
     next_socket_index: u32,
@@ -27,14 +27,19 @@ Collapse :: struct {
 
 Cell :: union {
     Tile,
-    Wave,
+    WaveFunction,
 }
 
-Wave :: struct {
+WaveFunction :: struct {
+    states: SuperPosition,
+    
     entropy: f32,
-    options_count_when_entropy_was_calculated: int,
-    options: [dynamic]int,
+    compatible_states: [Direction]SuperPosition,
 }
+
+// s[0] means is tiles[0] possible
+// we assume boolean possibility for now, but could change to real probability which allows for real valued effects and renormilization
+SuperPosition :: []b32
 
 Tile :: struct {
     center: []rl.Color, // Center*Center
@@ -76,7 +81,7 @@ init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, tile_count: u32, dime
     collapse.dimension = dimension
     cell_count := collapse.dimension.x * collapse.dimension.y
     collapse.tiles          = make_array(arena, Tile,   tile_count)
-    collapse.grid           = make_array(arena, Cell,   cell_count)
+    collapse.grid           = make([]Cell,  cell_count)
     collapse.to_check       = make_array(arena, Check,  cell_count)
     collapse.lowest_indices = make_array(arena, [2]int, cell_count)
     collapse.center = center
@@ -203,15 +208,39 @@ extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
 }
 
 entangle_grid :: proc(using collapse: ^Collapse) {
-    clear(&grid)
+    // @todo(viktor):  dont delete just resize
+    for &cell in grid {
+        if wave, ok := cell.(WaveFunction); ok {
+            delete(wave.states)
+            
+            for &c in wave.compatible_states {
+                delete(c)
+            }
+        } else {
+            cell = WaveFunction{}
+        }
+        
+    }
+    
     clear(&to_check)
     
-    for _ in 0..<len(grid.data) {
-        options := make([dynamic]int)
-        for _, i in slice(tiles) {
-            builtin.append(&options, i)
+    for &cell in grid {
+        wave := &cell.(WaveFunction)
+        
+        wave.states = make(SuperPosition, tiles.count)
+        for &it in wave.states do it = true
+        for &c in wave.compatible_states {
+            c = make(SuperPosition, tiles.count)
         }
-        append(&grid, Wave { options = options })
+    }
+    
+    for y in 0..<dimension.y {
+        for x in 0..<dimension.x {
+            cell := &grid[y * dimension.x + x]
+            wave := &cell.(WaveFunction)
+            
+            recompute_wavefunction(collapse, wave, {x,y})
+        }
     }
 }
 
@@ -225,16 +254,17 @@ step_observe :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (res
     
     if lowest_indices.count != 0 {
         lowest_index := random_choice(entropy, slice(lowest_indices))^
-        lowest_cell  := &grid.data[lowest_index.y * dimension.x + lowest_index.x]
+        lowest_cell  := &grid[lowest_index.y * dimension.x + lowest_index.x]
         
-        wave := lowest_cell.(Wave)
+        wave := lowest_cell.(WaveFunction)
         total_freq: u32
-        for index in wave.options do total_freq += tiles.data[index].frequency
+        for state, tile_index in wave.states do if state do total_freq += tiles.data[tile_index].frequency
         choice := random_between_u32(entropy, 0, total_freq)
         
         pick: Tile
-        for index in wave.options {
-            option := tiles.data[index]
+        for state, tile_index in wave.states {
+            if !state do continue
+            option := tiles.data[tile_index]
             if choice <= option.frequency {
                 pick = option
                 break
@@ -246,23 +276,6 @@ step_observe :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (res
     }
     
     _collapse += time.since(collapse_start)
-    // // 
-    // // Collapse all cells with only 1 options left
-    // // 
-    // for y in 0..<dimension {
-    //     for x in 0..<dimension {
-    //         index := y*dimension + x
-    //         cell := &grid.data[index]
-            
-    //         if wave, ok := cell.(Wave); ok {
-    //             if len(wave.options) == 1 {
-    //                 collapse_cell(cell, tiles.data[(cell^).(Wave).options[0]])
-    //                 add_neighbours(collapse, index, 10000)
-    //             }
-    //         }
-    //     }
-    // }
-    // check_all_neighbours(collapse)
     // 
     // Collect all lowest cells
     // 
@@ -275,42 +288,29 @@ step_observe :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (res
     loop: for y in 0..<dimension.y {
         for x in 0..<dimension.x {
             index := y*dimension.x + x
-            cell := &grid.data[index]
+            cell := &grid[index]
             
-            if wave, ok := cell.(Wave); ok {
-                if len(wave.options) == 0 {
+            if wave, ok := &cell.(WaveFunction); ok {
+                // @speed can this be done with fewer loops?
+                all_states_zero := true
+                for state in wave.states {
+                    if !state do continue
+                    
+                    all_states_zero = false
+                    break
+                }
+                if all_states_zero {
                     result = false
                     break loop
                 }
                 
-                if wave.options_count_when_entropy_was_calculated != len(wave.options) {
-                    wave.options_count_when_entropy_was_calculated = len(wave.options)
-                    when false  {
-                        total_frequency: f32
-                        for option in wave.options {
-                            total_frequency += cast(f32) tiles.data[option].frequency
-                        }
-                        
-                        wave.entropy = 0
-                        for option in wave.options {
-                            frequency := cast(f32) tiles.data[option].frequency
-                            probability := frequency / total_frequency
-                            // Shannon entropy is the negative sum of P * log2(P)
-                            wave.entropy -= probability * math.log2(probability)
-                        }
-                    } else {
-                        wave.entropy = cast(f32) len(wave.options)
-                    }
-                        
-                        
-                    if lowest_entropy > wave.entropy {
-                        lowest_entropy = wave.entropy
-                        clear(&lowest_indices)
-                    }
-                    
-                    if lowest_entropy >= wave.entropy {
-                        append(&lowest_indices, [2]int{x,y})
-                    }
+                if lowest_entropy > wave.entropy {
+                    lowest_entropy = wave.entropy
+                    clear(&lowest_indices)
+                }
+                
+                if lowest_entropy >= wave.entropy {
+                    append(&lowest_indices, [2]int{x,y})
                 }
             }
         }
@@ -327,9 +327,9 @@ collapse_cell_and_check_all_neighbours :: proc (using collapse: ^Collapse, cell:
 }
 
 collapse_cell :: proc (cell: ^Cell, pick: Tile) {
-    wave := cell.(Wave)
+    wave := cell.(WaveFunction)
     cell ^= pick
-    delete(wave.options)
+    delete(wave.states)
 }
 
 
@@ -337,25 +337,10 @@ add_neighbours :: proc (using collapse: ^Collapse, index: [2]int, depth: u32) {
     start := time.now()
     defer _add_neighbours += time.since(start)
     
-    for n in Delta {
+    for n, direction in Delta {
         next := n + index
 
-        ok := true
-        if wrap_x {
-            next.x = (next.x + dimension.x) % dimension.x
-        } else {
-            if next.x >= dimension.x || next.x < 0 {
-                ok = false
-            }
-        }
-        if wrap_y {
-            next.y = (next.y + dimension.y) % dimension.y
-        } else {
-            if next.y >= dimension.y || next.y < 0 {
-                ok = false
-            }
-        }
-        
+        _, ok := get_neighbour(collapse, index, direction)
         if ok {
             for entry in slice(to_check) {
                 if entry.index == next {
@@ -371,46 +356,57 @@ add_neighbours :: proc (using collapse: ^Collapse, index: [2]int, depth: u32) {
     }
 }
 
+// 30s on city
+
 check_all_neighbours :: proc (using collapse: ^Collapse) {
     for index: i64; index < to_check.count; index += 1 {
         next := to_check.data[index]
-        x := next.index.x
-        y := next.index.y
-        cell := &grid.data[y*dimension.x + x]
+        p := next.index
+        x := p.x
+        y := p.y
         
-        if wave, ok := &cell.(Wave); ok {
-            if reduce_entropy(collapse, cell, wave, {x, y}) {
+        cell := &grid[y*dimension.x + x]
+        
+        if wave, ok := &cell.(WaveFunction); ok {
+            changed: b32
+            // @todo(viktor): @speed O(n*m)
+            // for &c, direction in wave.compatible_states{
+            //     for &state, tile_index in wave.states {
+            //         if !state do continue
+            //         option := tiles.data[tile_index]
+            //         c[tile_index] = matches(collapse, option, p, direction)
+                    
+            //         if !c[tile_index] {
+            //             changed = true
+            //             state = false
+            //         }
+            //     }
+            // }
+            for &c, direction in wave.compatible_states{
+                for &state, tile_index in wave.states {
+                    if !state do continue
+                    option := tiles.data[tile_index]
+                    c[tile_index] = matches(collapse, option, p, direction)
+                    
+                    if !c[tile_index] {
+                        changed = true
+                        state = false
+                    }
+                }
+            }
+            
+            if changed {
+                recompute_wavefunction(collapse, wave, p)
                 if next.depth > 0 {
-                    add_neighbours(collapse, {x, y}, next.depth)
+                    add_neighbours(collapse, p, next.depth)
                 }
             }
         }
     }
 }
 
-reduce_entropy :: proc (using collapse: ^Collapse, cell: ^Cell, wave: ^Wave, p: [2]int) -> (changed: b32) {
-    // @todo(viktor): @speed O(n*m)
-    // n := len(wave.options) and m := [1..4]*len(next.options) with next := grid[n+direction]
-    // 
-    // 
-    #reverse for tile_index, index in wave.options {
-        option := tiles.data[tile_index]
-        
-        for direction in Direction {
-            if !matches(collapse, option, p, direction) {
-                changed = true
-                builtin.unordered_remove(&wave.options, index)
-                break
-            }
-        }
-    }
-    
-    return changed
-}
-
-matches :: proc(using collapse: ^Collapse, a: Tile, p: [2]int, direction: Direction) -> (result: bool) {
-    start := time.now()
-    defer _matches += time.since(start)
+get_neighbour :: proc (using collapse: ^Collapse, p: [2]int, direction: Direction) -> (next: ^Cell, ok: b32) {
+    ok = true
     
     p := p
     p += Delta[direction]
@@ -418,40 +414,91 @@ matches :: proc(using collapse: ^Collapse, a: Tile, p: [2]int, direction: Direct
         p.x = (p.x + dimension.x) % dimension.x
     } else {
         if p.x < 0 || p.x >= dimension.x {
-            result = true
+            ok = false
         }
     }
     if wrap_y {
         p.y = (p.y + dimension.y) % dimension.y
     } else {
         if p.y < 0 || p.y >= dimension.y {
-            result = true
+            ok = false
         }
     }
     
-    if !result {
-        next := grid.data[p.y*dimension.x + p.x]
+    if ok {
+        next = &grid[p.y*dimension.x + p.x]
+    }
+    return next, ok
+}
 
+matches :: proc (using collapse: ^Collapse, a: Tile, p: [2]int, direction: Direction) -> (result: b32) {
+    start := time.now()
+    defer _matches += time.since(start)
+    
+    next, ok := get_neighbour(collapse, p, direction)
+    if ok {
         switch &value in next {
-          case Wave:
+          case WaveFunction:
             result = false 
-            for index in value.options {
-                b := tiles.data[index]
+            for state, tile_index in value.states {
+                if !state do continue
+                b := tiles.data[tile_index]
                 result ||= matches_tile(a, b, direction)
                 if result do break
             }
           case Tile:
             result = matches_tile(a, value, direction)
         }
+    } else {
+        result = true
     }
     
     return result
 }
 
-matches_tile :: proc(a, b: Tile, direction: Direction) -> (result: bool) {
+matches_tile :: proc(a, b: Tile, direction: Direction) -> (result: b32) {
     a_side, b_side := direction, Opposite_Direction[direction]
     
     result = a.sockets_index[a_side] == b.sockets_index[b_side]
     
     return result
+}
+
+recompute_wavefunction :: proc (using collapse: ^Collapse, wave: ^WaveFunction, p: [2]int) {
+    // Update compatible_states
+    for &c, direction in wave.compatible_states {
+        for &state, tile_index in wave.states {
+            if !state {
+                c[tile_index] = false
+            } else {
+                option := tiles.data[tile_index]
+                c[tile_index] = matches(collapse, option, p, direction)
+            }
+        }
+    }
+    
+    // Update entropy
+    when !false {
+        total_frequency: f32
+        for state, tile_index in wave.states {
+            if !state do continue
+            total_frequency += cast(f32) tiles.data[tile_index].frequency
+        }
+        
+        wave.entropy = 0
+        for state, tile_index in wave.states {
+            if !state do continue
+            
+            frequency := cast(f32) tiles.data[tile_index].frequency
+            probability := frequency / total_frequency
+            // Shannon entropy is the negative sum of P * log2(P)
+            wave.entropy -= probability * math.log2(probability)
+        }
+    } else {
+        wave.entropy = 0
+        for state in wave.states {
+            if !state do continue
+            wave.entropy += 1
+        }
+    }
 }

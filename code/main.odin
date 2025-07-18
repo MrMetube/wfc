@@ -204,7 +204,7 @@ main :: proc () {
         all_done := true
         for y in 0..<Dim.y {
             for x in 0..<Dim.x {
-                cell := &grid.data[y*Dim.x + x]
+                cell := &grid[y*Dim.x + x]
                 
                 p := get_screen_p(collapse.dimension, size, x, y)
                 
@@ -218,9 +218,14 @@ main :: proc () {
                         }
                     }
                     
-                  case Wave:
+                  case WaveFunction:
                     all_done = false
-                    if len(value.options) == 0 {
+                    invalid:= true
+                    loop: for state in value.states do if state {
+                        invalid = false
+                        break loop
+                    }
+                    if invalid {
                         rl.DrawRectangleRec({p.x, p.y, size, size}, rl.RED)
                     } else {
                         draw_wave(&collapse, value, p, size)
@@ -274,7 +279,7 @@ main :: proc () {
     }
 }
 
-draw_wave :: proc (using collapse: ^Collapse, wave: Wave, p: v2, size: v2) {
+draw_wave :: proc (using collapse: ^Collapse, wave: WaveFunction, p: v2, size: v2) {
     count: u32
     when false {
         for tile, i in slice(tiles) {
