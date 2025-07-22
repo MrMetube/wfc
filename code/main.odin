@@ -21,7 +21,7 @@ code_points := [?]rune {
 
 buffer: [256]u8
 
-_total, _update, _render, _pick_next, _matches, _collect: time.Duration
+_total, _update, _render, _matches: time.Duration
 _total_start: time.Time
 
 
@@ -29,7 +29,7 @@ TargetFps       :: 144
 TargetFrameTime :: 1./TargetFps
 
 main :: proc () {
-    Dim :: [2]i32 {100, 100}
+    Dim :: [2]i32 {200, 100}
     size: f32
     
     ratio := vec_cast(f32, Screen_Size) / vec_cast(f32, Dim+10)
@@ -98,25 +98,31 @@ main :: proc () {
     t_restart: f32
     paused_update: b32
     
-    half_dim := dimension/2
-    half_dim_plus := half_dim + 1
-    base_region := rectangle_min_dimension([2]i32{}, half_dim_plus)
-    regions := [?]Rectangle2i {
-        base_region,
-        add_offset(base_region, [2]i32{half_dim.x-1, 0}),
-        add_offset(base_region, [2]i32{0, half_dim.y-1}),
-        add_offset(base_region, half_dim-1),
+    full_region := rectangle_min_dimension([2]i32{}, dimension)
+    divisor: i32 : 4
+    regions: [divisor*divisor]Rectangle2i
+    {
+        for y in 0..<divisor {
+            for x in 0..<divisor {
+                r := &regions[x + y * divisor]
+                r ^= rectangle_min_max((dimension*{x,y})/divisor, (dimension*{x+1,y+1})/divisor)
+                r ^= add_radius(r^, 1)
+                r ^= get_intersection(r^, full_region)
+            }
+        }
     }
     
     region_index := 0
     region := regions[region_index]
-    full_region := rectangle_min_dimension([2]i32{}, dimension)
     
     context_ := imgui.igCreateContext(nil)
     imgui.igSetCurrentContext(context_)
     
     rlimgui.ImGui_ImplRaylib_Init()
-
+    
+    first_time := true
+    max_lives := 5
+    lives := max_lives
     for !rl.WindowShouldClose() {
         free_all(context.temp_allocator)
         
@@ -125,19 +131,16 @@ main :: proc () {
         imgui.new_frame()
         
         imgui.text("Choose Input Image")
-        dim: i32
         imgui.columns(6)
         for _, &image in images {
-            defer dim += 1
-            
-            imgui.push_id(dim)
+            imgui.push_id(&image)
             if imgui.image_button(auto_cast &image.texture.id, 30) {
                 clear(&collapse.tiles)
                 extract_tiles(&collapse, image.image)
                 collapse.state = .Contradiction
-                
+                first_time = true
                 should_restart = true
-                t_restart = 0.3
+                t_restart = 0
             }
             imgui.pop_id()
             imgui.next_column()
@@ -186,8 +189,6 @@ main :: proc () {
                     
             if !should_restart {
                 update_start := time.now()
-                _pick_next = 0
-                _collect = 0
                 _matches = 0
                 
                 for time.duration_seconds(time.since(update_start)) < TargetFrameTime {
@@ -209,7 +210,7 @@ main :: proc () {
                             to_check_index += 1
                             
                             p := check.raw_p
-                            wrapped := rectangle_modulus(region, check.raw_p)
+                            wrapped := rectangle_modulus(full_region, p)
                             for w, dim in collapse.wrap do if w {
                                 p[dim] = wrapped[dim]
                             }
@@ -248,15 +249,25 @@ main :: proc () {
                       case .Contradiction:
                         if !should_restart {
                             should_restart = true
-                            t_restart = 3
+                            t_restart = .1
+                            
                         }
                         
                       case .Done:
                         region_index += 1
+                        lives = max_lives
                         if region_index < len(regions) {
                             region = regions[region_index]
-                            collapse.state = .PickNextCell
                             entangle_grid(&collapse, region)
+                            
+                            for y in region.min.y..<region.max.y {
+                                append_elem(&to_check, Check {{0, y}, 1})
+                                append_elem(&to_check, Check {{region.max.x-1, y}, 1})
+                            }
+                            for x in region.min.x..<region.max.x {
+                                append_elem(&to_check, Check {{x, 0}, 1})
+                                append_elem(&to_check, Check {{x, region.max.y-1}, 1})
+                            }
                         }
                     }
                 }
@@ -274,13 +285,46 @@ main :: proc () {
                     t_restart -= rl.GetFrameTime()
                     if t_restart <= 0 {
                         t_restart = 0
-                        _total_start = time.now()
                         should_restart = false
-                        
-                        region_index = 0
-                        region = regions[region_index]
-                        collapse.state = .PickNextCell
-                        entangle_grid(&collapse, full_region)
+                        if first_time {
+                            first_time = false
+                            
+                            _total_start = time.now()
+                            
+                            region_index = 0
+                            region = regions[region_index]
+                            entangle_grid(&collapse, full_region)
+                        } else {
+                            lives -= 1
+                            entangle_grid(&collapse, region)
+                            if lives == 0 {
+                                if region_index != 0 {
+                                    region_index -= 1
+                                    lives = max_lives
+                                    region = regions[region_index]
+                                    entangle_grid(&collapse, region)
+                                    for y in region.min.y..<region.max.y {
+                                        append_elem(&to_check, Check {{region.min.x, y}, 1})
+                                        append_elem(&to_check, Check {{region.max.x-1, y}, 1})
+                                    }
+                                    for x in region.min.x..<region.max.x {
+                                        append_elem(&to_check, Check {{x, region.min.y}, 1})
+                                        append_elem(&to_check, Check {{x, region.max.y-1}, 1})
+                                    }
+                                } else {
+                                    entangle_grid(&collapse, full_region)
+                                }
+                            } else {
+                                for y in region.min.y..<region.max.y {
+                                    append_elem(&to_check, Check {{region.min.x, y}, 1})
+                                    append_elem(&to_check, Check {{region.max.x-1, y}, 1})
+                                }
+                                for x in region.min.x..<region.max.x {
+                                    append_elem(&to_check, Check {{x, region.min.y}, 1})
+                                    append_elem(&to_check, Check {{x, region.max.y-1}, 1})
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -323,8 +367,10 @@ main :: proc () {
             for w, dim in collapse.wrap do if w {
                 cell_p[dim] = (cell_p[dim] + dimension[dim]) % dimension[dim]
             }
-            p := get_screen_p(collapse.dimension, size, cell_p)
-            rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(rl.YELLOW, 0.4))
+            if contains(region, cell_p) {
+                p := get_screen_p(collapse.dimension, size, cell_p)
+                rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(rl.YELLOW, 0.4))
+            }
         }
         
         for cell in slice(lowest_entropies) {
@@ -332,6 +378,10 @@ main :: proc () {
             color := rl.PURPLE
             rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(color, 0.8))
         }
+        
+        min := get_screen_p(collapse.dimension, size, region.min)
+        max := get_screen_p(collapse.dimension, size, region.max)
+        rl.DrawRectangleLinesEx({min.x, min.y, max.x-min.x, max.y-min.y}, 1, rl.ORANGE)
         
         rl.EndMode2D()
         _render = time.since(render_start)
@@ -345,9 +395,7 @@ main :: proc () {
             is_late := cast(f32) time.duration_seconds(_update) > TargetFrameTime
             imgui.text_colored(is_late ? Orange : White, format_string(buffer[:], `Update %`, _update))
             if !should_restart {
-                imgui.text(format_string(buffer[:], "  pick next %", _pick_next))
                 imgui.text(format_string(buffer[:], "  matches %",   _matches))
-                imgui.text(format_string(buffer[:], "  collect %",   _collect))
             }
             imgui.text(format_string(buffer[:], "Render %", _render))
             imgui.text(format_string(buffer[:], "Total %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)))

@@ -231,12 +231,16 @@ is_present :: proc (using collapse: ^Collapse, tile: Tile) -> (result: ^Tile, ok
 }
 
 entangle_grid :: proc(using collapse: ^Collapse, region: Rectangle2i) {
-    clear(&to_check)
     clear(&lowest_entropies)
+    clear(&to_check)
+    to_check_index = 0
     
     for y in region.min.y..<region.max.y {
         for x in region.min.x..<region.max.x {
             cell := &grid[y * dimension.x + x]
+            cell.changed = false
+            cell.checked = false
+            
             if wave, ok := cell.value.(WaveFunction); ok {
                 delete(wave.states)
                 wave.states_count = 0
@@ -259,12 +263,11 @@ entangle_grid :: proc(using collapse: ^Collapse, region: Rectangle2i) {
             recompute_wavefunction(collapse, wave)
         }
     }
+    
+    collapse.state = .Propagation
 }
 
 pick_next_cell :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (lowest_cell: ^Cell, pick: TileIndex) {
-    pick_next_start := time.now()
-    defer _pick_next += time.since(pick_next_start)
-    
     if lowest_entropies.count != 0 {
         lowest_cell = random_value(entropy, slice(lowest_entropies))
         
@@ -288,9 +291,6 @@ pick_next_cell :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (l
 }
 
 find_lowest_entropy :: proc (using collapse: ^Collapse, region: Rectangle2i) -> (next_state: CollapseState) {
-    collect_start := time.now()
-    defer _collect += time.since(collect_start)
-    
     clear(&lowest_entropies)
     clear(&to_check)
     to_check_index = 0
@@ -301,7 +301,7 @@ find_lowest_entropy :: proc (using collapse: ^Collapse, region: Rectangle2i) -> 
     collapsed_all_wavefunctions := true
     loop: for y in region.min.y..<region.max.y {
         for x in region.min.x..<region.max.x {
-            cell := &grid[x + y * dimension.y]
+            cell := &grid[x + y * dimension.x]
             cell.checked = false
             cell.changed = false
             
