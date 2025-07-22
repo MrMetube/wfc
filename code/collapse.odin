@@ -39,10 +39,12 @@ Collapse :: struct {
 Cell :: struct {
     p: [2]int,
     value: union {
-        Tile,
+        TileIndex,
         WaveFunction,
     },
 }
+
+TileIndex :: int
 
 WaveFunction :: struct {
     states: SuperPosition,
@@ -253,7 +255,7 @@ entangle_grid :: proc(using collapse: ^Collapse) {
     }
 }
 
-pick_next_cell :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (lowest_cell: ^Cell, pick: Tile) {
+pick_next_cell :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (lowest_cell: ^Cell, pick: TileIndex) {
     pick_next_start := time.now()
     defer _pick_next += time.since(pick_next_start)
     
@@ -269,7 +271,7 @@ pick_next_cell :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (l
             if !state do continue
             option := tiles[tile_index]
             if choice <= option.frequency {
-                pick = option
+                pick = tile_index
                 break
             }
             choice -= option.frequency
@@ -284,6 +286,8 @@ find_lowest_entropy :: proc (using collapse: ^Collapse) -> (next_state: Collapse
     defer _collect += time.since(collect_start)
     
     clear(&lowest_entropies)
+    clear(&to_check)
+    to_check_index = 0
     
     no_contradictions := true
     lowest_entropy := PositiveInfinity
@@ -320,11 +324,10 @@ find_lowest_entropy :: proc (using collapse: ^Collapse) -> (next_state: Collapse
     return next_state
 }
 
-collapse_cell_and_add_neighbours :: proc (using collapse: ^Collapse, cell: ^Cell, pick: Tile) {
+collapse_cell :: proc (using collapse: ^Collapse, cell: ^Cell, pick: TileIndex) {
     wave := cell.value.(WaveFunction)
     cell.value = pick
     delete(wave.states)
-    add_neighbours(collapse, cell, max_depth)
 }
 
 add_neighbours :: proc (using collapse: ^Collapse, cell: ^Cell, depth: u32) {
@@ -353,46 +356,25 @@ add_neighbour :: proc(using collapse: ^Collapse, next_cell: ^Cell, next: [2]int,
     append(&to_check, Check {next_cell, depth-1})
 }
 
-check_cell_neighbour :: proc (using collapse: ^Collapse, next: Check, neighbour: ^Cell, direction: Direction) -> (changed: b32) {
-    cell := next.cell
-    p := cell.p
-    
-    if wave, ok := &cell.value.(WaveFunction); ok {
-        // @speed O(n*m*d)
-        for &state, tile_index in wave.states {
-            if !state do continue
-            
-            if !matches(collapse, tiles[tile_index], p, direction) {
-                changed = true
-                state = false
-                wave.states_count -= 1
-            }
-        }
-    }
-    
-    return changed
-}
-
-matches :: proc (using collapse: ^Collapse, a: Tile, p: [2]int, direction: Direction) -> (result: b32) {
+matches :: proc (using collapse: ^Collapse, a: TileIndex, cell: ^Cell, direction: Direction) -> (result: b32) {
     start := time.now()
     defer _matches += time.since(start)
     
-    next, _ := get_neighbour(collapse, p, direction)
+    next, _ := get_neighbour(collapse, cell.p, direction)
     if next != nil {
         switch &value in next.value {
           case WaveFunction:
             result = false
-            for n_state, n_index in value.states {
-                if !n_state do continue
-                b := tiles[n_index]
-                if matches_tile(a, b, direction) {
+            for b_state, b in value.states {
+                if !b_state do continue
+                if matches_tile(collapse, a, b, direction) {
                     result = true
                     break
                 }
             }
             
-          case Tile:
-            result = matches_tile(a, value, direction)
+          case TileIndex:
+            result = matches_tile(collapse, a, value, direction)
         }
     } else {
         result = true
@@ -401,9 +383,11 @@ matches :: proc (using collapse: ^Collapse, a: Tile, p: [2]int, direction: Direc
     return result
 }
 
-matches_tile :: proc(a, b: Tile, direction: Direction) -> (result: b32) {
+matches_tile :: proc(using collapse: ^Collapse, a_index, b_index: TileIndex, direction: Direction) -> (result: b32) {
     a_side, b_side := direction, Opposite_Direction[direction]
     
+    a := tiles[a_index]
+    b := tiles[b_index]
     result = a.sockets_index[a_side] == b.sockets_index[b_side]
     
     return result

@@ -183,16 +183,15 @@ main :: proc () {
                         collapse.state = .PickNextCell
                         
                       case .PickNextCell:
-                        clear(&to_check)
-                        to_check_index = 0
-                        
                         cell, pick := pick_next_cell(&collapse, &entropy)
                         if cell != nil {
-                            collapse_cell_and_add_neighbours(&collapse, cell, pick)
+                            collapse_cell(&collapse, cell, pick)
+                            add_neighbours(&collapse, cell, collapse.max_depth)
                         }
                         collapse.state = .Propagation
                         
                       case .Propagation:
+                        // @todo(viktor): If we knew that a cell didnt change in this propagation we should expect that it wont change the current cell. Store if it changed and only compare current with changed
                         if to_check_index < to_check.count {
                             next := to_check.data[to_check_index]
                             to_check_index += 1
@@ -201,7 +200,7 @@ main :: proc () {
                                 // @speed O(n*m*d)
                                 loop: for &state, index in wave.states do if state {
                                     for direction in Direction {
-                                        if !matches(&collapse, tiles[index], next. cell.p, direction) {
+                                        if !matches(&collapse, index, next.cell, direction) {
                                             changed = true
                                             state = false
                                             wave.states_count -= 1
@@ -228,8 +227,11 @@ main :: proc () {
                         }
                         
                       case .Done:
-                        _total = time.since(_total_start)
                     }
+                }
+                
+                if collapse.state != .Done {
+                    _total = time.since(_total_start)
                 }
                 
                 _update = time.since(update_start)
@@ -266,16 +268,17 @@ main :: proc () {
                 p := get_screen_p(collapse.dimension, size, {x, y})
                 
                 switch value in cell.value {
-                    case Tile:
+                  case TileIndex:
                     for cy in 0..<center {
                         for cx in 0..<center {
                             fcenter := cast(f32) center
                             rect := rl.Rectangle {p.x+ cast(f32)cx*size/fcenter, p.y + cast(f32) cy*size/fcenter, size/fcenter, size/fcenter}
-                            rl.DrawRectangleRec(rect, value.center[cy*center+cx])
+                            tile := &tiles[value]
+                            rl.DrawRectangleRec(rect, tile.center[cy*center+cx])
                         }
                     }
                     
-                    case WaveFunction:
+                  case WaveFunction:
                     draw_wave(&collapse, value, p, size)
                 }
             }
