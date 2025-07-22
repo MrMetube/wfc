@@ -65,7 +65,7 @@ random_bilateral :: proc(series: ^RandomSeries, $T: typeid) -> (result: T) {
 
 
 
-random_choice :: proc { random_choice_integer_0_max, random_choice_integer_min_max, random_choice_data }
+random_choice :: proc { random_choice_integer_0_max, random_choice_integer_min_max }
 random_choice_integer_0_max :: proc(series: ^RandomSeries, max: u32) -> (result: u32) {
     result = next_random_u32(series) % max
     return result
@@ -74,9 +74,14 @@ random_choice_integer_min_max :: proc(series: ^RandomSeries, min, max: u32) -> (
     result = next_random_u32(series) % (max - min) + min
     return result
 }
-random_choice_data :: proc(series: ^RandomSeries, data:[]$T) -> (result: ^T) {
+random_pointer :: proc(series: ^RandomSeries, data: []$T) -> (result: ^T) {
     assert(len(data) != 0)
     result = &data[random_choice(series, auto_cast len(data))]
+    return result
+}
+random_value :: proc(series: ^RandomSeries, data: []$T) -> (result: T) {
+    assert(len(data) != 0)
+    result = data[random_choice(series, auto_cast len(data))]
     return result
 }
 

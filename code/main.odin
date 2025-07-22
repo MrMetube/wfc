@@ -1,6 +1,5 @@
 package main
 
-import "core:os"
 import "core:os/os2"
 import "core:strings"
 import "core:time"
@@ -22,7 +21,7 @@ code_points := [?]rune {
 
 buffer: [256]u8
 
-_total, _update, _render, _collapse, _add_neighbours, _matches, _collect: time.Duration
+_total, _update, _render, _pick_next, _add_neighbours, _matches, _collect: time.Duration
 _total_start: time.Time
 main :: proc () {
     Dim :: [2]int {200, 100}
@@ -69,7 +68,6 @@ main :: proc () {
                 data, ferr := os2.read_entire_file(info.fullpath, context.allocator)
                 if ferr != nil do print("Error reading file %:%\n", info.name, ferr)
                 
-                
                 temp := begin_temporary_memory(&arena)
                 defer end_temporary_memory(temp)
                 _total_start = time.now()
@@ -79,7 +77,7 @@ main :: proc () {
                     name = copy_string(&arena, info.name),
                     data = data,
                     type = file_type,
-                    read_time = time.now()
+                    read_time = time.now(),
                 }
                 image.image = rl.LoadImageFromMemory(cstr, raw_data(image.data), auto_cast len(image.data))
                 image.texture = rl.LoadTextureFromImage(image.image)
@@ -88,7 +86,7 @@ main :: proc () {
         }
     }
     
-    entropy := seed_random_series()//0x75658663)
+    entropy := seed_random_series()
     
     using collapse
     should_restart: b32
@@ -100,7 +98,6 @@ main :: proc () {
     
     rlimgui.ImGui_ImplRaylib_Init()
 
-    
     for !rl.WindowShouldClose() {
         rlimgui.ImGui_ImplRaylib_NewFrame()
         rlimgui.ImGui_ImplRaylib_ProcessEvent()
@@ -148,19 +145,59 @@ main :: proc () {
             }
             imgui.columns(1)
         }
-
+        
         if !paused_update {
-            _collapse = 0
+            _pick_next = 0
             _collect = 0
             _add_neighbours = 0
             _matches = 0
             
+            /* @todo(viktor): How can we separate the core of the algorithm from the data is works on.
+                The should be able to feed in the data however they want 
+                The current higher level functionality should be seen as wrapper around the core api
+                This would allow for non grid based data, as well as user space handling of wrapping and the like.
+                
+                For the input data we already abstract over the sockets as pixels with socket indices.
+                
+                The main idea is that the user drives the algorith and the wfc only provides services instead of being a blackbox
+                That way it should be possible to for example prevent having huge frame spikes when the recursion is too deep and we cant pause it 
+                and continue the work on the next frame.
+                
+                This should also allow for easier special cases like stiched wfc, where we only give a region at a time(with some overlap)
+            */
+            
             if !should_restart {
                 update_start := time.now()
-                for cast(f32) time.duration_seconds(time.since(update_start)) < 0.016 {
-                    if !step_observe(&collapse, &entropy) {
-                        should_restart = true
-                        t_restart = 3
+                for time.duration_seconds(time.since(update_start)) < 0.016 {
+                    switch collapse.state {
+                      case .Uninitialized:
+                        collapse.state = .PickNextCell
+                        
+                      case .PickNextCell:
+                        clear(&to_check)
+                        to_check_index = 0
+                        
+                        cell, pick := pick_next_cell(&collapse, &entropy)
+                        if cell != nil {
+                            collapse_cell_and_add_neighbours(&collapse, cell, pick)
+                        }
+                        collapse.state = .UpdateCell
+                        
+                      case .UpdateCell:
+                        if to_check_index < to_check.count {
+                            next := to_check.data[to_check_index]
+                            to_check_index += 1
+                            check_all_neighbours_once(&collapse, next)
+                        } else {
+                            collapse.state = find_lowest_entropy(&collapse)
+                        }
+                      case .Contradiction:
+                        if !should_restart {
+                            should_restart = true
+                            t_restart = 3
+                        }
+                      case .Done:
+                        _total = time.since(_total_start)
                     }
                 }
                 _update = time.since(update_start)
@@ -172,15 +209,16 @@ main :: proc () {
                     t_restart -= rl.GetFrameTime()
                     if t_restart <= 0 {
                         t_restart = 0
+                        _total_start = time.now()
                         should_restart = false
                         entangle_grid(&collapse)
+                        collapse.state = .Uninitialized
                     }
                 }
             }
         }
         
         // @todo(viktor): let user collapse manually
-        // collapse_cell_and_check_all_neighbours(&collapse, cell, {x,y}, tile)
         
         // 
         // Render
@@ -190,25 +228,13 @@ main :: proc () {
         rl.ClearBackground({0x54, 0x57, 0x66, 0xFF})
         rl.BeginMode2D(camera)
         
-        for entry in slice(to_check) {
-            p := get_screen_p(collapse.dimension, size, entry.index.x, entry.index.y)
-            rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(rl.YELLOW, 0.3))
-        }
-        
-        for entry in slice(lowest_indices) {
-            p := get_screen_p(collapse.dimension, size, entry.x, entry.y)
-            color := rl.PURPLE
-            rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(color, 0.6))
-        }
-        
-        all_done := true
         for y in 0..<Dim.y {
             for x in 0..<Dim.x {
                 cell := &grid[y*Dim.x + x]
                 
-                p := get_screen_p(collapse.dimension, size, x, y)
+                p := get_screen_p(collapse.dimension, size, {x, y})
                 
-                switch value in cell^ {
+                switch value in cell.value {
                   case Tile:
                     for cy in 0..<center {
                         for cx in 0..<center {
@@ -219,7 +245,6 @@ main :: proc () {
                     }
                     
                   case WaveFunction:
-                    all_done = false
                     invalid:= true
                     loop: for state in value.states do if state {
                         invalid = false
@@ -234,44 +259,47 @@ main :: proc () {
             }
         }
         
-        if !all_done {
-            _total = time.since(_total_start)
+        for entry in slice(to_check) {
+            p := get_screen_p(collapse.dimension, size, entry.index)
+            rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(rl.YELLOW, 0.8))
+        }
+        
+        for cell in slice(lowest_entropies) {
+            p := get_screen_p(collapse.dimension, size, cell.p)
+            color := rl.PURPLE
+            rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(color, 0.8))
         }
         
         rl.EndMode2D()
         _render = time.since(render_start)
         
-        line_p := v2 {10, 10}
-        is_late := cast(f32) time.duration_seconds(_update) > rl.GetFrameTime()
         
         imgui.begin("Stats")
-        if paused_update {
-            imgui.text_colored(Blue, "### Paused ###")
-        }
-        imgui.text_colored(is_late ? Orange : White, format_string(buffer[:], `Update %`, _update))
-        if !should_restart {
-            imgui.text(format_string(buffer[:], "  collapse %",        _collapse))
-            imgui.text(format_string(buffer[:], "  get neighbours %",  _add_neighbours))
-            imgui.text(format_string(buffer[:], "  matches %",         _matches))
-            imgui.text(format_string(buffer[:], "  collect %",         _collect))
-        }
-        imgui.text(format_string(buffer[:], "Render %", _render))
-        imgui.text(format_string(buffer[:], "Total %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)))
+            if paused_update {
+                imgui.text_colored(Blue, "### Paused ###")
+            }
+            is_late := cast(f32) time.duration_seconds(_update) > rl.GetFrameTime()
+            imgui.text_colored(is_late ? Orange : White, format_string(buffer[:], `Update %`, _update))
+            if !should_restart {
+                imgui.text(format_string(buffer[:], "  pick next %",        _pick_next))
+                imgui.text(format_string(buffer[:], "  get neighbours %",  _add_neighbours))
+                imgui.text(format_string(buffer[:], "  matches %",         _matches))
+                imgui.text(format_string(buffer[:], "  collect %",         _collect))
+            }
+            imgui.text(format_string(buffer[:], "Render %", _render))
+            imgui.text(format_string(buffer[:], "Total %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)))
         imgui.end()
         
         if collapse.tiles.count != 0 {
             imgui.begin("Tiles")
-            imgui.columns(ceil(i32, square_root(cast(f32)collapse.tiles.count)))
-            for &tile, i in slice(collapse.tiles) {
-                if imgui.image_button(auto_cast &tile.texture.id, 25) {
-                    
+                imgui.columns(ceil(i32, square_root(cast(f32)collapse.tiles.count)))
+                for &tile in slice(collapse.tiles) {
+                    imgui.image_button(auto_cast &tile.texture.id, 25)
+                    imgui.next_column()
                 }
-                imgui.next_column()
-            }
-            imgui.columns(1)
+                imgui.columns(1)
             imgui.end()
         }
-        
         
         imgui.render()
         rlimgui.ImGui_ImplRaylib_Render(imgui.igGetDrawData())
@@ -280,41 +308,25 @@ main :: proc () {
 }
 
 draw_wave :: proc (using collapse: ^Collapse, wave: WaveFunction, p: v2, size: v2) {
-    count: u32
-    when false {
-        for tile, i in slice(tiles) {
-            present: b32
-            for it in wave.options do if tiles.data[it] == tile { present = true; break }
-            if !present do continue
-            
-            factor := square_root(cast(f32) count)
-            option_size := (size / factor)
-            offset := vec_cast(f32, (i) % cast(int) factor, (i) / cast(int) factor)
-            op := p + option_size * (offset+1)
-            
-            option_rect := rl.Rectangle {op.x, op.y, option_size.x, option_size.y}
-            rl.DrawRectangleRec(option_rect, tile.color)
+    count: f32
+    sum:   v4
+    for state, index in wave.states {
+        if !state do continue
+        tile := tiles.data[index]
+        if tile.center != nil {
+            count += cast(f32) tile.frequency
+            assert(len(tile.center) == 1)
+            sum += cast(f32) tile.frequency * vec_cast(f32, cast([4]u8) tile.center[0])
         }
-    } else when false {
-        sum: [4]u32
-        for tile, tile_index in slice(tiles) {
-            present: b32
-            for index in wave.options do if index == tile_index { present = true; break }
-            if !present do continue
-            count += tile.frequency
-            // sum += tile.frequency * vec_cast(u32, cast([4]u8) tile.center)
-        }
-        
-        color := cast(rl.Color) vec_cast(u8, (sum/count) / {1,1,1,4})
-        rl.DrawRectangleRec({p.x, p.y, size.x, size.y}, color)
-    } else {
-        // nothing
-        unused(count)
     }
+    
+    average := safe_ratio_0(sum, count)
+    color := cast(rl.Color) vec_cast(u8, average)
+    rl.DrawRectangleRec({p.x, p.y, size.x, size.y}, color)
 }
 
-get_screen_p :: proc (dimension: [2]int, size: f32, x, y: int) -> (result: v2) {
-    result = vec_cast(f32, x, y) * size
+get_screen_p :: proc (dimension: [2]int, size: f32, p: [2]int) -> (result: v2) {
+    result = vec_cast(f32, p) * size
     
     result += (vec_cast(f32, Screen_Size) - (size * vec_cast(f32, dimension))) * 0.5
     

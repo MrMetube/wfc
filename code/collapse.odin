@@ -8,7 +8,16 @@ import rl "vendor:raylib"
 
 Kernel :: 3
 
+CollapseState :: enum {
+    Uninitialized,
+    PickNextCell,
+    UpdateCell,
+    Contradiction,
+    Done,
+}
+
 Collapse :: struct {
+    state: CollapseState,
     grid:    []Cell, 
     tiles:   Array(Tile),
     sockets: map[u32]u32,
@@ -16,8 +25,10 @@ Collapse :: struct {
     
     dimension: [2]int,
     
+    to_check_index: i64,
     to_check: Array(Check),
-    lowest_indices: Array([2]int),
+    
+    lowest_entropies: Array(^Cell),
     wrap_x: b32,
     wrap_y: b32,
     max_depth:  u32,
@@ -25,16 +36,18 @@ Collapse :: struct {
     center: i32,
 }
 
-Cell :: union {
-    Tile,
-    WaveFunction,
+Cell :: struct {
+    p: [2]int,
+    value: union {
+        Tile,
+        WaveFunction,
+    },
 }
 
 WaveFunction :: struct {
     states: SuperPosition,
-    
+    states_count: u32,
     entropy: f32,
-    compatible_states: [Direction]SuperPosition,
 }
 
 // s[0] means is tiles[0] possible
@@ -79,15 +92,15 @@ init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, tile_count: u32, dime
     collapse.wrap_y = wrap_y
     
     collapse.dimension = dimension
-    cell_count := collapse.dimension.x * collapse.dimension.y
-    collapse.tiles          = make_array(arena, Tile,   tile_count)
-    collapse.grid           = make([]Cell,  cell_count)
-    collapse.to_check       = make_array(arena, Check,  cell_count)
-    collapse.lowest_indices = make_array(arena, [2]int, cell_count)
-    collapse.center = center
+    collapse.center = center // size of the center of a tile
     collapse.max_depth = max_depth
+    
+    cell_count := collapse.dimension.x * collapse.dimension.y
+    collapse.grid             = make([]Cell, cell_count)
+    collapse.tiles            = make_array(arena, Tile,  tile_count)
+    collapse.to_check         = make_array(arena, Check, cell_count)
+    collapse.lowest_entropies = make_array(arena, ^Cell, cell_count)
 }
-
 
 extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
     assert(img.format == .UNCOMPRESSED_R8G8B8A8)
@@ -175,92 +188,92 @@ extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
                     }
                 }
                 
-                data := make([dynamic]u8, context.temp_allocator)
-                for &it in tile.center do append_elems(&data, ..to_bytes(&it))
+                data := make([dynamic]u8)
+                defer delete(data)
+                for &it in tile.center        do append_elems(&data, ..to_bytes(&it))
                 for &it in tile.sockets_index do append_elems(&data, ..to_bytes(&it))
                 tile.hash = hash.djb2(data[:])
             }
             
-            present: ^Tile
-            loop: for &it in slice(tiles) {
-                if tile.hash == it.hash {
-                    present = &it
-                    break loop
-                }
+            temp := rl.Image {
+                data    = raw_data(tile_pixels), 
+                width   = center*Kernel, 
+                height  = center*Kernel, 
+                mipmaps = 1, 
+                format = .UNCOMPRESSED_R8G8B8A8,
             }
+            tile.texture = rl.LoadTextureFromImage(temp)
             
-            if present != nil {
-                present.frequency += 1
-            } else {
-                tile.frequency = 1
-                temp:= rl.Image {
-                    data    = raw_data(tile_pixels), 
-                    width   = center*Kernel, 
-                    height  = center*Kernel, 
-                    mipmaps = 1, 
-                    format = .UNCOMPRESSED_R8G8B8A8,
-                }
-                tile.texture = rl.LoadTextureFromImage(temp)
-                append(&tiles, tile)
+            if !add_tile(collapse, tile) {
+                rl.UnloadTexture(tile.texture)
             }
         }
     }
 }
 
-entangle_grid :: proc(using collapse: ^Collapse) {
-    for &cell in grid {
-        if wave, ok := cell.(WaveFunction); ok {
-            delete(wave.states)
-            
-            for &c in wave.compatible_states {
-                delete(c)
-            }
-        } else {
-            cell = WaveFunction{}
+add_tile :: proc (using collapse: ^Collapse, tile: Tile) -> (ok: bool) {
+    tile := tile
+    
+    present: ^Tile
+    loop: for &it in slice(tiles) {
+        if tile.hash == it.hash {
+            present = &it
+            break loop
         }
-        
     }
     
+    if present != nil {
+        present.frequency += 1
+    } else {
+        ok = true
+        tile.frequency = 1
+        
+        append(&tiles, tile)
+    }
+    
+    return ok
+}
+
+entangle_grid :: proc(using collapse: ^Collapse) {
     clear(&to_check)
+    clear(&lowest_entropies)
     
     for &cell in grid {
-        wave := &cell.(WaveFunction)
+        if wave, ok := cell.value.(WaveFunction); ok {
+            delete(wave.states)
+            wave.states_count = 0
+        } else {
+            cell.value = WaveFunction{}
+        }
+        wave := &cell.value.(WaveFunction)
         
         wave.states = make(SuperPosition, tiles.count)
+        wave.states_count = auto_cast len(wave.states)
         for &it in wave.states do it = true
-        for &c in wave.compatible_states {
-            c = make(SuperPosition, tiles.count)
-            for &it in c do it = true
-        }
     }
     
     for y in 0..<dimension.y {
         for x in 0..<dimension.x {
             cell := &grid[y * dimension.x + x]
-            wave := &cell.(WaveFunction)
-            recompute_wavefunction(collapse, wave, {x,y})
+            cell.p = {x, y}
+            wave := &cell.value.(WaveFunction)
+            recompute_wavefunction(collapse, wave, cell.p)
         }
     }
 }
 
-step_observe :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (result: bool) {
-    lowest_entropy := PositiveInfinity
-    //
-    // Pick a cell to collapse
-    //
-    collapse_start := time.now()
-    clear(&to_check)
+pick_next_cell :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (lowest_cell: ^Cell, pick: Tile) {
+    pick_next_start := time.now()
+    defer _pick_next += time.since(pick_next_start)
     
-    if lowest_indices.count != 0 {
-        lowest_index := random_choice(entropy, slice(lowest_indices))^
-        lowest_cell  := &grid[lowest_index.y * dimension.x + lowest_index.x]
+    if lowest_entropies.count != 0 {
+        lowest_cell = random_value(entropy, slice(lowest_entropies))
         
-        wave := lowest_cell.(WaveFunction)
+        wave := lowest_cell.value.(WaveFunction)
         total_freq: u32
         for state, tile_index in wave.states do if state do total_freq += tiles.data[tile_index].frequency
         choice := random_between_u32(entropy, 0, total_freq)
         
-        pick: Tile
         for state, tile_index in wave.states {
             if !state do continue
             option := tiles.data[tile_index]
@@ -270,77 +283,67 @@ step_observe :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (res
             }
             choice -= option.frequency
         }
-        
-        collapse_cell_and_check_all_neighbours(collapse, lowest_cell, lowest_index, pick)
     }
     
-    _collapse += time.since(collapse_start)
-    // 
-    // Collect all lowest cells
-    // 
+    return lowest_cell, pick
+}
+
+find_lowest_entropy :: proc (using collapse: ^Collapse) -> (next_state: CollapseState) {
     collect_start := time.now()
-    clear(&lowest_indices)
-    lowest_entropy = max(f32)
+    defer _collect += time.since(collect_start)
     
-    result = true
+    clear(&lowest_entropies)
     
-    loop: for y in 0..<dimension.y {
-        for x in 0..<dimension.x {
-            index := y*dimension.x + x
-            cell := &grid[index]
+    no_contradictions := true
+    lowest_entropy := PositiveInfinity
+    
+    collapsed_all_wavefunctions := true
+    loop: for &cell in grid {
+        if wave, ok := &cell.value.(WaveFunction); ok {
+            collapsed_all_wavefunctions = false
+            if wave.states_count == 0 {
+                no_contradictions = false
+                break loop
+            }
             
-            if wave, ok := &cell.(WaveFunction); ok {
-                // @speed can this be done with fewer loops?
-                all_states_zero := true
-                for state in wave.states {
-                    if !state do continue
-                    
-                    all_states_zero = false
-                    break
-                }
-                if all_states_zero {
-                    result = false
-                    break loop
-                }
-                
-                if lowest_entropy > wave.entropy {
-                    lowest_entropy = wave.entropy
-                    clear(&lowest_indices)
-                }
-                
-                if lowest_entropy >= wave.entropy {
-                    append(&lowest_indices, [2]int{x,y})
-                }
+            if lowest_entropy > wave.entropy {
+                lowest_entropy = wave.entropy
+                clear(&lowest_entropies)
+            }
+            
+            if lowest_entropy == wave.entropy {
+                append(&lowest_entropies, &cell)
             }
         }
     }
     
-    _collect += time.since(collect_start)
-    return result
+    next_state = .PickNextCell
+    if no_contradictions {
+        if collapsed_all_wavefunctions {
+            next_state = .Done
+        }
+    } else {
+        next_state = .Contradiction
+    }
+    
+    return next_state
 }
 
-collapse_cell_and_check_all_neighbours :: proc (using collapse: ^Collapse, cell: ^Cell, index: [2]int, pick: Tile) {
-    collapse_cell(cell, pick)
-    // @todo(viktor): this will also readd the collapsed
-    add_neighbours(collapse, index, max_depth)
-    check_all_neighbours(collapse)
-}
-
-collapse_cell :: proc (cell: ^Cell, pick: Tile) {
-    wave := cell.(WaveFunction)
-    cell ^= pick
+collapse_cell_and_add_neighbours :: proc (using collapse: ^Collapse, cell: ^Cell, pick: Tile) {
+    wave := cell.value.(WaveFunction)
+    cell.value = pick
     delete(wave.states)
+    add_neighbours(collapse, cell, max_depth)
 }
 
-
-add_neighbours :: proc (using collapse: ^Collapse, index: [2]int, depth: u32) {
+add_neighbours :: proc (using collapse: ^Collapse, cell: ^Cell, depth: u32) {
     start := time.now()
     defer _add_neighbours += time.since(start)
     
     for direction in Direction {
-        cell, next := get_neighbour(collapse, index, direction)
+        next_cell, next := get_neighbour(collapse, cell.p, direction)
         
-        ok := cell != nil
+        ok := next_cell != nil
         if ok {
             for entry in slice(to_check) {
                 if entry.index == next {
@@ -356,70 +359,68 @@ add_neighbours :: proc (using collapse: ^Collapse, index: [2]int, depth: u32) {
     }
 }
 
-// 30s on city
-// 10s on city
-
-check_all_neighbours :: proc (using collapse: ^Collapse) {
-    for index: i64; index < to_check.count; index += 1 {
-        next := to_check.data[index]
-        p := next.index
-        x := p.x
-        y := p.y
+check_all_neighbours_once :: proc (using collapse: ^Collapse, next: Check) {
+    p := next.index
+    cell := &grid[p.y*dimension.x + p.x]
+    
+    if wave, ok := &cell.value.(WaveFunction); ok {
+        changed: b32
         
-        cell := &grid[y*dimension.x + x]
-        
-        if wave, ok := &cell.(WaveFunction); ok {
-            changed: b32
-            // @todo(viktor): @speed O(n*m)
-            
-            for &c, direction in wave.compatible_states{
-                for &state, tile_index in wave.states {
-                    if !state do continue
-                    a := tiles.data[tile_index]
+        // @speed O(n*m*d)
+        for direction in Direction {
+            for &state, tile_index in wave.states {
+                if !state do continue
+                a := tiles.data[tile_index]
+                
+                matches: b32
+                {
+                    start := time.now()
+                    defer _matches += time.since(start)
                     
-                    matches: b32
-                    {
-                        start := time.now()
-                        defer _matches += time.since(start)
-                        
-                        next, _ := get_neighbour(collapse, p, direction)
-                        if next != nil {
-                            switch &value in next {
-                              case WaveFunction:
-                                matches = false
-                                for n_state, n_tile_index in value.states {
-                                    if !n_state do continue
-                                    b := tiles.data[n_tile_index]
-                                    if matches_tile(a, b, direction) {
-                                        matches = true
-                                        break
-                                    }
+                    next, _ := get_neighbour(collapse, p, direction)
+                    if next != nil {
+                        switch &value in next.value {
+                            case WaveFunction:
+                            matches = false
+                            for n_state, n_index in value.states {
+                                if !n_state do continue
+                                b := tiles.data[n_index]
+                                if matches_tile(a, b, direction) {
+                                    matches = true
+                                    break
                                 }
-                              case Tile:
-                                matches = matches_tile(a, value, direction)
                             }
-                        } else {
-                            matches = true
+                            case Tile:
+                            matches = matches_tile(a, value, direction)
                         }
-                    }
-                    
-                    c[tile_index] = matches
-                    
-                    if !c[tile_index] {
-                        changed = true
-                        state = false
+                    } else {
+                        matches = true
                     }
                 }
-            }
-            
-            if changed {
-                recompute_wavefunction(collapse, wave, p)
-                if next.depth > 0 {
-                    add_neighbours(collapse, p, next.depth)
+                
+                if !matches {
+                    changed = true
+                    state = false
+                    wave.states_count -= 1
                 }
             }
         }
+        
+        if changed {
+            recompute_wavefunction(collapse, wave, p)
+            if next.depth > 0 {
+                add_neighbours(collapse, cell, next.depth)
+            }
+        }
     }
+}
+
+matches_tile :: proc(a, b: Tile, direction: Direction) -> (result: b32) {
+    a_side, b_side := direction, Opposite_Direction[direction]
+    
+    result = a.sockets_index[a_side] == b.sockets_index[b_side]
+    
+    return result
 }
 
 get_neighbour :: proc (using collapse: ^Collapse, p: [2]int, direction: Direction) -> (cell: ^Cell, next: [2]int) {
@@ -446,17 +447,9 @@ get_neighbour :: proc (using collapse: ^Collapse, p: [2]int, direction: Directio
     return cell, next
 }
 
-matches_tile :: proc(a, b: Tile, direction: Direction) -> (result: b32) {
-    a_side, b_side := direction, Opposite_Direction[direction]
-    
-    result = a.sockets_index[a_side] == b.sockets_index[b_side]
-    
-    return result
-}
-
 recompute_wavefunction :: proc (using collapse: ^Collapse, wave: ^WaveFunction, p: [2]int) {
     // Update entropy
-    when !false {
+    when true {
         total_frequency: f32
         for state, tile_index in wave.states {
             if !state do continue
@@ -473,10 +466,6 @@ recompute_wavefunction :: proc (using collapse: ^Collapse, wave: ^WaveFunction, 
             wave.entropy -= probability * math.log2(probability)
         }
     } else {
-        wave.entropy = 0
-        for state in wave.states {
-            if !state do continue
-            wave.entropy += 1
-        }
+        wave.entropy = wave.states_count
     }
 }
