@@ -517,6 +517,14 @@ get_xy :: proc(rect: Rectangle3) -> (result: Rectangle2) {
     return result
 }
 
+rectangle_modulus :: proc (rect: $R/Rectangle($T), p: T) -> (result: T) {
+    dim := get_dimension(rect)
+    offset := p - rect.min
+    result = (((offset % dim) + dim) % dim) + rect.min
+    assert(contains(rect, result))
+    return result
+}
+
 // @note(viktor): Area without the points at the maximum
 get_volume_or_zero :: get_area_or_zero
 get_area_or_zero :: proc(rect: $R/Rectangle($T)) -> (result: T) {

@@ -29,7 +29,7 @@ TargetFps       :: 144
 TargetFrameTime :: 1./TargetFps
 
 main :: proc () {
-    Dim :: [2]int {200, 100}
+    Dim :: [2]i32 {100, 100}
     size: f32
     
     ratio := vec_cast(f32, Screen_Size) / vec_cast(f32, Dim+10)
@@ -97,7 +97,20 @@ main :: proc () {
     should_restart: b32
     t_restart: f32
     paused_update: b32
-    region := rectangle_min_dimension([2]int{}, dimension)
+    
+    half_dim := dimension/2
+    half_dim_plus := half_dim + 1
+    base_region := rectangle_min_dimension([2]i32{}, half_dim_plus)
+    regions := [?]Rectangle2i {
+        base_region,
+        add_offset(base_region, [2]i32{half_dim.x-1, 0}),
+        add_offset(base_region, [2]i32{0, half_dim.y-1}),
+        add_offset(base_region, half_dim-1),
+    }
+    
+    region_index := 0
+    region := regions[region_index]
+    full_region := rectangle_min_dimension([2]i32{}, dimension)
     
     context_ := imgui.igCreateContext(nil)
     imgui.igSetCurrentContext(context_)
@@ -180,7 +193,6 @@ main :: proc () {
                 for time.duration_seconds(time.since(update_start)) < TargetFrameTime {
                     switch collapse.state {
                       case .Uninitialized:
-                        collapse.state = .PickNextCell
                         
                       case .PickNextCell:
                         cell, pick := pick_next_cell(&collapse, &entropy)
@@ -197,8 +209,9 @@ main :: proc () {
                             to_check_index += 1
                             
                             p := check.raw_p
+                            wrapped := rectangle_modulus(region, check.raw_p)
                             for w, dim in collapse.wrap do if w {
-                                p[dim] = (p[dim] + dimension[dim]) % dimension[dim]
+                                p[dim] = wrapped[dim]
                             }
                             
                             if contains(region, p) {
@@ -229,7 +242,7 @@ main :: proc () {
                                 }
                             }
                         } else {
-                            collapse.state = find_lowest_entropy(&collapse)
+                            collapse.state = find_lowest_entropy(&collapse, region)
                         }
                         
                       case .Contradiction:
@@ -239,6 +252,12 @@ main :: proc () {
                         }
                         
                       case .Done:
+                        region_index += 1
+                        if region_index < len(regions) {
+                            region = regions[region_index]
+                            collapse.state = .PickNextCell
+                            entangle_grid(&collapse, region)
+                        }
                     }
                 }
                 
@@ -257,8 +276,11 @@ main :: proc () {
                         t_restart = 0
                         _total_start = time.now()
                         should_restart = false
-                        entangle_grid(&collapse)
-                        collapse.state = .Uninitialized
+                        
+                        region_index = 0
+                        region = regions[region_index]
+                        collapse.state = .PickNextCell
+                        entangle_grid(&collapse, full_region)
                     }
                 }
             }
@@ -374,7 +396,7 @@ draw_wave :: proc (using collapse: ^Collapse, wave: WaveFunction, p: v2, size: v
     }
 }
 
-get_screen_p :: proc (dimension: [2]int, size: f32, p: [2]int) -> (result: v2) {
+get_screen_p :: proc (dimension: [2]i32, size: f32, p: [2]i32) -> (result: v2) {
     result = vec_cast(f32, p) * size
     
     result += (vec_cast(f32, Screen_Size) - (size * vec_cast(f32, dimension))) * 0.5

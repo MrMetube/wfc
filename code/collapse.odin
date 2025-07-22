@@ -23,7 +23,7 @@ Collapse :: struct {
     sockets: map[u32]u32,
     next_socket_index: u32,
     
-    dimension: [2]int,
+    dimension: [2]i32,
     
     to_check_index: int,
     to_check: [dynamic] Check,
@@ -39,7 +39,7 @@ Cell :: struct {
     checked: b32,
     changed: b32,
     
-    p: [2]int,
+    p: [2]i32,
     value: union {
         TileIndex,
         WaveFunction,
@@ -59,7 +59,7 @@ WaveFunction :: struct {
 SuperPosition :: []b32
 
 Check :: struct {
-    raw_p: [2]int,
+    raw_p: [2]i32,
     
     depth: u32,
 }
@@ -85,14 +85,14 @@ Opposite_Direction := [Direction] Direction {
     .West  = .East,
     .South = .North,
 }
-Delta := [Direction] [2]int {
+Delta := [Direction] [2]i32 {
     .East  = {+1,  0},
     .North = { 0, -1},
     .West  = {-1,  0},
     .South = { 0, +1},
 }
 
-init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, dimension: [2]int, wrap_x, wrap_y: b32, max_depth: u32, center: i32 = 1) {
+init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, dimension: [2]i32, wrap_x, wrap_y: b32, max_depth: u32, center: i32 = 1) {
     collapse.wrap.x = wrap_x
     collapse.wrap.y = wrap_y
     
@@ -230,26 +230,29 @@ is_present :: proc (using collapse: ^Collapse, tile: Tile) -> (result: ^Tile, ok
     return result, result != nil
 }
 
-entangle_grid :: proc(using collapse: ^Collapse) {
+entangle_grid :: proc(using collapse: ^Collapse, region: Rectangle2i) {
     clear(&to_check)
     clear(&lowest_entropies)
     
-    for &cell in grid {
-        if wave, ok := cell.value.(WaveFunction); ok {
-            delete(wave.states)
-            wave.states_count = 0
-        } else {
-            cell.value = WaveFunction{}
+    for y in region.min.y..<region.max.y {
+        for x in region.min.x..<region.max.x {
+            cell := &grid[y * dimension.x + x]
+            if wave, ok := cell.value.(WaveFunction); ok {
+                delete(wave.states)
+                wave.states_count = 0
+            } else {
+                cell.value = WaveFunction{}
+            }
+            wave := &cell.value.(WaveFunction)
+            
+            wave.states = make(SuperPosition, len(tiles))
+            wave.states_count = auto_cast len(wave.states)
+            for &it in wave.states do it = true
         }
-        wave := &cell.value.(WaveFunction)
-        
-        wave.states = make(SuperPosition, len(tiles))
-        wave.states_count = auto_cast len(wave.states)
-        for &it in wave.states do it = true
     }
     
-    for y in 0..<dimension.y {
-        for x in 0..<dimension.x {
+    for y in region.min.y..<region.max.y {
+        for x in region.min.x..<region.max.x {
             cell := &grid[y * dimension.x + x]
             cell.p = {x, y}
             wave := &cell.value.(WaveFunction)
@@ -284,7 +287,7 @@ pick_next_cell :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (l
     return lowest_cell, pick
 }
 
-find_lowest_entropy :: proc (using collapse: ^Collapse) -> (next_state: CollapseState) {
+find_lowest_entropy :: proc (using collapse: ^Collapse, region: Rectangle2i) -> (next_state: CollapseState) {
     collect_start := time.now()
     defer _collect += time.since(collect_start)
     
@@ -296,24 +299,27 @@ find_lowest_entropy :: proc (using collapse: ^Collapse) -> (next_state: Collapse
     lowest_entropy := PositiveInfinity
     
     collapsed_all_wavefunctions := true
-    loop: for &cell in grid {
-        cell.checked = false
-        cell.changed = false
-        
-        if wave, ok := &cell.value.(WaveFunction); ok {
-            collapsed_all_wavefunctions = false
-            if wave.states_count == 0 {
-                no_contradictions = false
-                break loop
-            }
+    loop: for y in region.min.y..<region.max.y {
+        for x in region.min.x..<region.max.x {
+            cell := &grid[x + y * dimension.y]
+            cell.checked = false
+            cell.changed = false
             
-            if lowest_entropy > wave.entropy {
-                lowest_entropy = wave.entropy
-                clear(&lowest_entropies)
-            }
-            
-            if lowest_entropy == wave.entropy {
-                append(&lowest_entropies, &cell)
+            if wave, ok := &cell.value.(WaveFunction); ok {
+                collapsed_all_wavefunctions = false
+                if wave.states_count == 0 {
+                    no_contradictions = false
+                    break loop
+                }
+                
+                if lowest_entropy > wave.entropy {
+                    lowest_entropy = wave.entropy
+                    clear(&lowest_entropies)
+                }
+                
+                if lowest_entropy == wave.entropy {
+                    append(&lowest_entropies, cell)
+                }
             }
         }
     }
@@ -392,7 +398,7 @@ matches_tile :: proc(using collapse: ^Collapse, a_index, b_index: TileIndex, dir
     return result
 }
 
-get_neighbour :: proc (using collapse: ^Collapse, p: [2]int, direction: Direction) -> (cell: ^Cell, next: [2]int) {
+get_neighbour :: proc (using collapse: ^Collapse, p: [2]i32, direction: Direction) -> (cell: ^Cell, next: [2]i32) {
     ok := true
     next = p + Delta[direction]
     
