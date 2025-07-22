@@ -21,7 +21,7 @@ code_points := [?]rune {
 
 buffer: [256]u8
 
-_total, _update, _render, _pick_next, _add_neighbours, _matches, _collect: time.Duration
+_total, _update, _render, _pick_next, _matches, _collect: time.Duration
 _total_start: time.Time
 
 
@@ -97,6 +97,7 @@ main :: proc () {
     should_restart: b32
     t_restart: f32
     paused_update: b32
+    region := rectangle_min_dimension([2]int{}, dimension)
     
     context_ := imgui.igCreateContext(nil)
     imgui.igSetCurrentContext(context_)
@@ -111,12 +112,12 @@ main :: proc () {
         imgui.new_frame()
         
         imgui.text("Choose Input Image")
-        i: i32
+        dim: i32
         imgui.columns(6)
         for _, &image in images {
-            defer i += 1
+            defer dim += 1
             
-            imgui.push_id(i)
+            imgui.push_id(dim)
             if imgui.image_button(auto_cast &image.texture.id, 30) {
                 clear(&collapse.tiles)
                 extract_tiles(&collapse, image.image)
@@ -129,8 +130,8 @@ main :: proc () {
             imgui.next_column()
         }
         imgui.columns(1)
-        imgui.checkbox("Loop on X Axis", cast(^bool) &collapse.wrap_x)
-        imgui.checkbox("Loop on Y Axis", cast(^bool) &collapse.wrap_y)
+        imgui.checkbox("Loop on X Axis", cast(^bool) &collapse.wrap.x)
+        imgui.checkbox("Loop on Y Axis", cast(^bool) &collapse.wrap.y)
         imgui.slider_int("Recursion Depth", cast(^i32) &collapse.max_depth, 1, 1000, flags = .Logarithmic)
         
         if len(collapse.tiles) != 0 {
@@ -174,7 +175,6 @@ main :: proc () {
                 update_start := time.now()
                 _pick_next = 0
                 _collect = 0
-                _add_neighbours = 0
                 _matches = 0
                 
                 for time.duration_seconds(time.since(update_start)) < TargetFrameTime {
@@ -186,33 +186,45 @@ main :: proc () {
                         cell, pick := pick_next_cell(&collapse, &entropy)
                         if cell != nil {
                             collapse_cell(&collapse, cell, pick)
-                            add_neighbours(&collapse, cell, collapse.max_depth)
                         }
                         collapse.state = .Propagation
+                        // @todo(viktor): the first time this falls through to find_lowest_entropy, make this explicit
                         
                       case .Propagation:
                         // @todo(viktor): If we knew that a cell didnt change in this propagation we should expect that it wont change the current cell. Store if it changed and only compare current with changed
-                        if to_check_index < to_check.count {
-                            next := to_check.data[to_check_index]
+                        if to_check_index < len(to_check) {
+                            check := to_check[to_check_index]
                             to_check_index += 1
-                            if wave, ok := &next.cell.value.(WaveFunction); ok {
-                                changed: b32
-                                // @speed O(n*m*d)
-                                loop: for &state, index in wave.states do if state {
-                                    for direction in Direction {
-                                        if !matches(&collapse, index, next.cell, direction) {
-                                            changed = true
-                                            state = false
-                                            wave.states_count -= 1
-                                            continue loop
+                            
+                            p := check.raw_p
+                            for w, dim in collapse.wrap do if w {
+                                p[dim] = (p[dim] + dimension[dim]) % dimension[dim]
+                            }
+                            
+                            if contains(region, p) {
+                                next_cell := &grid[p.x + p.y * dimension.x]
+                                assert(next_cell.p == p)
+                                if !next_cell.checked {
+                                    next_cell.checked = true
+                                    if wave, ok := &next_cell.value.(WaveFunction); ok {
+                                        // @speed O(n*m*d)
+                                        loop: for &state, index in wave.states do if state {
+                                            for direction in Direction {
+                                                if !matches(&collapse, index, next_cell, direction) {
+                                                    next_cell.changed = true
+                                                    state = false
+                                                    wave.states_count -= 1
+                                                    continue loop
+                                                }
+                                            }
                                         }
-                                    }
-                                }
-                                
-                                if changed {
-                                    recompute_wavefunction(&collapse, wave, next.cell.p)
-                                    if next.depth > 0 {
-                                        add_neighbours(&collapse, next.cell, next.depth)
+                                        
+                                        if next_cell.changed {
+                                            recompute_wavefunction(&collapse, wave)
+                                            if check.depth > 0 {
+                                                add_neighbours(&collapse, next_cell, check.depth)
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -264,7 +276,6 @@ main :: proc () {
         for y in 0..<Dim.y {
             for x in 0..<Dim.x {
                 cell := &grid[y*Dim.x + x]
-                
                 p := get_screen_p(collapse.dimension, size, {x, y})
                 
                 switch value in cell.value {
@@ -284,9 +295,14 @@ main :: proc () {
             }
         }
         
-        for entry in slice(to_check) {
-            p := get_screen_p(collapse.dimension, size, entry.cell.p)
-            rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(rl.YELLOW, 0.8))
+        for check in to_check {
+            // @todo(viktor): correct raw p
+            cell_p := check.raw_p
+            for w, dim in collapse.wrap do if w {
+                cell_p[dim] = (cell_p[dim] + dimension[dim]) % dimension[dim]
+            }
+            p := get_screen_p(collapse.dimension, size, cell_p)
+            rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(rl.YELLOW, 0.4))
         }
         
         for cell in slice(lowest_entropies) {
@@ -307,10 +323,9 @@ main :: proc () {
             is_late := cast(f32) time.duration_seconds(_update) > TargetFrameTime
             imgui.text_colored(is_late ? Orange : White, format_string(buffer[:], `Update %`, _update))
             if !should_restart {
-                imgui.text(format_string(buffer[:], "  pick next %",        _pick_next))
-                imgui.text(format_string(buffer[:], "  get neighbours %",  _add_neighbours))
-                imgui.text(format_string(buffer[:], "  matches %",         _matches))
-                imgui.text(format_string(buffer[:], "  collect %",         _collect))
+                imgui.text(format_string(buffer[:], "  pick next %", _pick_next))
+                imgui.text(format_string(buffer[:], "  matches %",   _matches))
+                imgui.text(format_string(buffer[:], "  collect %",   _collect))
             }
             imgui.text(format_string(buffer[:], "Render %", _render))
             imgui.text(format_string(buffer[:], "Total %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)))

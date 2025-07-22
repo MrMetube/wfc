@@ -465,7 +465,7 @@ add_offset :: proc(rect: $R/Rectangle($T), offset: T) -> (result: R) {
 contains :: proc(rect: Rectangle($T), point: T) -> (result: b32) {
     result = true
     #unroll for i in 0..<len(T) {
-        result &&= rect.min[i] < point[i] && point[i] < rect.max[i] 
+        result &&= rect.min[i] <= point[i] && point[i] < rect.max[i] 
     }
     return result
 }

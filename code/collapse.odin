@@ -18,25 +18,27 @@ CollapseState :: enum {
 
 Collapse :: struct {
     state: CollapseState,
-    grid:    []Cell, 
-    tiles:   [dynamic]Tile,
+    grid:    [] Cell, 
+    tiles:   [dynamic] Tile,
     sockets: map[u32]u32,
     next_socket_index: u32,
     
     dimension: [2]int,
     
-    to_check_index: i64,
-    to_check: Array(Check),
+    to_check_index: int,
+    to_check: [dynamic] Check,
     
     lowest_entropies: Array(^Cell),
-    wrap_x: b32,
-    wrap_y: b32,
+    wrap: [2]b32,
     max_depth:  u32,
     
     center: i32,
 }
 
 Cell :: struct {
+    checked: b32,
+    changed: b32,
+    
     p: [2]int,
     value: union {
         TileIndex,
@@ -55,6 +57,12 @@ WaveFunction :: struct {
 // s[0] means is tiles[0] possible
 // we assume boolean possibility for now, but could change to real probability which allows for real valued effects and renormilization
 SuperPosition :: []b32
+
+Check :: struct {
+    raw_p: [2]int,
+    
+    depth: u32,
+}
 
 Tile :: struct {
     center: []rl.Color, // Center*Center
@@ -84,23 +92,18 @@ Delta := [Direction] [2]int {
     .South = { 0, +1},
 }
 
-Check :: struct {
-    cell: ^Cell,
-    depth: u32,
-}
-
 init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, dimension: [2]int, wrap_x, wrap_y: b32, max_depth: u32, center: i32 = 1) {
-    collapse.wrap_x = wrap_x
-    collapse.wrap_y = wrap_y
+    collapse.wrap.x = wrap_x
+    collapse.wrap.y = wrap_y
     
     collapse.dimension = dimension
     collapse.center = center // size of the center of a tile
     collapse.max_depth = max_depth
     
     cell_count := collapse.dimension.x * collapse.dimension.y
-    collapse.grid             = make([]Cell, cell_count)
-    collapse.tiles            = make([dynamic]Tile)
-    collapse.to_check         = make_array(arena, Check, cell_count)
+    collapse.grid             = make([] Cell, cell_count)
+    collapse.tiles            = make([dynamic] Tile)
+    collapse.to_check         = make([dynamic] Check)
     collapse.lowest_entropies = make_array(arena, ^Cell, cell_count)
 }
 
@@ -250,7 +253,7 @@ entangle_grid :: proc(using collapse: ^Collapse) {
             cell := &grid[y * dimension.x + x]
             cell.p = {x, y}
             wave := &cell.value.(WaveFunction)
-            recompute_wavefunction(collapse, wave, cell.p)
+            recompute_wavefunction(collapse, wave)
         }
     }
 }
@@ -294,6 +297,9 @@ find_lowest_entropy :: proc (using collapse: ^Collapse) -> (next_state: Collapse
     
     collapsed_all_wavefunctions := true
     loop: for &cell in grid {
+        cell.checked = false
+        cell.changed = false
+        
         if wave, ok := &cell.value.(WaveFunction); ok {
             collapsed_all_wavefunctions = false
             if wave.states_count == 0 {
@@ -328,32 +334,25 @@ collapse_cell :: proc (using collapse: ^Collapse, cell: ^Cell, pick: TileIndex) 
     wave := cell.value.(WaveFunction)
     cell.value = pick
     delete(wave.states)
+    
+    add_neighbours(collapse, cell, max_depth)
 }
 
 add_neighbours :: proc (using collapse: ^Collapse, cell: ^Cell, depth: u32) {
-    start := time.now()
-    defer _add_neighbours += time.since(start)
-    
-    for direction in Direction {
-        next_cell, next := get_neighbour(collapse, cell.p, direction)
+    for delta in Delta {
+        p := cell.p + delta
         
-        add_neighbour(collapse, next_cell, next, depth)
-    }
-}
-
-add_neighbour :: proc(using collapse: ^Collapse, next_cell: ^Cell, next: [2]int, depth: u32)  {
-    ok := next_cell != nil
-    if !ok do return
-    
-    for entry in slice(to_check) {
-        if entry.cell.p == next {
-            ok = false
-            break
+        ok := true
+        for entry in to_check {
+            if entry.raw_p == p {
+                ok = false
+                break
+            }
         }
+        if !ok do continue
+        
+        append_elem(&to_check, Check { p, depth-1 })
     }
-    if !ok do return
-    
-    append(&to_check, Check {next_cell, depth-1})
 }
 
 matches :: proc (using collapse: ^Collapse, a: TileIndex, cell: ^Cell, direction: Direction) -> (result: b32) {
@@ -396,14 +395,16 @@ matches_tile :: proc(using collapse: ^Collapse, a_index, b_index: TileIndex, dir
 get_neighbour :: proc (using collapse: ^Collapse, p: [2]int, direction: Direction) -> (cell: ^Cell, next: [2]int) {
     ok := true
     next = p + Delta[direction]
-    if wrap_x {
+    
+    if wrap.x {
         next.x = (next.x + dimension.x) % dimension.x
     } else {
         if next.x < 0 || next.x >= dimension.x {
             ok = false
         }
     }
-    if wrap_y {
+    
+    if wrap.y {
         next.y = (next.y + dimension.y) % dimension.y
     } else {
         if next.y < 0 || next.y >= dimension.y {
@@ -417,7 +418,7 @@ get_neighbour :: proc (using collapse: ^Collapse, p: [2]int, direction: Directio
     return cell, next
 }
 
-recompute_wavefunction :: proc (using collapse: ^Collapse, wave: ^WaveFunction, p: [2]int) {
+recompute_wavefunction :: proc (using collapse: ^Collapse, wave: ^WaveFunction) {
     // Update entropy
     when true {
         total_frequency: f32
