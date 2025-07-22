@@ -23,6 +23,11 @@ buffer: [256]u8
 
 _total, _update, _render, _pick_next, _add_neighbours, _matches, _collect: time.Duration
 _total_start: time.Time
+
+
+TargetFps       :: 144
+TargetFrameTime :: 1./TargetFps
+
 main :: proc () {
     Dim :: [2]int {200, 100}
     size: f32
@@ -36,7 +41,7 @@ main :: proc () {
 
     rl.SetTraceLogLevel(.WARNING)
     rl.InitWindow(Screen_Size.x, Screen_Size.y, "Wave Function Collapse")
-    rl.SetTargetFPS(60)
+    rl.SetTargetFPS(TargetFps)
     
     camera := rl.Camera2D { zoom = 1 }
     
@@ -46,7 +51,7 @@ main :: proc () {
     init_arena(&arena, make([]u8, 1*Gigabyte))
     
     collapse: Collapse
-    init_collapse(&collapse, &arena, 256, Dim, false, false, 50)
+    init_collapse(&collapse, &arena, Dim, false, false, 50)
     
     
     File :: struct {
@@ -99,6 +104,8 @@ main :: proc () {
     rlimgui.ImGui_ImplRaylib_Init()
 
     for !rl.WindowShouldClose() {
+        free_all(context.temp_allocator)
+        
         rlimgui.ImGui_ImplRaylib_NewFrame()
         rlimgui.ImGui_ImplRaylib_ProcessEvent()
         imgui.new_frame()
@@ -111,9 +118,9 @@ main :: proc () {
             
             imgui.push_id(i)
             if imgui.image_button(auto_cast &image.texture.id, 30) {
-                // @leak
-                collapse.tiles = make_array(&arena, Tile, 1<<16)
+                clear(&collapse.tiles)
                 extract_tiles(&collapse, image.image)
+                collapse.state = .Contradiction
                 
                 should_restart = true
                 t_restart = 0.3
@@ -126,7 +133,7 @@ main :: proc () {
         imgui.checkbox("Loop on Y Axis", cast(^bool) &collapse.wrap_y)
         imgui.slider_int("Recursion Depth", cast(^i32) &collapse.max_depth, 1, 1000, flags = .Logarithmic)
         
-        if collapse.tiles.count != 0 {
+        if len(collapse.tiles) != 0 {
             imgui.columns(2)
             if imgui.button(paused_update ? "Unpause" : "Pause") {
                 paused_update = !paused_update
@@ -147,11 +154,6 @@ main :: proc () {
         }
         
         if !paused_update {
-            _pick_next = 0
-            _collect = 0
-            _add_neighbours = 0
-            _matches = 0
-            
             /* @todo(viktor): How can we separate the core of the algorithm from the data is works on.
                 The should be able to feed in the data however they want 
                 The current higher level functionality should be seen as wrapper around the core api
@@ -165,10 +167,17 @@ main :: proc () {
                 
                 This should also allow for easier special cases like stiched wfc, where we only give a region at a time(with some overlap)
             */
-            
+        
+            // @todo(viktor): let user collapse manually
+                    
             if !should_restart {
                 update_start := time.now()
-                for time.duration_seconds(time.since(update_start)) < 0.016 {
+                _pick_next = 0
+                _collect = 0
+                _add_neighbours = 0
+                _matches = 0
+                
+                for time.duration_seconds(time.since(update_start)) < TargetFrameTime {
                     switch collapse.state {
                       case .Uninitialized:
                         collapse.state = .PickNextCell
@@ -181,28 +190,51 @@ main :: proc () {
                         if cell != nil {
                             collapse_cell_and_add_neighbours(&collapse, cell, pick)
                         }
-                        collapse.state = .UpdateCell
+                        collapse.state = .Propagation
                         
-                      case .UpdateCell:
+                      case .Propagation:
                         if to_check_index < to_check.count {
                             next := to_check.data[to_check_index]
                             to_check_index += 1
-                            check_all_neighbours_once(&collapse, next)
+                            if wave, ok := &next.cell.value.(WaveFunction); ok {
+                                changed: b32
+                                // @speed O(n*m*d)
+                                loop: for &state, index in wave.states do if state {
+                                    for direction in Direction {
+                                        if !matches(&collapse, tiles[index], next. cell.p, direction) {
+                                            changed = true
+                                            state = false
+                                            wave.states_count -= 1
+                                            continue loop
+                                        }
+                                    }
+                                }
+                                
+                                if changed {
+                                    recompute_wavefunction(&collapse, wave, next.cell.p)
+                                    if next.depth > 0 {
+                                        add_neighbours(&collapse, next.cell, next.depth)
+                                    }
+                                }
+                            }
                         } else {
                             collapse.state = find_lowest_entropy(&collapse)
                         }
+                        
                       case .Contradiction:
                         if !should_restart {
                             should_restart = true
                             t_restart = 3
                         }
+                        
                       case .Done:
                         _total = time.since(_total_start)
                     }
                 }
+                
                 _update = time.since(update_start)
             } else {
-                if collapse.tiles.count == 0 {
+                if len(collapse.tiles) == 0 {
                     should_restart = false
                     t_restart = 0
                 } else {
@@ -217,15 +249,14 @@ main :: proc () {
                 }
             }
         }
-        
-        // @todo(viktor): let user collapse manually
-        
+
         // 
         // Render
         // 
-        render_start := time.now()
         rl.BeginDrawing()
         rl.ClearBackground({0x54, 0x57, 0x66, 0xFF})
+        
+        render_start := time.now()
         rl.BeginMode2D(camera)
         
         for y in 0..<Dim.y {
@@ -235,7 +266,7 @@ main :: proc () {
                 p := get_screen_p(collapse.dimension, size, {x, y})
                 
                 switch value in cell.value {
-                  case Tile:
+                    case Tile:
                     for cy in 0..<center {
                         for cx in 0..<center {
                             fcenter := cast(f32) center
@@ -244,23 +275,14 @@ main :: proc () {
                         }
                     }
                     
-                  case WaveFunction:
-                    invalid:= true
-                    loop: for state in value.states do if state {
-                        invalid = false
-                        break loop
-                    }
-                    if invalid {
-                        rl.DrawRectangleRec({p.x, p.y, size, size}, rl.RED)
-                    } else {
-                        draw_wave(&collapse, value, p, size)
-                    }
+                    case WaveFunction:
+                    draw_wave(&collapse, value, p, size)
                 }
             }
         }
         
         for entry in slice(to_check) {
-            p := get_screen_p(collapse.dimension, size, entry.index)
+            p := get_screen_p(collapse.dimension, size, entry.cell.p)
             rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(rl.YELLOW, 0.8))
         }
         
@@ -274,11 +296,12 @@ main :: proc () {
         _render = time.since(render_start)
         
         
+        
         imgui.begin("Stats")
             if paused_update {
                 imgui.text_colored(Blue, "### Paused ###")
             }
-            is_late := cast(f32) time.duration_seconds(_update) > rl.GetFrameTime()
+            is_late := cast(f32) time.duration_seconds(_update) > TargetFrameTime
             imgui.text_colored(is_late ? Orange : White, format_string(buffer[:], `Update %`, _update))
             if !should_restart {
                 imgui.text(format_string(buffer[:], "  pick next %",        _pick_next))
@@ -290,10 +313,10 @@ main :: proc () {
             imgui.text(format_string(buffer[:], "Total %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)))
         imgui.end()
         
-        if collapse.tiles.count != 0 {
+        if len(collapse.tiles) != 0 {
             imgui.begin("Tiles")
-                imgui.columns(ceil(i32, square_root(cast(f32)collapse.tiles.count)))
-                for &tile in slice(collapse.tiles) {
+                imgui.columns(ceil(i32, square_root(cast(f32) len(collapse.tiles))))
+                for &tile in collapse.tiles {
                     imgui.image_button(auto_cast &tile.texture.id, 25)
                     imgui.next_column()
                 }
@@ -308,21 +331,29 @@ main :: proc () {
 }
 
 draw_wave :: proc (using collapse: ^Collapse, wave: WaveFunction, p: v2, size: v2) {
-    count: f32
-    sum:   v4
-    for state, index in wave.states {
-        if !state do continue
-        tile := tiles.data[index]
-        if tile.center != nil {
-            count += cast(f32) tile.frequency
-            assert(len(tile.center) == 1)
-            sum += cast(f32) tile.frequency * vec_cast(f32, cast([4]u8) tile.center[0])
+    when true {
+        total := cast(f32) len(tiles)
+        count := cast(f32) wave.states_count
+        ratio := (1-safe_ratio_0(count, total))
+        color := cast(rl.Color) vec_cast(u8, v4{ratio, ratio, ratio, 1-ratio} * 255)
+        rl.DrawRectangleRec({p.x, p.y, size.x, size.y}, color)
+    } else {
+        count: f32
+        sum:   v4
+        for state, index in wave.states {
+            if !state do continue
+            tile := tiles[index]
+            if tile.center != nil {
+                count += cast(f32) tile.frequency
+                assert(len(tile.center) == 1)
+                sum += cast(f32) tile.frequency * vec_cast(f32, cast([4]u8) tile.center[0])
+            }
         }
+        
+        average := safe_ratio_0(sum, count)
+        color := cast(rl.Color) vec_cast(u8, average)
+        rl.DrawRectangleRec({p.x, p.y, size.x, size.y}, color)
     }
-    
-    average := safe_ratio_0(sum, count)
-    color := cast(rl.Color) vec_cast(u8, average)
-    rl.DrawRectangleRec({p.x, p.y, size.x, size.y}, color)
 }
 
 get_screen_p :: proc (dimension: [2]int, size: f32, p: [2]int) -> (result: v2) {

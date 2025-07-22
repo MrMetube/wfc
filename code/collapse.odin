@@ -11,7 +11,7 @@ Kernel :: 3
 CollapseState :: enum {
     Uninitialized,
     PickNextCell,
-    UpdateCell,
+    Propagation,
     Contradiction,
     Done,
 }
@@ -19,7 +19,7 @@ CollapseState :: enum {
 Collapse :: struct {
     state: CollapseState,
     grid:    []Cell, 
-    tiles:   Array(Tile),
+    tiles:   [dynamic]Tile,
     sockets: map[u32]u32,
     next_socket_index: u32,
     
@@ -83,11 +83,11 @@ Delta := [Direction] [2]int {
 }
 
 Check :: struct {
-    index: [2]int,
+    cell: ^Cell,
     depth: u32,
 }
 
-init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, tile_count: u32, dimension: [2]int, wrap_x, wrap_y: b32, max_depth: u32, center: i32 = 1) {
+init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, dimension: [2]int, wrap_x, wrap_y: b32, max_depth: u32, center: i32 = 1) {
     collapse.wrap_x = wrap_x
     collapse.wrap_y = wrap_y
     
@@ -97,7 +97,7 @@ init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, tile_count: u32, dime
     
     cell_count := collapse.dimension.x * collapse.dimension.y
     collapse.grid             = make([]Cell, cell_count)
-    collapse.tiles            = make_array(arena, Tile,  tile_count)
+    collapse.tiles            = make([dynamic]Tile)
     collapse.to_check         = make_array(arena, Check, cell_count)
     collapse.lowest_entropies = make_array(arena, ^Cell, cell_count)
 }
@@ -123,10 +123,11 @@ extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
             
             tile_pixels := tile_pixels[:]
             rw := 3 * center
+            len := 2*center * Kernel*center
             {
                 west, east: Socket
-                west.pixels = make([]rl.Color, 2*center * Kernel*center)
-                east.pixels = make([]rl.Color, 2*center * Kernel*center)
+                west.pixels = make([]rl.Color, len, context.temp_allocator)
+                east.pixels = make([]rl.Color, len, context.temp_allocator)
                 
                 sw := 2 * center
                 for y in 0..<3 * center {
@@ -153,8 +154,8 @@ extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
             
             {
                 south, north: Socket
-                south.pixels = make([]rl.Color, 2*center * Kernel*center)
-                north.pixels = make([]rl.Color, 2*center * Kernel*center)
+                south.pixels = make([]rl.Color, len, context.temp_allocator)
+                north.pixels = make([]rl.Color, len, context.temp_allocator)
                 
                 sw := 3 * center
                 for y in 0..<2 * center {
@@ -195,43 +196,33 @@ extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
                 tile.hash = hash.djb2(data[:])
             }
             
-            temp := rl.Image {
-                data    = raw_data(tile_pixels), 
-                width   = center*Kernel, 
-                height  = center*Kernel, 
-                mipmaps = 1, 
-                format = .UNCOMPRESSED_R8G8B8A8,
-            }
-            tile.texture = rl.LoadTextureFromImage(temp)
-            
-            if !add_tile(collapse, tile) {
-                rl.UnloadTexture(tile.texture)
+            if present, ok := is_present(collapse, tile); ok {
+                present.frequency += 1
+            } else {
+                temp := rl.Image {
+                    data    = raw_data(tile_pixels), 
+                    width   = center*Kernel, 
+                    height  = center*Kernel, 
+                    mipmaps = 1, 
+                    format = .UNCOMPRESSED_R8G8B8A8,
+                }
+                tile.texture = rl.LoadTextureFromImage(temp)
+                tile.frequency = 1
+                append_elem(&tiles, tile)
             }
         }
     }
 }
 
-add_tile :: proc (using collapse: ^Collapse, tile: Tile) -> (ok: bool) {
-    tile := tile
-    
-    present: ^Tile
-    loop: for &it in slice(tiles) {
+is_present :: proc (using collapse: ^Collapse, tile: Tile) -> (result: ^Tile, ok: bool) {
+    loop: for &it in tiles {
         if tile.hash == it.hash {
-            present = &it
+            result = &it
             break loop
         }
     }
     
-    if present != nil {
-        present.frequency += 1
-    } else {
-        ok = true
-        tile.frequency = 1
-        
-        append(&tiles, tile)
-    }
-    
-    return ok
+    return result, result != nil
 }
 
 entangle_grid :: proc(using collapse: ^Collapse) {
@@ -247,7 +238,7 @@ entangle_grid :: proc(using collapse: ^Collapse) {
         }
         wave := &cell.value.(WaveFunction)
         
-        wave.states = make(SuperPosition, tiles.count)
+        wave.states = make(SuperPosition, len(tiles))
         wave.states_count = auto_cast len(wave.states)
         for &it in wave.states do it = true
     }
@@ -271,12 +262,12 @@ pick_next_cell :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (l
         
         wave := lowest_cell.value.(WaveFunction)
         total_freq: u32
-        for state, tile_index in wave.states do if state do total_freq += tiles.data[tile_index].frequency
+        for state, tile_index in wave.states do if state do total_freq += tiles[tile_index].frequency
         choice := random_between_u32(entropy, 0, total_freq)
         
         for state, tile_index in wave.states {
             if !state do continue
-            option := tiles.data[tile_index]
+            option := tiles[tile_index]
             if choice <= option.frequency {
                 pick = option
                 break
@@ -343,76 +334,71 @@ add_neighbours :: proc (using collapse: ^Collapse, cell: ^Cell, depth: u32) {
     for direction in Direction {
         next_cell, next := get_neighbour(collapse, cell.p, direction)
         
-        ok := next_cell != nil
-        if ok {
-            for entry in slice(to_check) {
-                if entry.index == next {
-                    ok = false
-                    break
-                }
-            }
-        }
-        
-        if ok {
-            append(&to_check, Check {next, depth-1})
-        }
+        add_neighbour(collapse, next_cell, next, depth)
     }
 }
 
-check_all_neighbours_once :: proc (using collapse: ^Collapse, next: Check) {
-    p := next.index
-    cell := &grid[p.y*dimension.x + p.x]
+add_neighbour :: proc(using collapse: ^Collapse, next_cell: ^Cell, next: [2]int, depth: u32)  {
+    ok := next_cell != nil
+    if !ok do return
+    
+    for entry in slice(to_check) {
+        if entry.cell.p == next {
+            ok = false
+            break
+        }
+    }
+    if !ok do return
+    
+    append(&to_check, Check {next_cell, depth-1})
+}
+
+check_cell_neighbour :: proc (using collapse: ^Collapse, next: Check, neighbour: ^Cell, direction: Direction) -> (changed: b32) {
+    cell := next.cell
+    p := cell.p
     
     if wave, ok := &cell.value.(WaveFunction); ok {
-        changed: b32
-        
         // @speed O(n*m*d)
-        for direction in Direction {
-            for &state, tile_index in wave.states {
-                if !state do continue
-                a := tiles.data[tile_index]
-                
-                matches: b32
-                {
-                    start := time.now()
-                    defer _matches += time.since(start)
-                    
-                    next, _ := get_neighbour(collapse, p, direction)
-                    if next != nil {
-                        switch &value in next.value {
-                            case WaveFunction:
-                            matches = false
-                            for n_state, n_index in value.states {
-                                if !n_state do continue
-                                b := tiles.data[n_index]
-                                if matches_tile(a, b, direction) {
-                                    matches = true
-                                    break
-                                }
-                            }
-                            case Tile:
-                            matches = matches_tile(a, value, direction)
-                        }
-                    } else {
-                        matches = true
-                    }
-                }
-                
-                if !matches {
-                    changed = true
-                    state = false
-                    wave.states_count -= 1
-                }
-            }
-        }
-        
-        if changed {
-            recompute_wavefunction(collapse, wave, p)
-            if next.depth > 0 {
-                add_neighbours(collapse, cell, next.depth)
+        for &state, tile_index in wave.states {
+            if !state do continue
+            
+            if !matches(collapse, tiles[tile_index], p, direction) {
+                changed = true
+                state = false
+                wave.states_count -= 1
             }
         }
     }
+    
+    return changed
+}
+
+matches :: proc (using collapse: ^Collapse, a: Tile, p: [2]int, direction: Direction) -> (result: b32) {
+    start := time.now()
+    defer _matches += time.since(start)
+    
+    next, _ := get_neighbour(collapse, p, direction)
+    if next != nil {
+        switch &value in next.value {
+          case WaveFunction:
+            result = false
+            for n_state, n_index in value.states {
+                if !n_state do continue
+                b := tiles[n_index]
+                if matches_tile(a, b, direction) {
+                    result = true
+                    break
+                }
+            }
+            
+          case Tile:
+            result = matches_tile(a, value, direction)
+        }
+    } else {
+        result = true
+    }
+    
+    return result
 }
 
 matches_tile :: proc(a, b: Tile, direction: Direction) -> (result: b32) {
@@ -453,14 +439,14 @@ recompute_wavefunction :: proc (using collapse: ^Collapse, wave: ^WaveFunction, 
         total_frequency: f32
         for state, tile_index in wave.states {
             if !state do continue
-            total_frequency += cast(f32) tiles.data[tile_index].frequency
+            total_frequency += cast(f32) tiles[tile_index].frequency
         }
         
         wave.entropy = 0
         for state, tile_index in wave.states {
             if !state do continue
             
-            frequency := cast(f32) tiles.data[tile_index].frequency
+            frequency := cast(f32) tiles[tile_index].frequency
             probability := frequency / total_frequency
             // Shannon entropy is the negative sum of P * log2(P)
             wave.entropy -= probability * math.log2(probability)
