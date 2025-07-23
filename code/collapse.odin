@@ -370,8 +370,7 @@ matches :: proc (using collapse: ^Collapse, a: TileIndex, cell: ^Cell, direction
         switch &value in next.value {
           case WaveFunction:
             result = false
-            for b_state, b in value.states {
-                if !b_state do continue
+            for b_state, b in value.states do if b_state {
                 if matches_tile(collapse, a, b, direction) {
                     result = true
                     break

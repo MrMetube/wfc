@@ -99,30 +99,28 @@ main :: proc () {
     paused_update: b32
     
     full_region := rectangle_min_dimension([2]i32{}, dimension)
-    divisor: i32 : 4
+    divisor: i32 : 3
     regions: [divisor*divisor]Rectangle2i
-    {
-        for y in 0..<divisor {
-            for x in 0..<divisor {
-                r := &regions[x + y * divisor]
-                r ^= rectangle_min_max((dimension*{x,y})/divisor, (dimension*{x+1,y+1})/divisor)
-                r ^= add_radius(r^, 1)
-                r ^= get_intersection(r^, full_region)
-            }
+    for y in 0..<divisor {
+        for x in 0..<divisor {
+            r := rectangle_min_max((dimension*{x,y})/divisor, (dimension*{x+1,y+1})/divisor)
+            r = add_radius(r, 1)
+            r = get_intersection(r, full_region)
+            regions[x + y * divisor] = r
         }
     }
     
     region_index := 0
     region := regions[region_index]
     
-    context_ := imgui.igCreateContext(nil)
-    imgui.igSetCurrentContext(context_)
+    imgui.igSetCurrentContext(imgui.igCreateContext(nil))
     
     rlimgui.ImGui_ImplRaylib_Init()
     
     first_time := true
     max_lives := 5
     lives := max_lives
+    
     for !rl.WindowShouldClose() {
         free_all(context.temp_allocator)
         
@@ -177,12 +175,6 @@ main :: proc () {
                 This would allow for non grid based data, as well as user space handling of wrapping and the like.
                 
                 For the input data we already abstract over the sockets as pixels with socket indices.
-                
-                The main idea is that the user drives the algorith and the wfc only provides services instead of being a blackbox
-                That way it should be possible to for example prevent having huge frame spikes when the recursion is too deep and we cant pause it 
-                and continue the work on the next frame.
-                
-                This should also allow for easier special cases like stiched wfc, where we only give a region at a time(with some overlap)
             */
         
             // @todo(viktor): let user collapse manually
@@ -191,7 +183,8 @@ main :: proc () {
                 update_start := time.now()
                 _matches = 0
                 
-                for time.duration_seconds(time.since(update_start)) < TargetFrameTime {
+                update_done := false
+                for !update_done {
                     switch collapse.state {
                       case .Uninitialized:
                         
@@ -220,6 +213,7 @@ main :: proc () {
                                 assert(next_cell.p == p)
                                 if !next_cell.checked {
                                     next_cell.checked = true
+                                    
                                     if wave, ok := &next_cell.value.(WaveFunction); ok {
                                         // @speed O(n*m*d)
                                         loop: for &state, index in wave.states do if state {
@@ -250,7 +244,6 @@ main :: proc () {
                         if !should_restart {
                             should_restart = true
                             t_restart = .1
-                            
                         }
                         
                       case .Done:
@@ -268,7 +261,13 @@ main :: proc () {
                                 append_elem(&to_check, Check {{x, 0}, 1})
                                 append_elem(&to_check, Check {{x, region.max.y-1}, 1})
                             }
+                        } else {
+                            update_done = true
                         }
+                    }
+                    
+                    if time.duration_seconds(time.since(update_start)) > TargetFrameTime * 0.9 {
+                        update_done = true
                     }
                 }
                 
