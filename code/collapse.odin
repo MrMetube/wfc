@@ -91,7 +91,7 @@ Delta := [Direction] [2]i32 {
     .South = { 0, +1},
 }
 
-init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, dimension: [2]i32, max_depth: u32, center: i32 = 1) {
+init_collapse :: proc (collapse: ^Collapse, dimension: [2]i32, max_depth: u32, center: i32 = 1) {
     collapse.dimension = dimension
     collapse.center = center // size of the center of a tile
     collapse.max_depth = max_depth
@@ -103,8 +103,7 @@ init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, dimension: [2]i32, ma
 }
 
 extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
-    sockets := make(map[u32]u32)
-    defer delete(sockets)
+    sockets := make(map[u32]u32, context.temp_allocator)
     next_socket_index: u32
     
     Socket :: struct {
@@ -115,9 +114,12 @@ extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
     pixels := (cast([^]rl.Color) img.data)[:img.width * img.height]
     
     tile_pixels := make([dynamic]rl.Color, Kernel*center * Kernel*center, context.temp_allocator)
+    data := make([dynamic]u8, context.temp_allocator)
+    
     for min_y in 0..<img.height/center {
         for min_x in 0..<img.width/center {
             clear(&tile_pixels)
+            clear(&data)
             
             tile: Tile
             for ky in i32(0)..<Kernel*center {
@@ -198,8 +200,6 @@ extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
                     }
                 }
                 
-                data := make([dynamic]u8)
-                defer delete(data)
                 for &it in tile.center        do append_elems(&data, ..to_bytes(&it))
                 for &it in tile.sockets_index do append_elems(&data, ..to_bytes(&it))
                 tile.hash = hash.djb2(data[:])
@@ -221,8 +221,6 @@ extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
             }
         }
     }
-    
-    clear(&sockets)
 }
 
 is_present :: proc (using collapse: ^Collapse, tile: Tile) -> (result: ^Tile, ok: bool) {
@@ -362,6 +360,15 @@ add_neighbour :: proc (using collapse: ^Collapse, p: [2]i32, depth: u32) {
     if not_in_list {
         append_elem(&to_check, Check { p, depth-1 })
     }
+}
+
+get_next_check :: proc (collapse: ^Collapse) -> (check: Check, ok: b32) {
+    if collapse.to_check_index < len(collapse.to_check) {
+        ok = true
+        check = collapse.to_check[collapse.to_check_index]
+        collapse.to_check_index += 1
+    }
+    return check, ok
 }
 
 matches :: proc (using collapse: ^Collapse, a: TileIndex, b: ^Cell, direction: Direction) -> (result: b32) {

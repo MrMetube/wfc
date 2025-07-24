@@ -62,11 +62,11 @@ main :: proc () {
     the_font = rl.LoadFontEx(`.\Caladea-Regular.ttf`, rl_font_scale, raw_data(code_points[:]), len(code_points))
     
     arena: Arena
-    init_arena(&arena, make([]u8, 1*Gigabyte))
+    init_arena(&arena, make([]u8, 1*Megabyte))
     
     collapse: Collapse
     wrap = { false, false }
-    init_collapse(&collapse, &arena, Dim, 50)
+    init_collapse(&collapse, Dim, 50)
     
     
     File :: struct {
@@ -304,8 +304,6 @@ main :: proc () {
         rl.EndMode2D()
         _render = time.since(render_start)
         
-        
-        
         imgui.begin("Stats")
             if paused_update {
                 imgui.text_colored(Blue, "### Paused ###")
@@ -356,11 +354,7 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
             collapse.state = .Propagation
             
           case .Propagation:
-            // @todo(viktor): If we knew that a cell didnt change in this propagation we should expect that it wont change the current cell. Store if it changed and only compare current with changed
-            if collapse.to_check_index < len(collapse.to_check) {
-                check := collapse.to_check[collapse.to_check_index]
-                collapse.to_check_index += 1
-                
+            if check, ok := get_next_check(collapse); ok {
                 p := check.raw_p
                 wrapped := rectangle_modulus(full_region, p)
                 for w, dim in wrap do if w {
