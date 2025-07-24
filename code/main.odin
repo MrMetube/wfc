@@ -28,6 +28,20 @@ _total_start: time.Time
 TargetFps       :: 144
 TargetFrameTime :: 1./TargetFps
 
+////////////////////////////////////////////////
+
+first_time := true
+max_lives := 5
+lives := max_lives
+should_restart: b32
+t_restart: f32
+paused_update: b32
+region_index:= 0
+region: Rectangle2i
+full_region: Rectangle2i
+regions: [dynamic]Rectangle2i
+wrap: [2]b32
+
 main :: proc () {
     Dim :: [2]i32 {200, 100}
     size: f32
@@ -51,7 +65,8 @@ main :: proc () {
     init_arena(&arena, make([]u8, 1*Gigabyte))
     
     collapse: Collapse
-    init_collapse(&collapse, &arena, Dim, false, false, 50)
+    wrap = { false, false }
+    init_collapse(&collapse, &arena, Dim, 50)
     
     
     File :: struct {
@@ -62,6 +77,7 @@ main :: proc () {
         type: string,
         read_time: time.Time,
     }
+
     images: map[string]File
     image_dir := "./images"
     file_type := ".png"
@@ -94,32 +110,24 @@ main :: proc () {
     entropy := seed_random_series()
     
     using collapse
-    should_restart: b32
-    t_restart: f32
-    paused_update: b32
     
-    full_region := rectangle_min_dimension([2]i32{}, dimension)
+    full_region = rectangle_min_dimension([2]i32{}, dimension)
     divisor: i32 : 3
-    regions: [divisor*divisor]Rectangle2i
     for y in 0..<divisor {
         for x in 0..<divisor {
             r := rectangle_min_max((dimension*{x,y})/divisor, (dimension*{x+1,y+1})/divisor)
             r = add_radius(r, 1)
             r = get_intersection(r, full_region)
-            regions[x + y * divisor] = r
+            append_elem(&regions, r)
         }
     }
     
-    region_index := 0
-    region := regions[region_index]
+    region_index = 0
+    region = regions[region_index]
     
     imgui.igSetCurrentContext(imgui.igCreateContext(nil))
     
     rlimgui.ImGui_ImplRaylib_Init()
-    
-    first_time := true
-    max_lives := 5
-    lives := max_lives
     
     for !rl.WindowShouldClose() {
         free_all(context.temp_allocator)
@@ -144,8 +152,8 @@ main :: proc () {
             imgui.next_column()
         }
         imgui.columns(1)
-        imgui.checkbox("Loop on X Axis", cast(^bool) &collapse.wrap.x)
-        imgui.checkbox("Loop on Y Axis", cast(^bool) &collapse.wrap.y)
+        imgui.checkbox("Loop on X Axis", cast(^bool) &wrap.x)
+        imgui.checkbox("Loop on Y Axis", cast(^bool) &wrap.y)
         imgui.slider_int("Recursion Depth", cast(^i32) &collapse.max_depth, 1, 1000, flags = .Logarithmic)
         
         if len(collapse.tiles) != 0 {
@@ -180,102 +188,14 @@ main :: proc () {
             // @todo(viktor): let user collapse manually
                     
             if !should_restart {
-                update_start := time.now()
                 _matches = 0
                 
-                update_done := false
-                for !update_done {
-                    switch collapse.state {
-                      case .Uninitialized:
-                        
-                      case .PickNextCell:
-                        cell, pick := pick_next_cell(&collapse, &entropy)
-                        if cell != nil {
-                            collapse_cell(&collapse, cell, pick)
-                        }
-                        collapse.state = .Propagation
-                        // @todo(viktor): the first time this falls through to find_lowest_entropy, make this explicit
-                        
-                      case .Propagation:
-                        // @todo(viktor): If we knew that a cell didnt change in this propagation we should expect that it wont change the current cell. Store if it changed and only compare current with changed
-                        if to_check_index < len(to_check) {
-                            check := to_check[to_check_index]
-                            to_check_index += 1
-                            
-                            p := check.raw_p
-                            wrapped := rectangle_modulus(full_region, p)
-                            for w, dim in collapse.wrap do if w {
-                                p[dim] = wrapped[dim]
-                            }
-                            
-                            if contains(region, p) {
-                                next_cell := &grid[p.x + p.y * dimension.x]
-                                assert(next_cell.p == p)
-                                if !next_cell.checked {
-                                    next_cell.checked = true
-                                    
-                                    if wave, ok := &next_cell.value.(WaveFunction); ok {
-                                        // @speed O(n*m*d)
-                                        loop: for &state, index in wave.states do if state {
-                                            for direction in Direction {
-                                                if !matches(&collapse, index, next_cell, direction) {
-                                                    next_cell.changed = true
-                                                    state = false
-                                                    wave.states_count -= 1
-                                                    continue loop
-                                                }
-                                            }
-                                        }
-                                        
-                                        if next_cell.changed {
-                                            recompute_wavefunction(&collapse, wave)
-                                            if check.depth > 0 {
-                                                add_neighbours(&collapse, next_cell, check.depth)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            collapse.state = find_lowest_entropy(&collapse, region)
-                        }
-                        
-                      case .Contradiction:
-                        if !should_restart {
-                            should_restart = true
-                            t_restart = .1
-                        }
-                        
-                      case .Done:
-                        region_index += 1
-                        lives = max_lives
-                        if region_index < len(regions) {
-                            region = regions[region_index]
-                            entangle_grid(&collapse, region)
-                            
-                            for y in region.min.y..<region.max.y {
-                                append_elem(&to_check, Check {{0, y}, 1})
-                                append_elem(&to_check, Check {{region.max.x-1, y}, 1})
-                            }
-                            for x in region.min.x..<region.max.x {
-                                append_elem(&to_check, Check {{x, 0}, 1})
-                                append_elem(&to_check, Check {{x, region.max.y-1}, 1})
-                            }
-                        } else {
-                            update_done = true
-                        }
-                    }
-                    
-                    if time.duration_seconds(time.since(update_start)) > TargetFrameTime * 0.9 {
-                        update_done = true
-                    }
-                }
+                update(&collapse, &entropy)
                 
                 if collapse.state != .Done {
                     _total = time.since(_total_start)
                 }
                 
-                _update = time.since(update_start)
             } else {
                 if len(collapse.tiles) == 0 {
                     should_restart = false
@@ -338,9 +258,9 @@ main :: proc () {
         render_start := time.now()
         rl.BeginMode2D(camera)
         
-        for y in 0..<Dim.y {
-            for x in 0..<Dim.x {
-                cell := &grid[y*Dim.x + x]
+        for y in 0..<dimension.y {
+            for x in 0..<dimension.x {
+                cell := &grid[x + y * dimension.x]
                 p := get_screen_p(collapse.dimension, size, {x, y})
                 
                 switch value in cell.value {
@@ -363,7 +283,7 @@ main :: proc () {
         for check in to_check {
             // @todo(viktor): correct raw p
             cell_p := check.raw_p
-            for w, dim in collapse.wrap do if w {
+            for w, dim in wrap do if w {
                 cell_p[dim] = (cell_p[dim] + dimension[dim]) % dimension[dim]
             }
             if contains(region, cell_p) {
@@ -414,6 +334,102 @@ main :: proc () {
         imgui.render()
         rlimgui.ImGui_ImplRaylib_Render(imgui.igGetDrawData())
         rl.EndDrawing()
+    }
+}
+
+update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
+    update_start := time.now()
+    defer _update = time.since(update_start)
+                
+    update_done := false
+    for !update_done {
+        switch collapse.state {
+          case .Uninitialized:
+            
+          case .PickNextCell:
+            cell, pick := pick_next_cell(collapse, entropy)
+            if cell != nil {
+                collapse_cell(collapse, cell, pick)
+            }
+            collapse.state = .Propagation
+            // @todo(viktor): the first time this falls through to find_lowest_entropy, make this explicit
+            
+          case .Propagation:
+            // @todo(viktor): If we knew that a cell didnt change in this propagation we should expect that it wont change the current cell. Store if it changed and only compare current with changed
+            if collapse.to_check_index < len(collapse.to_check) {
+                check := collapse.to_check[collapse.to_check_index]
+                collapse.to_check_index += 1
+                
+                p := check.raw_p
+                wrapped := rectangle_modulus(full_region, p)
+                for w, dim in wrap do if w {
+                    p[dim] = wrapped[dim]
+                }
+                
+                if contains(region, p) {
+                    next_cell := &collapse.grid[p.x + p.y * collapse.dimension.x]
+                    assert(next_cell.p == p)
+                    if !next_cell.checked {
+                        next_cell.checked = true
+                        
+                        if wave, ok := &next_cell.value.(WaveFunction); ok {
+                            // @speed O(n*m*d)
+                            loop: for &state, index in wave.states do if state {
+                                for direction in Direction {
+                                    b, _ := get_neighbour(collapse, next_cell.p, direction)
+                                    if b != nil {
+                                        if !matches(collapse, index, b, direction) {
+                                            next_cell.changed = true
+                                            state = false
+                                            wave.states_count -= 1
+                                            continue loop
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            if next_cell.changed {
+                                recompute_wavefunction(collapse, wave)
+                                if check.depth > 0 {
+                                    add_neighbours(collapse, next_cell, check.depth)
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                collapse.state = find_lowest_entropy(collapse, region)
+            }
+            
+          case .Contradiction:
+            if !should_restart {
+                should_restart = true
+                t_restart = .1
+            }
+            
+          case .Done:
+            region_index += 1
+            lives = max_lives
+            if region_index < len(regions) {
+                region = regions[region_index]
+                entangle_grid(collapse, region)
+                
+                for y in region.min.y..<region.max.y {
+                    append_elem(&collapse.to_check, Check {{0, y}, 1})
+                    append_elem(&collapse.to_check, Check {{region.max.x-1, y}, 1})
+                }
+                for x in region.min.x..<region.max.x {
+                    append_elem(&collapse.to_check, Check {{x, 0}, 1})
+                    append_elem(&collapse.to_check, Check {{x, region.max.y-1}, 1})
+                }
+            } else {
+                update_done = true
+            }
+        }
+        
+        if time.duration_seconds(time.since(update_start)) > TargetFrameTime * 0.9 {
+            update_done = true
+        }
     }
 }
 

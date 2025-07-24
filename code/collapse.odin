@@ -9,7 +9,9 @@ import rl "vendor:raylib"
 Kernel :: 3
 
 CollapseState :: enum {
-    Uninitialized,
+    // @todo(viktor): remove this
+    Uninitialized, 
+    
     PickNextCell,
     Propagation,
     Contradiction,
@@ -18,10 +20,9 @@ CollapseState :: enum {
 
 Collapse :: struct {
     state: CollapseState,
+    
     grid:    [] Cell, 
     tiles:   [dynamic] Tile,
-    sockets: map[u32]u32,
-    next_socket_index: u32,
     
     dimension: [2]i32,
     
@@ -29,7 +30,6 @@ Collapse :: struct {
     to_check: [dynamic] Check,
     
     lowest_entropies: Array(^Cell),
-    wrap: [2]b32,
     max_depth:  u32,
     
     center: i32,
@@ -92,10 +92,7 @@ Delta := [Direction] [2]i32 {
     .South = { 0, +1},
 }
 
-init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, dimension: [2]i32, wrap_x, wrap_y: b32, max_depth: u32, center: i32 = 1) {
-    collapse.wrap.x = wrap_x
-    collapse.wrap.y = wrap_y
-    
+init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, dimension: [2]i32, max_depth: u32, center: i32 = 1) {
     collapse.dimension = dimension
     collapse.center = center // size of the center of a tile
     collapse.max_depth = max_depth
@@ -108,6 +105,11 @@ init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, dimension: [2]i32, wr
 }
 
 extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
+    sockets := make(map[u32]u32)
+    defer delete(sockets)
+    next_socket_index: u32
+    
+    
     assert(img.format == .UNCOMPRESSED_R8G8B8A8)
     pixels := (cast([^]rl.Color) img.data)[:img.width * img.height]
     
@@ -217,6 +219,8 @@ extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
             }
         }
     }
+    
+    clear(&sockets)
 }
 
 is_present :: proc (using collapse: ^Collapse, tile: Tile) -> (result: ^Tile, ok: bool) {
@@ -361,27 +365,22 @@ add_neighbours :: proc (using collapse: ^Collapse, cell: ^Cell, depth: u32) {
     }
 }
 
-matches :: proc (using collapse: ^Collapse, a: TileIndex, cell: ^Cell, direction: Direction) -> (result: b32) {
+matches :: proc (using collapse: ^Collapse, a: TileIndex, b: ^Cell, direction: Direction) -> (result: b32) {
     start := time.now()
     defer _matches += time.since(start)
     
-    next, _ := get_neighbour(collapse, cell.p, direction)
-    if next != nil {
-        switch &value in next.value {
-          case WaveFunction:
-            result = false
-            for b_state, b in value.states do if b_state {
-                if matches_tile(collapse, a, b, direction) {
-                    result = true
-                    break
-                }
+    switch &value in b.value {
+      case WaveFunction:
+        result = false
+        for b_state, b in value.states do if b_state {
+            if matches_tile(collapse, a, b, direction) {
+                result = true
+                break
             }
-            
-          case TileIndex:
-            result = matches_tile(collapse, a, value, direction)
         }
-    } else {
-        result = true
+        
+      case TileIndex:
+        result = matches_tile(collapse, a, value, direction)
     }
     
     return result
