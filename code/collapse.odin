@@ -1,12 +1,11 @@
 package main
 
 import "base:builtin"
-import "core:hash"
-import "core:math"
 import "core:time"
 import rl "vendor:raylib"
 
 Kernel :: 3
+center :: 1
 
 CollapseState :: enum {
     // @todo(viktor): remove this
@@ -25,16 +24,14 @@ Collapse :: struct {
     grid:    [] Cell, 
     tiles:   [dynamic] Tile,
     
-    dimension: v2i,
+    dimension:   v2i,
     full_region: Rectangle2i,
     
     to_check_index: int,
-    to_check: [dynamic] Check,
+    to_check:       [dynamic] Check,
+    max_depth:      u32,
     
-    lowest_entropies: [dynamic]^Cell,
-    max_depth:  u32,
-    
-    center: i32,
+    lowest_entropies: [dynamic] ^Cell,
 }
 
 Cell :: struct {
@@ -92,10 +89,9 @@ Delta := [Direction] v2i {
     .South = { 0, +1},
 }
 
-init_collapse :: proc (collapse: ^Collapse, dimension: v2i, max_depth: u32, center: i32 = 1) {
+init_collapse :: proc (collapse: ^Collapse, dimension: v2i, max_depth: u32) {
     collapse.dimension = dimension
     collapse.full_region = rectangle_min_dimension(v2i{}, dimension)
-    collapse.center = center // size of the center of a tile
     collapse.max_depth = max_depth
     
     collapse.grid             = make([] Cell, collapse.dimension.x * collapse.dimension.y)
@@ -104,139 +100,7 @@ init_collapse :: proc (collapse: ^Collapse, dimension: v2i, max_depth: u32, cent
     collapse.lowest_entropies = make([dynamic] ^Cell)
 }
 
-extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
-    sockets := make(map[u32]u32, context.temp_allocator)
-    next_socket_index: u32
-    
-    Socket :: struct {
-        pixels: []rl.Color, // 2*center * Kernel*center
-    }
-    
-    assert(img.format == .UNCOMPRESSED_R8G8B8A8)
-    pixels := (cast([^]rl.Color) img.data)[:img.width * img.height]
-    
-    tile_pixels := make([dynamic]rl.Color, Kernel*center * Kernel*center, context.temp_allocator)
-    data := make([dynamic]u8, context.temp_allocator)
-    
-    for min_y in 0..<img.height/center {
-        for min_x in 0..<img.width/center {
-            clear(&tile_pixels)
-            clear(&data)
-            
-            tile: Tile
-            for ky in i32(0)..<Kernel*center {
-                for kx in i32(0)..<Kernel*center {
-                    x := (min_x*center + kx) % img.width
-                    y := (min_y*center + ky) % img.height
-                    pixel := pixels[y*img.width+x]
-                    append_elems(&tile_pixels, pixel)
-                }
-            }
-            
-            tile_pixels := tile_pixels[:]
-            rw := 3 * center
-            len := 2*center * Kernel*center
-            
-            {
-                west, east: Socket
-                west.pixels = make([]rl.Color, len, context.temp_allocator)
-                east.pixels = make([]rl.Color, len, context.temp_allocator)
-                
-                sw := 2 * center
-                for y in 0..<3 * center {
-                    for x in 0..<sw {
-                        west.pixels[y*sw + x] = tile_pixels[y*rw + x]
-                        east.pixels[y*sw + x] = tile_pixels[y*rw + x+center]
-                    }
-                }
-                
-                west_hash := hash.djb2(slice_to_bytes(west.pixels))
-                if west_hash not_in sockets {
-                    sockets[west_hash] = next_socket_index
-                    next_socket_index += 1
-                }
-                tile.sockets_index[Direction.West] = sockets[west_hash]
-                
-                east_hash := hash.djb2(slice_to_bytes(east.pixels))
-                if east_hash not_in sockets {
-                    sockets[east_hash] = next_socket_index
-                    next_socket_index += 1
-                }
-                tile.sockets_index[Direction.East] = sockets[east_hash]
-            }
-            
-            {
-                south, north: Socket
-                south.pixels = make([]rl.Color, len, context.temp_allocator)
-                north.pixels = make([]rl.Color, len, context.temp_allocator)
-                
-                sw := 3 * center
-                for y in 0..<2 * center {
-                    for x in 0..<sw {
-                        south.pixels[y*sw + x] = tile_pixels[(y+center)*rw + x]
-                        north.pixels[y*sw + x] = tile_pixels[y*rw + x]
-                    }
-                }
-                
-                north_hash := hash.djb2(slice_to_bytes(north.pixels))
-                if north_hash not_in sockets {
-                    sockets[north_hash] = next_socket_index
-                    next_socket_index += 1
-                }
-                tile.sockets_index[Direction.North] = sockets[north_hash]
-                
-                south_hash := hash.djb2(slice_to_bytes(south.pixels))
-                if south_hash not_in sockets {
-                    sockets[south_hash] = next_socket_index
-                    next_socket_index += 1
-                }
-                tile.sockets_index[Direction.South] = sockets[south_hash]
-            }
-            
-            {
-                tile.center = make([]rl.Color, center*center)
-                cw := center
-                for y in 0..<center {
-                    for x in 0..<cw {
-                        tile.center[y*cw + x] = tile_pixels[(y+center)*rw + x]
-                    }
-                }
-                
-                for &it in tile.center        do append_elems(&data, ..to_bytes(&it))
-                for &it in tile.sockets_index do append_elems(&data, ..to_bytes(&it))
-                tile.hash = hash.djb2(data[:])
-            }
-            
-            if present, ok := is_present(collapse, tile); ok {
-                present.frequency += 1
-            } else {
-                temp := rl.Image {
-                    data    = raw_data(tile_pixels), 
-                    width   = center*Kernel, 
-                    height  = center*Kernel, 
-                    mipmaps = 1, 
-                    format = .UNCOMPRESSED_R8G8B8A8,
-                }
-                tile.texture = rl.LoadTextureFromImage(temp)
-                tile.frequency = 1
-                append_elem(&tiles, tile)
-            }
-        }
-    }
-}
-
-is_present :: proc (using collapse: ^Collapse, tile: Tile) -> (result: ^Tile, ok: bool) {
-    loop: for &it in tiles {
-        if tile.hash == it.hash {
-            result = &it
-            break loop
-        }
-    }
-    
-    return result, result != nil
-}
-
-entangle_grid :: proc(using collapse: ^Collapse, region: Rectangle2i) {
+entangle_grid :: proc(using collapse: ^Collapse, region: Rectangle2i, check_region_border := false) {
     clear(&lowest_entropies)
     clear(&to_check)
     to_check_index = 0
@@ -272,7 +136,20 @@ entangle_grid :: proc(using collapse: ^Collapse, region: Rectangle2i) {
         }
     }
     
-    collapse.state = .FindLowestEntropy
+    if check_region_border {
+        for y in region.min.y..<region.max.y {
+            append_to_check(collapse, {region.min.x, y}, 1)
+            append_to_check(collapse, {region.max.x-1, y}, 1)
+        }
+        for x in region.min.x..<region.max.x {
+            append_to_check(collapse, {x, region.min.y}, 1)
+            append_to_check(collapse, {x, region.max.y-1}, 1)
+        }
+        collapse.state = .Propagation
+    } else {
+        collapse.state = .FindLowestEntropy
+    }
+    
 }
 
 collapse_one_of_the_cells_with_lowest_entropy :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (cell: ^Cell) {
@@ -349,7 +226,7 @@ find_lowest_entropy :: proc (using collapse: ^Collapse, region: Rectangle2i) -> 
     return next_state
 }
 
-add_neighbour :: proc (using collapse: ^Collapse, p: v2i, depth: u32) {
+append_to_check :: proc (using collapse: ^Collapse, p: v2i, depth: u32) {
     not_in_list := true
     for entry in to_check {
         if entry.raw_p == p {
@@ -359,7 +236,7 @@ add_neighbour :: proc (using collapse: ^Collapse, p: v2i, depth: u32) {
     }
     
     if not_in_list {
-        append_elem(&to_check, Check { p, depth-1 })
+        append_elem(&to_check, Check { p, depth })
     }
 }
 
@@ -423,7 +300,7 @@ wave_recompute_entropy :: proc (using collapse: ^Collapse, wave: ^WaveFunction) 
             frequency := cast(f32) tiles[index].frequency
             probability := frequency / wave.total_frequency
             // Shannon entropy is the negative sum of P * log2(P)
-            wave.entropy -= probability * math.log2(probability)
+            wave.entropy -= probability * log2(probability)
         }
     } else {
         wave.entropy = cast(f32) wave.states_count

@@ -1,8 +1,10 @@
 package main
 
+import "core:hash"
 import "core:os/os2"
 import "core:strings"
 import "core:time"
+
 import rl "vendor:raylib"
 import imgui "../lib/odin-imgui/"
 import rlimgui "../lib/odin-imgui/examples/raylib"
@@ -42,7 +44,7 @@ regions: [dynamic]Rectangle2i
 wrap: [2]b32
 
 main :: proc () {
-    Dim :: v2i {200, 100}
+    Dim :: v2i {150, 100}
     size: f32
     
     ratio := vec_cast(f32, Screen_Size) / vec_cast(f32, Dim+10)
@@ -187,13 +189,7 @@ main :: proc () {
                     
             if !should_restart {
                 _matches = 0
-                
                 update(&collapse, &entropy)
-                
-                if collapse.state != .Done {
-                    _total = time.since(_total_start)
-                }
-                
             } else {
                 if len(collapse.tiles) == 0 {
                     should_restart = false
@@ -213,37 +209,25 @@ main :: proc () {
                             entangle_grid(&collapse, full_region)
                         } else {
                             lives -= 1
-                            entangle_grid(&collapse, region)
+                            entangle_grid(&collapse, region, lives != 0)
                             if lives == 0 {
                                 if region_index != 0 {
                                     region_index -= 1
                                     lives = max_lives
                                     region = regions[region_index]
-                                    entangle_grid(&collapse, region)
-                                    for y in region.min.y..<region.max.y {
-                                        append_elem(&to_check, Check {{region.min.x, y}, 1})
-                                        append_elem(&to_check, Check {{region.max.x-1, y}, 1})
-                                    }
-                                    for x in region.min.x..<region.max.x {
-                                        append_elem(&to_check, Check {{x, region.min.y}, 1})
-                                        append_elem(&to_check, Check {{x, region.max.y-1}, 1})
-                                    }
+                                    entangle_grid(&collapse, region, true)
+                                    
                                 } else {
                                     entangle_grid(&collapse, full_region)
-                                }
-                            } else {
-                                for y in region.min.y..<region.max.y {
-                                    append_elem(&to_check, Check {{region.min.x, y}, 1})
-                                    append_elem(&to_check, Check {{region.max.x-1, y}, 1})
-                                }
-                                for x in region.min.x..<region.max.x {
-                                    append_elem(&to_check, Check {{x, region.min.y}, 1})
-                                    append_elem(&to_check, Check {{x, region.max.y-1}, 1})
                                 }
                             }
                         }
                     }
                 }
+            }
+            
+            if collapse.state != .Done {
+                _total = time.since(_total_start)
             }
         }
 
@@ -415,16 +399,7 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
             lives = max_lives
             if region_index < len(regions) {
                 region = regions[region_index]
-                entangle_grid(collapse, region)
-                
-                for y in region.min.y..<region.max.y {
-                    append_elem(&collapse.to_check, Check {{0, y}, 1})
-                    append_elem(&collapse.to_check, Check {{region.max.x-1, y}, 1})
-                }
-                for x in region.min.x..<region.max.x {
-                    append_elem(&collapse.to_check, Check {{x, 0}, 1})
-                    append_elem(&collapse.to_check, Check {{x, region.max.y-1}, 1})
-                }
+                entangle_grid(collapse, region, true)
             } else {
                 update_done = true
             }
@@ -436,9 +411,141 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
     }
 }
 
+extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
+    sockets := make(map[u32]u32, context.temp_allocator)
+    next_socket_index: u32
+    
+    Socket :: struct {
+        pixels: []rl.Color, // 2*center * Kernel*center
+    }
+    
+    assert(img.format == .UNCOMPRESSED_R8G8B8A8)
+    pixels := (cast([^]rl.Color) img.data)[:img.width * img.height]
+    
+    tile_pixels := make([dynamic]rl.Color, Kernel*center * Kernel*center, context.temp_allocator)
+    data := make([dynamic]u8, context.temp_allocator)
+    
+    for min_y in 0..<img.height/center {
+        for min_x in 0..<img.width/center {
+            clear(&tile_pixels)
+            clear(&data)
+            
+            tile: Tile
+            for ky in i32(0)..<Kernel*center {
+                for kx in i32(0)..<Kernel*center {
+                    x := (min_x*center + kx) % img.width
+                    y := (min_y*center + ky) % img.height
+                    pixel := pixels[y*img.width+x]
+                    append_elems(&tile_pixels, pixel)
+                }
+            }
+            
+            tile_pixels := tile_pixels[:]
+            rw := 3 * center
+            len := 2*center * Kernel*center
+            
+            {
+                west, east: Socket
+                west.pixels = make([]rl.Color, len, context.temp_allocator)
+                east.pixels = make([]rl.Color, len, context.temp_allocator)
+                
+                sw := 2 * center
+                for y in 0..<3 * center {
+                    for x in 0..<sw {
+                        west.pixels[y*sw + x] = tile_pixels[y*rw + x]
+                        east.pixels[y*sw + x] = tile_pixels[y*rw + x+center]
+                    }
+                }
+                
+                west_hash := hash.djb2(slice_to_bytes(west.pixels))
+                if west_hash not_in sockets {
+                    sockets[west_hash] = next_socket_index
+                    next_socket_index += 1
+                }
+                tile.sockets_index[Direction.West] = sockets[west_hash]
+                
+                east_hash := hash.djb2(slice_to_bytes(east.pixels))
+                if east_hash not_in sockets {
+                    sockets[east_hash] = next_socket_index
+                    next_socket_index += 1
+                }
+                tile.sockets_index[Direction.East] = sockets[east_hash]
+            }
+            
+            {
+                south, north: Socket
+                south.pixels = make([]rl.Color, len, context.temp_allocator)
+                north.pixels = make([]rl.Color, len, context.temp_allocator)
+                
+                sw := 3 * center
+                for y in 0..<2 * center {
+                    for x in 0..<sw {
+                        south.pixels[y*sw + x] = tile_pixels[(y+center)*rw + x]
+                        north.pixels[y*sw + x] = tile_pixels[y*rw + x]
+                    }
+                }
+                
+                north_hash := hash.djb2(slice_to_bytes(north.pixels))
+                if north_hash not_in sockets {
+                    sockets[north_hash] = next_socket_index
+                    next_socket_index += 1
+                }
+                tile.sockets_index[Direction.North] = sockets[north_hash]
+                
+                south_hash := hash.djb2(slice_to_bytes(south.pixels))
+                if south_hash not_in sockets {
+                    sockets[south_hash] = next_socket_index
+                    next_socket_index += 1
+                }
+                tile.sockets_index[Direction.South] = sockets[south_hash]
+            }
+            
+            {
+                tile.center = make([]rl.Color, center*center)
+                cw := center
+                for y in 0..<center {
+                    for x in 0..<cw {
+                        tile.center[y*cw + x] = tile_pixels[(y+center)*rw + x]
+                    }
+                }
+                
+                for &it in tile.center        do append_elems(&data, ..to_bytes(&it))
+                for &it in tile.sockets_index do append_elems(&data, ..to_bytes(&it))
+                tile.hash = hash.djb2(data[:])
+            }
+            
+            if present, ok := is_present(collapse, tile); ok {
+                present.frequency += 1
+            } else {
+                temp := rl.Image {
+                    data    = raw_data(tile_pixels), 
+                    width   = center*Kernel, 
+                    height  = center*Kernel, 
+                    mipmaps = 1, 
+                    format = .UNCOMPRESSED_R8G8B8A8,
+                }
+                tile.texture = rl.LoadTextureFromImage(temp)
+                tile.frequency = 1
+                append_elem(&tiles, tile)
+            }
+        }
+    }
+}
+
+is_present :: proc (using collapse: ^Collapse, tile: Tile) -> (result: ^Tile, ok: bool) {
+    loop: for &it in tiles {
+        if tile.hash == it.hash {
+            result = &it
+            break loop
+        }
+    }
+    
+    return result, result != nil
+}
+
 add_neighbours :: proc (using collapse: ^Collapse, cell: ^Cell, depth: u32) {
     for delta in Delta {
-        add_neighbour(collapse, cell.p + delta, depth)
+        append_to_check(collapse, cell.p + delta, depth-1)
     }
 }
 

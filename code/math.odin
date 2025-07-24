@@ -231,6 +231,7 @@ sin :: math.sin
 cos :: math.cos
 acos  :: math.acos
 atan2 :: math.atan2
+log2 :: math.log2
 
 ////////////////////////////////////////////////
 // Vector operations
