@@ -291,7 +291,7 @@ main :: proc () {
             }
         }
         
-        for cell in slice(lowest_entropies) {
+        for cell in lowest_entropies {
             p := get_screen_p(collapse.dimension, size, cell.p)
             color := rl.PURPLE
             rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(color, 0.8))
@@ -345,14 +345,15 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
         switch collapse.state {
           case .Uninitialized:
             
-          case .PickNextCell:
-            cell, pick := pick_next_cell(collapse, entropy)
-            if cell != nil {
-                wave_collapse(collapse, cell, pick)
-                add_neighbours(collapse, cell, collapse.max_depth)
-            }
+          case .FindLowestEntropy:
+            collapse.state = find_lowest_entropy(collapse, region, full_region)
+            
+          case .CollapseCell:
+            cell := collapse_one_of_the_cells_with_lowest_entropy(collapse, entropy)
+            assert(cell != nil)
+            
+            add_neighbours(collapse, cell, collapse.max_depth)
             collapse.state = .Propagation
-            // @todo(viktor): the first time this falls through to find_lowest_entropy, make this explicit
             
           case .Propagation:
             // @todo(viktor): If we knew that a cell didnt change in this propagation we should expect that it wont change the current cell. Store if it changed and only compare current with changed
@@ -407,7 +408,7 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
                     }
                 }
             } else {
-                collapse.state = find_lowest_entropy(collapse, region, full_region)
+                collapse.state = .FindLowestEntropy
             }
             
           case .Contradiction:

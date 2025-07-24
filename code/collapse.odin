@@ -12,7 +12,8 @@ CollapseState :: enum {
     // @todo(viktor): remove this
     Uninitialized, 
     
-    PickNextCell,
+    FindLowestEntropy,
+    CollapseCell,
     Propagation,
     Contradiction,
     Done,
@@ -29,7 +30,7 @@ Collapse :: struct {
     to_check_index: int,
     to_check: [dynamic] Check,
     
-    lowest_entropies: Array(^Cell),
+    lowest_entropies: [dynamic]^Cell,
     max_depth:  u32,
     
     center: i32,
@@ -95,11 +96,10 @@ init_collapse :: proc (collapse: ^Collapse, arena: ^Arena, dimension: [2]i32, ma
     collapse.center = center // size of the center of a tile
     collapse.max_depth = max_depth
     
-    cell_count := collapse.dimension.x * collapse.dimension.y
-    collapse.grid             = make([] Cell, cell_count)
+    collapse.grid             = make([] Cell, collapse.dimension.x * collapse.dimension.y)
     collapse.tiles            = make([dynamic] Tile)
     collapse.to_check         = make([dynamic] Check)
-    collapse.lowest_entropies = make_array(arena, ^Cell, cell_count)
+    collapse.lowest_entropies = make([dynamic] ^Cell)
 }
 
 extract_tiles :: proc (using collapse: ^Collapse, img: rl.Image) {
@@ -272,30 +272,34 @@ entangle_grid :: proc(using collapse: ^Collapse, region, full_region: Rectangle2
         }
     }
     
-    collapse.state = .Propagation
+    collapse.state = .FindLowestEntropy
 }
 
-pick_next_cell :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (lowest_cell: ^Cell, pick: TileIndex) {
-    if lowest_entropies.count != 0 {
-        lowest_cell = random_value(entropy, slice(lowest_entropies))
-        
-        wave := lowest_cell.value.(WaveFunction)
-        total_freq: u32
-        for state, tile_index in wave.states do if state do total_freq += tiles[tile_index].frequency
-        choice := random_between_u32(entropy, 0, total_freq)
-        
-        for state, tile_index in wave.states {
-            if !state do continue
-            option := tiles[tile_index]
-            if choice <= option.frequency {
-                pick = tile_index
-                break
-            }
-            choice -= option.frequency
+collapse_one_of_the_cells_with_lowest_entropy :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (cell: ^Cell) {
+    assert(len(lowest_entropies) != 0)
+    
+    cell = random_value(entropy, lowest_entropies[:])
+    assert(cell != nil)
+    
+    wave := cell.value.(WaveFunction)
+    total_freq: u32
+    for state, tile_index in wave.states do if state do total_freq += tiles[tile_index].frequency
+    choice := random_between_u32(entropy, 0, total_freq)
+    
+    pick: TileIndex
+    for state, tile_index in wave.states {
+        if !state do continue
+        option := tiles[tile_index]
+        if choice <= option.frequency {
+            pick = tile_index
+            break
         }
+        choice -= option.frequency
     }
     
-    return lowest_cell, pick
+    wave_collapse(collapse, cell, pick)
+    
+    return cell
 }
 
 find_lowest_entropy :: proc (using collapse: ^Collapse, region, full_region: Rectangle2i) -> (next_state: CollapseState) {
@@ -328,13 +332,13 @@ find_lowest_entropy :: proc (using collapse: ^Collapse, region, full_region: Rec
                 }
                 
                 if lowest_entropy == wave.entropy {
-                    append(&lowest_entropies, cell)
+                    append_elem(&lowest_entropies, cell)
                 }
             }
         }
     }
     
-    next_state = .PickNextCell
+    next_state = .CollapseCell
     if no_contradictions {
         if collapsed_all_wavefunctions {
             next_state = .Done
