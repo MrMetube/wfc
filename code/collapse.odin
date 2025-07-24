@@ -234,14 +234,16 @@ is_present :: proc (using collapse: ^Collapse, tile: Tile) -> (result: ^Tile, ok
     return result, result != nil
 }
 
-entangle_grid :: proc(using collapse: ^Collapse, region: Rectangle2i) {
+entangle_grid :: proc(using collapse: ^Collapse, region, full_region: Rectangle2i) {
     clear(&lowest_entropies)
     clear(&to_check)
     to_check_index = 0
     
     for y in region.min.y..<region.max.y {
         for x in region.min.x..<region.max.x {
-            cell := &grid[y * dimension.x + x]
+            wrapped := rectangle_modulus(full_region, [2]i32{x,y})
+            cell := &grid[wrapped.x + wrapped.y * dimension.x]
+            
             cell.changed = false
             cell.checked = false
             
@@ -261,8 +263,10 @@ entangle_grid :: proc(using collapse: ^Collapse, region: Rectangle2i) {
     
     for y in region.min.y..<region.max.y {
         for x in region.min.x..<region.max.x {
-            cell := &grid[y * dimension.x + x]
-            cell.p = {x, y}
+            wrapped := rectangle_modulus(full_region, [2]i32{x,y})
+            cell := &grid[wrapped.x + wrapped.y * dimension.x]
+            
+            cell.p = wrapped
             wave := &cell.value.(WaveFunction)
             recompute_wavefunction(collapse, wave)
         }
@@ -294,7 +298,7 @@ pick_next_cell :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (l
     return lowest_cell, pick
 }
 
-find_lowest_entropy :: proc (using collapse: ^Collapse, region: Rectangle2i) -> (next_state: CollapseState) {
+find_lowest_entropy :: proc (using collapse: ^Collapse, region, full_region: Rectangle2i) -> (next_state: CollapseState) {
     clear(&lowest_entropies)
     clear(&to_check)
     to_check_index = 0
@@ -305,7 +309,9 @@ find_lowest_entropy :: proc (using collapse: ^Collapse, region: Rectangle2i) -> 
     collapsed_all_wavefunctions := true
     loop: for y in region.min.y..<region.max.y {
         for x in region.min.x..<region.max.x {
-            cell := &grid[x + y * dimension.x]
+            wrapped := rectangle_modulus(full_region, [2]i32{x,y})
+            cell := &grid[wrapped.x + wrapped.y * dimension.x]
+            
             cell.checked = false
             cell.changed = false
             
@@ -394,32 +400,6 @@ matches_tile :: proc(using collapse: ^Collapse, a_index, b_index: TileIndex, dir
     result = a.sockets_index[a_side] == b.sockets_index[b_side]
     
     return result
-}
-
-get_neighbour :: proc (using collapse: ^Collapse, p: [2]i32, direction: Direction) -> (cell: ^Cell, next: [2]i32) {
-    ok := true
-    next = p + Delta[direction]
-    
-    if wrap.x {
-        next.x = (next.x + dimension.x) % dimension.x
-    } else {
-        if next.x < 0 || next.x >= dimension.x {
-            ok = false
-        }
-    }
-    
-    if wrap.y {
-        next.y = (next.y + dimension.y) % dimension.y
-    } else {
-        if next.y < 0 || next.y >= dimension.y {
-            ok = false
-        }
-    }
-    
-    if ok {
-        cell = &grid[next.y*dimension.x + next.x]
-    }
-    return cell, next
 }
 
 recompute_wavefunction :: proc (using collapse: ^Collapse, wave: ^WaveFunction) {

@@ -117,7 +117,6 @@ main :: proc () {
         for x in 0..<divisor {
             r := rectangle_min_max((dimension*{x,y})/divisor, (dimension*{x+1,y+1})/divisor)
             r = add_radius(r, 1)
-            r = get_intersection(r, full_region)
             append_elem(&regions, r)
         }
     }
@@ -212,16 +211,16 @@ main :: proc () {
                             
                             region_index = 0
                             region = regions[region_index]
-                            entangle_grid(&collapse, full_region)
+                            entangle_grid(&collapse, full_region, full_region)
                         } else {
                             lives -= 1
-                            entangle_grid(&collapse, region)
+                            entangle_grid(&collapse, region, full_region)
                             if lives == 0 {
                                 if region_index != 0 {
                                     region_index -= 1
                                     lives = max_lives
                                     region = regions[region_index]
-                                    entangle_grid(&collapse, region)
+                                    entangle_grid(&collapse, region, full_region)
                                     for y in region.min.y..<region.max.y {
                                         append_elem(&to_check, Check {{region.min.x, y}, 1})
                                         append_elem(&to_check, Check {{region.max.x-1, y}, 1})
@@ -231,7 +230,7 @@ main :: proc () {
                                         append_elem(&to_check, Check {{x, region.max.y-1}, 1})
                                     }
                                 } else {
-                                    entangle_grid(&collapse, full_region)
+                                    entangle_grid(&collapse, full_region, full_region)
                                 }
                             } else {
                                 for y in region.min.y..<region.max.y {
@@ -367,6 +366,7 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
                 }
                 
                 if contains(region, p) {
+                    p = wrapped
                     next_cell := &collapse.grid[p.x + p.y * collapse.dimension.x]
                     assert(next_cell.p == p)
                     if !next_cell.checked {
@@ -376,8 +376,14 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
                             // @speed O(n*m*d)
                             loop: for &state, index in wave.states do if state {
                                 for direction in Direction {
-                                    b, _ := get_neighbour(collapse, next_cell.p, direction)
-                                    if b != nil {
+                                    bp := p + Delta[direction]
+                                    bwrapped := rectangle_modulus(full_region, bp)
+                                    for w, dim in wrap do if w {
+                                        bp[dim] = bwrapped[dim]
+                                    }
+                                    
+                                    if contains(full_region, bp) {
+                                        b := &collapse.grid[bp.x + bp.y * collapse.dimension.x]
                                         if !matches(collapse, index, b, direction) {
                                             next_cell.changed = true
                                             state = false
@@ -398,7 +404,7 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
                     }
                 }
             } else {
-                collapse.state = find_lowest_entropy(collapse, region)
+                collapse.state = find_lowest_entropy(collapse, region, full_region)
             }
             
           case .Contradiction:
@@ -412,7 +418,7 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
             lives = max_lives
             if region_index < len(regions) {
                 region = regions[region_index]
-                entangle_grid(collapse, region)
+                entangle_grid(collapse, region, full_region)
                 
                 for y in region.min.y..<region.max.y {
                     append_elem(&collapse.to_check, Check {{0, y}, 1})
