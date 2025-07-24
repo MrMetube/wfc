@@ -26,6 +26,7 @@ Collapse :: struct {
     tiles:   [dynamic] Tile,
     
     dimension: v2i,
+    full_region: Rectangle2i,
     
     to_check_index: int,
     to_check: [dynamic] Check,
@@ -93,6 +94,7 @@ Delta := [Direction] v2i {
 
 init_collapse :: proc (collapse: ^Collapse, dimension: v2i, max_depth: u32, center: i32 = 1) {
     collapse.dimension = dimension
+    collapse.full_region = rectangle_min_dimension(v2i{}, dimension)
     collapse.center = center // size of the center of a tile
     collapse.max_depth = max_depth
     
@@ -234,7 +236,7 @@ is_present :: proc (using collapse: ^Collapse, tile: Tile) -> (result: ^Tile, ok
     return result, result != nil
 }
 
-entangle_grid :: proc(using collapse: ^Collapse, region, full_region: Rectangle2i) {
+entangle_grid :: proc(using collapse: ^Collapse, region: Rectangle2i) {
     clear(&lowest_entropies)
     clear(&to_check)
     to_check_index = 0
@@ -299,7 +301,7 @@ collapse_one_of_the_cells_with_lowest_entropy :: proc (using collapse: ^Collapse
     return cell
 }
 
-find_lowest_entropy :: proc (using collapse: ^Collapse, region, full_region: Rectangle2i) -> (next_state: CollapseState) {
+find_lowest_entropy :: proc (using collapse: ^Collapse, region: Rectangle2i) -> (next_state: CollapseState) {
     clear(&lowest_entropies)
     clear(&to_check)
     to_check_index = 0

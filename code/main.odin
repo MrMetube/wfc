@@ -38,7 +38,6 @@ t_restart: f32
 paused_update: b32
 region_index:= 0
 region: Rectangle2i
-full_region: Rectangle2i
 regions: [dynamic]Rectangle2i
 wrap: [2]b32
 
@@ -211,16 +210,16 @@ main :: proc () {
                             
                             region_index = 0
                             region = regions[region_index]
-                            entangle_grid(&collapse, full_region, full_region)
+                            entangle_grid(&collapse, full_region)
                         } else {
                             lives -= 1
-                            entangle_grid(&collapse, region, full_region)
+                            entangle_grid(&collapse, region)
                             if lives == 0 {
                                 if region_index != 0 {
                                     region_index -= 1
                                     lives = max_lives
                                     region = regions[region_index]
-                                    entangle_grid(&collapse, region, full_region)
+                                    entangle_grid(&collapse, region)
                                     for y in region.min.y..<region.max.y {
                                         append_elem(&to_check, Check {{region.min.x, y}, 1})
                                         append_elem(&to_check, Check {{region.max.x-1, y}, 1})
@@ -230,7 +229,7 @@ main :: proc () {
                                         append_elem(&to_check, Check {{x, region.max.y-1}, 1})
                                     }
                                 } else {
-                                    entangle_grid(&collapse, full_region, full_region)
+                                    entangle_grid(&collapse, full_region)
                                 }
                             } else {
                                 for y in region.min.y..<region.max.y {
@@ -344,7 +343,7 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
           case .Uninitialized:
             
           case .FindLowestEntropy:
-            collapse.state = find_lowest_entropy(collapse, region, full_region)
+            collapse.state = find_lowest_entropy(collapse, region)
             
           case .CollapseCell:
             cell := collapse_one_of_the_cells_with_lowest_entropy(collapse, entropy)
@@ -356,7 +355,7 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
           case .Propagation:
             if check, ok := get_next_check(collapse); ok {
                 p := check.raw_p
-                wrapped := rectangle_modulus(full_region, p)
+                wrapped := rectangle_modulus(collapse.full_region, p)
                 for w, dim in wrap do if w {
                     p[dim] = wrapped[dim]
                 }
@@ -377,12 +376,12 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
                             loop: for &state, index in wave.states do if state {
                                 for direction in Direction {
                                     bp := p + Delta[direction]
-                                    bwrapped := rectangle_modulus(full_region, bp)
+                                    bwrapped := rectangle_modulus(collapse.full_region, bp)
                                     for w, dim in wrap do if w {
                                         bp[dim] = bwrapped[dim]
                                     }
                                     
-                                    if contains(full_region, bp) {
+                                    if contains(collapse.full_region, bp) {
                                         b := &collapse.grid[bp.x + bp.y * collapse.dimension.x]
                                         if !matches(collapse, index, b, direction) {
                                             wave_remove_state(collapse, next_cell, wave, index) 
@@ -416,7 +415,7 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
             lives = max_lives
             if region_index < len(regions) {
                 region = regions[region_index]
-                entangle_grid(collapse, region, full_region)
+                entangle_grid(collapse, region)
                 
                 for y in region.min.y..<region.max.y {
                     append_elem(&collapse.to_check, Check {{0, y}, 1})
