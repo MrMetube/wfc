@@ -12,6 +12,23 @@ import "core:simd"
 v2 :: [2]f32
 v3 :: [3]f32
 v4 :: [4]f32
+v2i :: [2]i32
+v3i :: [3]i32
+v4i :: [4]i32
+
+m4 :: matrix[4,4]f32
+
+Rectangle   :: struct($T: typeid) { min, max: T }
+Rectangle2  :: Rectangle(v2)
+Rectangle3  :: Rectangle(v3)
+Rectangle2i :: Rectangle(v2i)
+
+f32x8 :: #simd[8]f32
+u32x8 :: #simd[8]u32
+i32x8 :: #simd[8]i32
+
+f32x4 :: #simd[4]f32
+i32x4 :: #simd[4]i32
 
 LaneWidth :: 1
 
@@ -40,13 +57,6 @@ when LaneWidth != 1 {
     lane_umm :: umm
     lane_f64 :: f64
 }
-
-m4 :: matrix[4,4]f32
-
-Rectangle   :: struct($T: typeid) { min, max: T }
-Rectangle2  :: Rectangle(v2)
-Rectangle3  :: Rectangle(v3)
-Rectangle2i :: Rectangle([2]i32)
 
 ////////////////////////////////////////////////
 // Constants
@@ -211,6 +221,10 @@ fractional :: proc(x: $F) -> (fractional: F, integer: i32) {
     integer = cast(i32) x
     fractional = x - cast(F) integer
     return 
+}
+
+distance :: proc (a: $T, b: T) -> (result: T) {
+    return abs(a - b)
 }
 
 sin :: math.sin

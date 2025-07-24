@@ -25,7 +25,7 @@ Collapse :: struct {
     grid:    [] Cell, 
     tiles:   [dynamic] Tile,
     
-    dimension: [2]i32,
+    dimension: v2i,
     
     to_check_index: int,
     to_check: [dynamic] Check,
@@ -40,7 +40,7 @@ Cell :: struct {
     checked: b32,
     changed: b32,
     
-    p: [2]i32,
+    p: v2i,
     value: union {
         TileIndex,
         WaveFunction,
@@ -62,7 +62,7 @@ WaveFunction :: struct {
 SuperPosition :: []b32
 
 Check :: struct {
-    raw_p: [2]i32,
+    raw_p: v2i,
     
     depth: u32,
 }
@@ -84,14 +84,14 @@ Opposite_Direction := [Direction] Direction {
     .West  = .East,
     .South = .North,
 }
-Delta := [Direction] [2]i32 {
+Delta := [Direction] v2i {
     .East  = {+1,  0},
     .North = { 0, -1},
     .West  = {-1,  0},
     .South = { 0, +1},
 }
 
-init_collapse :: proc (collapse: ^Collapse, dimension: [2]i32, max_depth: u32, center: i32 = 1) {
+init_collapse :: proc (collapse: ^Collapse, dimension: v2i, max_depth: u32, center: i32 = 1) {
     collapse.dimension = dimension
     collapse.center = center // size of the center of a tile
     collapse.max_depth = max_depth
@@ -244,7 +244,7 @@ entangle_grid :: proc(using collapse: ^Collapse, region, full_region: Rectangle2
     
     for y in region.min.y..<region.max.y {
         for x in region.min.x..<region.max.x {
-            wrapped := rectangle_modulus(full_region, [2]i32{x,y})
+            wrapped := rectangle_modulus(full_region, v2i{x,y})
             cell := &grid[wrapped.x + wrapped.y * dimension.x]
             
             cell.changed = false
@@ -280,8 +280,7 @@ collapse_one_of_the_cells_with_lowest_entropy :: proc (using collapse: ^Collapse
     assert(cell != nil)
     
     wave := cell.value.(WaveFunction)
-    total_freq: u32
-    for state, tile_index in wave.states do if state do total_freq += tiles[tile_index].frequency
+    total_freq := cast(u32) wave.total_frequency
     choice := random_between_u32(entropy, 0, total_freq)
     
     pick: TileIndex
@@ -311,7 +310,7 @@ find_lowest_entropy :: proc (using collapse: ^Collapse, region, full_region: Rec
     collapsed_all_wavefunctions := true
     loop: for y in region.min.y..<region.max.y {
         for x in region.min.x..<region.max.x {
-            wrapped := rectangle_modulus(full_region, [2]i32{x,y})
+            wrapped := rectangle_modulus(full_region, v2i{x,y})
             cell := &grid[wrapped.x + wrapped.y * dimension.x]
             
             cell.checked = false
@@ -348,7 +347,7 @@ find_lowest_entropy :: proc (using collapse: ^Collapse, region, full_region: Rec
     return next_state
 }
 
-add_neighbour :: proc (using collapse: ^Collapse, p: [2]i32, depth: u32) {
+add_neighbour :: proc (using collapse: ^Collapse, p: v2i, depth: u32) {
     not_in_list := true
     for entry in to_check {
         if entry.raw_p == p {
@@ -417,13 +416,6 @@ wave_remove_state :: proc (collapse: ^Collapse, cell: ^Cell, wave: ^WaveFunction
 
 wave_recompute_entropy :: proc (using collapse: ^Collapse, wave: ^WaveFunction) {
     when true {
-        before := wave.total_frequency
-        wave.total_frequency = 0
-        for state, index in wave.states do if state {
-            wave.total_frequency += cast(f32) tiles[index].frequency
-        }
-        assert(abs(wave.total_frequency - before) < 0.0001)
-        
         wave.entropy = 0
         for state, index in wave.states do if state {
             frequency := cast(f32) tiles[index].frequency

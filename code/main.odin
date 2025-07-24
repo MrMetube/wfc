@@ -7,7 +7,7 @@ import rl "vendor:raylib"
 import imgui "../lib/odin-imgui/"
 import rlimgui "../lib/odin-imgui/examples/raylib"
 
-Screen_Size :: [2]i32{1920, 1080}
+Screen_Size :: v2i{1920, 1080}
 
 the_font: rl.Font
 rl_font_scale :: 32
@@ -43,7 +43,7 @@ regions: [dynamic]Rectangle2i
 wrap: [2]b32
 
 main :: proc () {
-    Dim :: [2]i32 {200, 100}
+    Dim :: v2i {200, 100}
     size: f32
     
     ratio := vec_cast(f32, Screen_Size) / vec_cast(f32, Dim+10)
@@ -111,7 +111,7 @@ main :: proc () {
     
     using collapse
     
-    full_region = rectangle_min_dimension([2]i32{}, dimension)
+    full_region = rectangle_min_dimension(v2i{}, dimension)
     divisor: i32 : 3
     for y in 0..<divisor {
         for x in 0..<divisor {
@@ -469,7 +469,7 @@ draw_wave :: proc (using collapse: ^Collapse, wave: WaveFunction, p: v2, size: v
     }
 }
 
-get_screen_p :: proc (dimension: [2]i32, size: f32, p: [2]i32) -> (result: v2) {
+get_screen_p :: proc (dimension: v2i, size: f32, p: v2i) -> (result: v2) {
     result = vec_cast(f32, p) * size
     
     result += (vec_cast(f32, Screen_Size) - (size * vec_cast(f32, dimension))) * 0.5
