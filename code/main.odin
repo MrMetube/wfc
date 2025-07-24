@@ -348,7 +348,8 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
           case .PickNextCell:
             cell, pick := pick_next_cell(collapse, entropy)
             if cell != nil {
-                collapse_cell(collapse, cell, pick)
+                wave_collapse(collapse, cell, pick)
+                add_neighbours(collapse, cell, collapse.max_depth)
             }
             collapse.state = .Propagation
             // @todo(viktor): the first time this falls through to find_lowest_entropy, make this explicit
@@ -374,6 +375,10 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
                         
                         if wave, ok := &next_cell.value.(WaveFunction); ok {
                             // @speed O(n*m*d)
+                            // n = a.wave.state_count
+                            // m = b.wave.state_count
+                            // d = len(Direction)
+                            
                             loop: for &state, index in wave.states do if state {
                                 for direction in Direction {
                                     bp := p + Delta[direction]
@@ -385,9 +390,7 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
                                     if contains(full_region, bp) {
                                         b := &collapse.grid[bp.x + bp.y * collapse.dimension.x]
                                         if !matches(collapse, index, b, direction) {
-                                            next_cell.changed = true
-                                            state = false
-                                            wave.states_count -= 1
+                                            wave_remove_state(collapse, next_cell, wave, index) 
                                             continue loop
                                         }
                                     }
@@ -395,7 +398,7 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
                             }
                             
                             if next_cell.changed {
-                                recompute_wavefunction(collapse, wave)
+                                wave_recompute_entropy(collapse, wave)
                                 if check.depth > 0 {
                                     add_neighbours(collapse, next_cell, check.depth)
                                 }
@@ -436,6 +439,12 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
         if time.duration_seconds(time.since(update_start)) > TargetFrameTime * 0.9 {
             update_done = true
         }
+    }
+}
+
+add_neighbours :: proc (using collapse: ^Collapse, cell: ^Cell, depth: u32) {
+    for delta in Delta {
+        add_neighbour(collapse, cell.p + delta, depth)
     }
 }
 
