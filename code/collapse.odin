@@ -29,7 +29,6 @@ Collapse :: struct {
     
     to_check_index: int,
     to_check:       [dynamic] Check,
-    max_depth:      u32,
     
     lowest_entropies: [dynamic] ^Cell,
 }
@@ -62,7 +61,7 @@ SuperPosition :: []b32
 Check :: struct {
     raw_p: v2i,
     
-    depth: u32,
+    depth: i32,
 }
 
 Tile :: struct {
@@ -89,10 +88,9 @@ Delta := [Direction] v2i {
     .South = { 0, +1},
 }
 
-init_collapse :: proc (collapse: ^Collapse, dimension: v2i, max_depth: u32) {
+init_collapse :: proc (collapse: ^Collapse, dimension: v2i) {
     collapse.dimension = dimension
     collapse.full_region = rectangle_min_dimension(v2i{}, dimension)
-    collapse.max_depth = max_depth
     
     collapse.grid             = make([] Cell, collapse.dimension.x * collapse.dimension.y)
     collapse.tiles            = make([dynamic] Tile)
@@ -138,12 +136,12 @@ entangle_grid :: proc(using collapse: ^Collapse, region: Rectangle2i, check_regi
     
     if check_region_border {
         for y in region.min.y..<region.max.y {
-            append_to_check(collapse, {region.min.x, y}, 1)
-            append_to_check(collapse, {region.max.x-1, y}, 1)
+            maybe_append_to_check(collapse, {region.min.x, y}, 1)
+            maybe_append_to_check(collapse, {region.max.x-1, y}, 1)
         }
         for x in region.min.x..<region.max.x {
-            append_to_check(collapse, {x, region.min.y}, 1)
-            append_to_check(collapse, {x, region.max.y-1}, 1)
+            maybe_append_to_check(collapse, {x, region.min.y}, 1)
+            maybe_append_to_check(collapse, {x, region.max.y-1}, 1)
         }
         collapse.state = .Propagation
     } else {
@@ -226,18 +224,19 @@ find_lowest_entropy :: proc (using collapse: ^Collapse, region: Rectangle2i) -> 
     return next_state
 }
 
-append_to_check :: proc (using collapse: ^Collapse, p: v2i, depth: u32) {
-    not_in_list := true
+maybe_append_to_check :: proc (using collapse: ^Collapse, p: v2i, depth: i32) {
+    if depth < 0 do return
+    
+    in_list := false
     for entry in to_check {
         if entry.raw_p == p {
-            not_in_list = false
+            in_list = true
             break
         }
     }
+    if in_list do return
     
-    if not_in_list {
-        append_elem(&to_check, Check { p, depth })
-    }
+    append_elem(&to_check, Check { p, depth })
 }
 
 get_next_check :: proc (collapse: ^Collapse) -> (check: Check, ok: b32) {

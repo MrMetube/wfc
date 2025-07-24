@@ -11,18 +11,6 @@ import rlimgui "../lib/odin-imgui/examples/raylib"
 
 Screen_Size :: v2i{1920, 1080}
 
-the_font: rl.Font
-rl_font_scale :: 32
-code_points := [?]rune {
-    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
-    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-    ',',';','.',':','-','_','#','\'','+','*','~','´','`','?','\\','=','}',')',']','(','[','/','{','&','%','$','§','"','!','^','°',' ',
-    'µ','@','€','²','³','<','>','|',
-    '1','2','3','4','5','6','7','8','9','0',
-}
-
-buffer: [256]u8
-
 _total, _update, _render, _matches: time.Duration
 _total_start: time.Time
 
@@ -41,7 +29,8 @@ paused_update: b32
 region_index:= 0
 region: Rectangle2i
 regions: [dynamic]Rectangle2i
-wrap: [2]b32
+wrap: [2]b32 = {false, false}
+max_depth: i32 = 20
 
 main :: proc () {
     Dim :: v2i {150, 100}
@@ -60,15 +49,11 @@ main :: proc () {
     
     camera := rl.Camera2D { zoom = 1 }
     
-    the_font = rl.LoadFontEx(`.\Caladea-Regular.ttf`, rl_font_scale, raw_data(code_points[:]), len(code_points))
-    
     arena: Arena
     init_arena(&arena, make([]u8, 1*Megabyte))
     
     collapse: Collapse
-    wrap = { false, false }
-    init_collapse(&collapse, Dim, 50)
-    
+    init_collapse(&collapse, Dim)
     
     File :: struct {
         name: string,
@@ -117,7 +102,6 @@ main :: proc () {
     for y in 0..<divisor {
         for x in 0..<divisor {
             r := rectangle_min_max((dimension*{x,y})/divisor, (dimension*{x+1,y+1})/divisor)
-            r = add_radius(r, 1)
             append_elem(&regions, r)
         }
     }
@@ -154,7 +138,7 @@ main :: proc () {
         imgui.columns(1)
         imgui.checkbox("Loop on X Axis", cast(^bool) &wrap.x)
         imgui.checkbox("Loop on Y Axis", cast(^bool) &wrap.y)
-        imgui.slider_int("Recursion Depth", cast(^i32) &collapse.max_depth, 1, 1000, flags = .Logarithmic)
+        imgui.slider_int("Recursion Depth", &max_depth, 1, 1000, flags = .Logarithmic)
         
         if len(collapse.tiles) != 0 {
             imgui.columns(2)
@@ -171,7 +155,7 @@ main :: proc () {
                     t_restart = 0
                 }
                 imgui.next_column()
-                imgui.text(format_string(buffer[:], "Restarting in %", view_seconds(t_restart, precision = 3)))
+                imgui.text(tprint("Restarting in %", view_seconds(t_restart, precision = 3)))
             }
             imgui.columns(1)
         }
@@ -263,7 +247,6 @@ main :: proc () {
         }
         
         for check in to_check {
-            // @todo(viktor): correct raw p
             cell_p := check.raw_p
             for w, dim in wrap do if w {
                 cell_p[dim] = (cell_p[dim] + dimension[dim]) % dimension[dim]
@@ -292,12 +275,12 @@ main :: proc () {
                 imgui.text_colored(Blue, "### Paused ###")
             }
             is_late := cast(f32) time.duration_seconds(_update) > TargetFrameTime
-            imgui.text_colored(is_late ? Orange : White, format_string(buffer[:], `Update %`, _update))
+            imgui.text_colored(is_late ? Orange : White, tprint(`Update %`, _update))
             if !should_restart {
-                imgui.text(format_string(buffer[:], "  matches %",   _matches))
+                imgui.text(tprint("  matches %",   _matches))
             }
-            imgui.text(format_string(buffer[:], "Render %", _render))
-            imgui.text(format_string(buffer[:], "Total %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)))
+            imgui.text(tprint("Render %", _render))
+            imgui.text(tprint("Total %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)))
         imgui.end()
         
         if len(collapse.tiles) != 0 {
@@ -333,7 +316,7 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
             cell := collapse_one_of_the_cells_with_lowest_entropy(collapse, entropy)
             assert(cell != nil)
             
-            add_neighbours(collapse, cell, collapse.max_depth)
+            add_neighbours(collapse, cell, max_depth)
             collapse.state = .Propagation
             
           case .Propagation:
@@ -377,9 +360,7 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
                             
                             if next_cell.changed {
                                 wave_recompute_entropy(collapse, wave)
-                                if check.depth > 0 {
-                                    add_neighbours(collapse, next_cell, check.depth)
-                                }
+                                add_neighbours(collapse, next_cell, check.depth)
                             }
                         }
                     }
@@ -543,9 +524,9 @@ is_present :: proc (using collapse: ^Collapse, tile: Tile) -> (result: ^Tile, ok
     return result, result != nil
 }
 
-add_neighbours :: proc (using collapse: ^Collapse, cell: ^Cell, depth: u32) {
+add_neighbours :: proc (using collapse: ^Collapse, cell: ^Cell, depth: i32) {
     for delta in Delta {
-        append_to_check(collapse, cell.p + delta, depth-1)
+        maybe_append_to_check(collapse, cell.p + delta, depth-1)
     }
 }
 
