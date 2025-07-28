@@ -21,8 +21,8 @@ TargetFrameTime :: 1./TargetFps
 ////////////////////////////////////////////////
 
 first_time := true
-max_lives := 5
-lives := max_lives
+max_lives: i32 = 5
+tries: i32
 should_restart: b32
 t_restart: f32
 paused_update: b32
@@ -31,6 +31,7 @@ region: Rectangle2i
 regions: [dynamic]Rectangle2i
 wrap: [2]b32 = {false, false}
 max_depth: i32 = 20
+wait_time: f32 = 0.1
 
 main :: proc () {
     Dim :: v2i {150, 100}
@@ -49,11 +50,15 @@ main :: proc () {
     
     camera := rl.Camera2D { zoom = 1 }
     
+    temp_arena: Arena
+    init_arena(&temp_arena, make([]u8, 128*Megabyte))
+    // context.temp_allocator = to_allocator(&temp_arena)
     arena: Arena
-    init_arena(&arena, make([]u8, 1*Megabyte))
+    init_arena(&arena, make([]u8, 128*Megabyte))
     
     collapse: Collapse
-    init_collapse(&collapse, Dim)
+    _entropy := seed_random_series()
+    init_collapse(&collapse, Dim, &_entropy)
     
     File :: struct {
         name: string,
@@ -93,15 +98,15 @@ main :: proc () {
         }
     }
     
-    entropy := seed_random_series()
-    
     using collapse
     
     full_region = rectangle_min_dimension(v2i{}, dimension)
-    divisor: i32 : 3
+    divisor: i32 : 1
     for y in 0..<divisor {
         for x in 0..<divisor {
             r := rectangle_min_max((dimension*{x,y})/divisor, (dimension*{x+1,y+1})/divisor)
+            // r = add_radius(r, 1)
+            // r = get_intersection(r, full_region)
             append_elem(&regions, r)
         }
     }
@@ -109,8 +114,7 @@ main :: proc () {
     region_index = 0
     region = regions[region_index]
     
-    imgui.igSetCurrentContext(imgui.igCreateContext(nil))
-    
+    imgui.set_current_context(imgui.create_context(nil))
     rlimgui.ImGui_ImplRaylib_Init()
     
     for !rl.WindowShouldClose() {
@@ -121,13 +125,19 @@ main :: proc () {
         imgui.new_frame()
         
         imgui.text("Choose Input Image")
-        imgui.columns(6)
+        imgui.columns(4)
         for _, &image in images {
             imgui.push_id(&image)
             if imgui.image_button(auto_cast &image.texture.id, 30) {
+                // @todo(viktor): make this more explicite so i dont forget any one of these steps
                 clear(&collapse.tiles)
                 extract_tiles(&collapse, image.image)
                 collapse.state = .Contradiction
+                collapse.max_frequency = 0
+                clear(&collapse.lowest_entropies)
+                clear(&collapse.to_check)
+                collapse.to_check_index = 0
+                
                 first_time = true
                 should_restart = true
                 t_restart = 0
@@ -136,29 +146,38 @@ main :: proc () {
             imgui.next_column()
         }
         imgui.columns(1)
+        
         imgui.checkbox("Loop on X Axis", cast(^bool) &wrap.x)
         imgui.checkbox("Loop on Y Axis", cast(^bool) &wrap.y)
-        imgui.slider_int("Recursion Depth", &max_depth, 1, 1000, flags = .Logarithmic)
+        imgui.slider_int("Depth", &max_depth, 1, 200, flags = .Logarithmic)
+        imgui.slider_float("Delay", &wait_time, 0, 5, flags = .Logarithmic)
+        if imgui.input_int("Retries", &max_lives, 1, 10) {
+            max_lives = clamp(max_lives, 1, 100)
+        }
         
         if len(collapse.tiles) != 0 {
-            imgui.columns(2)
             if imgui.button(paused_update ? "Unpause" : "Pause") {
                 paused_update = !paused_update
             }
-            if !should_restart {
-                if imgui.button("Restart") {
+            
+            imgui.text(tprint("Retries %/% for this region", tries, max_lives))
+            
+            if imgui.button(should_restart ? tprint("Restarting in %", view_seconds(t_restart, precision = 3)) : "Restart") {
+                if !should_restart {
                     should_restart = true
                     t_restart = 0.3
-                }
-            } else {
-                if imgui.button("Restart now") {
+                } else {
                     t_restart = 0
                 }
-                imgui.next_column()
-                imgui.text(tprint("Restarting in %", view_seconds(t_restart, precision = 3)))
             }
-            imgui.columns(1)
         }
+        
+        imgui.text("Stats")
+        is_late := cast(f32) time.duration_seconds(_update) > TargetFrameTime
+        imgui.text_colored(is_late ? Orange : White, tprint(`Update %`, _update))
+        imgui.text(tprint("  matches %",   _matches))
+        imgui.text(tprint("Render %", _render))
+        imgui.text(tprint("Total %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)))
         
         if !paused_update {
             /* @todo(viktor): How can we separate the core of the algorithm from the data is works on.
@@ -173,37 +192,33 @@ main :: proc () {
                     
             if !should_restart {
                 _matches = 0
-                update(&collapse, &entropy)
+                update(&collapse)
             } else {
-                if len(collapse.tiles) == 0 {
-                    should_restart = false
+                assert(len(collapse.tiles) != 0)
+                
+                t_restart -= rl.GetFrameTime()
+                if t_restart <= 0 {
                     t_restart = 0
-                } else {
-                    t_restart -= rl.GetFrameTime()
-                    if t_restart <= 0 {
-                        t_restart = 0
-                        should_restart = false
-                        if first_time {
-                            first_time = false
-                            
-                            _total_start = time.now()
-                            
-                            region_index = 0
-                            region = regions[region_index]
-                            entangle_grid(&collapse, full_region)
+                    should_restart = false
+                    if first_time {
+                        first_time = false
+                        
+                        _total_start = time.now()
+                        
+                        region_index = 0
+                        region = regions[region_index]
+                        entangle_grid(&collapse, full_region)
+                    } else {
+                        tries += 1
+                        if region_index == 0 {
+                            entangle_grid(&collapse, region)
                         } else {
-                            lives -= 1
-                            entangle_grid(&collapse, region, lives != 0)
-                            if lives == 0 {
-                                if region_index != 0 {
-                                    region_index -= 1
-                                    lives = max_lives
-                                    region = regions[region_index]
-                                    entangle_grid(&collapse, region, true)
-                                    
-                                } else {
-                                    entangle_grid(&collapse, full_region)
-                                }
+                            entangle_grid(&collapse, region, tries < max_lives ? max_depth : 0)
+                            if tries >= max_lives {
+                                entangle_grid(&collapse, full_region)
+                                region_index = 0
+                                tries = 0
+                                region = regions[region_index]
                             }
                         }
                     }
@@ -270,19 +285,6 @@ main :: proc () {
         rl.EndMode2D()
         _render = time.since(render_start)
         
-        imgui.begin("Stats")
-            if paused_update {
-                imgui.text_colored(Blue, "### Paused ###")
-            }
-            is_late := cast(f32) time.duration_seconds(_update) > TargetFrameTime
-            imgui.text_colored(is_late ? Orange : White, tprint(`Update %`, _update))
-            if !should_restart {
-                imgui.text(tprint("  matches %",   _matches))
-            }
-            imgui.text(tprint("Render %", _render))
-            imgui.text(tprint("Total %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)))
-        imgui.end()
-        
         if len(collapse.tiles) != 0 {
             imgui.begin("Tiles")
                 imgui.columns(ceil(i32, square_root(cast(f32) len(collapse.tiles))))
@@ -295,28 +297,28 @@ main :: proc () {
         }
         
         imgui.render()
-        rlimgui.ImGui_ImplRaylib_Render(imgui.igGetDrawData())
+        rlimgui.ImGui_ImplRaylib_Render(imgui.get_draw_data())
         rl.EndDrawing()
     }
 }
 
-update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
+update :: proc (collapse: ^Collapse) {
     update_start := time.now()
     defer _update = time.since(update_start)
-                
+    
     update_done := false
     for !update_done {
         switch collapse.state {
           case .Uninitialized:
-            
+            update_done = true
+        
           case .FindLowestEntropy:
             collapse.state = find_lowest_entropy(collapse, region)
             
           case .CollapseCell:
-            cell := collapse_one_of_the_cells_with_lowest_entropy(collapse, entropy)
+            cell := collapse_one_of_the_cells_with_lowest_entropy(collapse)
             assert(cell != nil)
-            
-            add_neighbours(collapse, cell, max_depth)
+            add_neighbours(collapse, cell.p, max_depth)
             collapse.state = .Propagation
             
           case .Propagation:
@@ -326,61 +328,65 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
                 for w, dim in wrap do if w {
                     p[dim] = wrapped[dim]
                 }
+                pp := p
+                p = wrapped
                 
-                if contains(region, p) {
-                    p = wrapped
-                    next_cell := &collapse.grid[p.x + p.y * collapse.dimension.x]
-                    assert(next_cell.p == p)
-                    if !next_cell.checked {
-                        next_cell.checked = true
-                        
-                        if wave, ok := &next_cell.value.(WaveFunction); ok {
-                            // @speed O(n*m*d)
-                            // n = a.wave.state_count
-                            // m = b.wave.state_count
-                            // d = len(Direction)
-                            
-                            loop: for &state, index in wave.states do if state {
-                                for direction in Direction {
-                                    bp := p + Delta[direction]
-                                    bwrapped := rectangle_modulus(collapse.full_region, bp)
-                                    for w, dim in wrap do if w {
-                                        bp[dim] = bwrapped[dim]
-                                    }
-                                    
-                                    if contains(collapse.full_region, bp) {
-                                        b := &collapse.grid[bp.x + bp.y * collapse.dimension.x]
-                                        if !matches(collapse, index, b, direction) {
-                                            wave_remove_state(collapse, next_cell, wave, index) 
-                                            continue loop
-                                        }
-                                    }
-                                }
+                cell := &collapse.grid[p.x + p.y * collapse.dimension.x]
+                assert(cell.p == p)
+                
+                
+                if wave, ok := &cell.value.(WaveFunction); ok {
+                    // @speed O(n*m*d)
+                    // n = a.wave.state_count
+                    // m = b.wave.state_count
+                    // d = len(Direction)
+                    
+                    changed: b32
+                    loop: for &state, index in wave.states do if state {
+                        for direction in Direction {
+                            bp := p + Delta[direction]
+                            bwrapped := rectangle_modulus(collapse.full_region, bp)
+                            for w, dim in wrap do if w {
+                                bp[dim] = bwrapped[dim]
                             }
                             
-                            if next_cell.changed {
-                                wave_recompute_entropy(collapse, wave)
-                                add_neighbours(collapse, next_cell, check.depth)
+                            if contains(collapse.full_region, bp) {
+                                b := &collapse.grid[bp.x + bp.y * collapse.dimension.x]
+                                if !matches(collapse, index, b, direction) {
+                                    changed = true
+                                    wave_remove_state(collapse, cell, wave, index)
+                                    continue loop
+                                }
                             }
                         }
                     }
+                    
+                    if changed {
+                        if contains(region, pp) {
+                            wave_recompute_entropy(collapse, wave)
+                            
+                            add_neighbours(collapse, cell.p, check.depth)
+                        }
+                    }
                 }
+                
             } else {
                 collapse.state = .FindLowestEntropy
             }
+            k := 123
             
           case .Contradiction:
             if !should_restart {
                 should_restart = true
-                t_restart = .1
+                t_restart = wait_time
             }
             
           case .Done:
             region_index += 1
-            lives = max_lives
+            tries = 0
             if region_index < len(regions) {
                 region = regions[region_index]
-                entangle_grid(collapse, region, true)
+                entangle_grid(collapse, region, max_depth)
             } else {
                 update_done = true
             }
@@ -524,9 +530,9 @@ is_present :: proc (using collapse: ^Collapse, tile: Tile) -> (result: ^Tile, ok
     return result, result != nil
 }
 
-add_neighbours :: proc (using collapse: ^Collapse, cell: ^Cell, depth: i32) {
+add_neighbours :: proc (using collapse: ^Collapse, p: v2i, depth: i32) {
     for delta in Delta {
-        maybe_append_to_check(collapse, cell.p + delta, depth-1)
+        maybe_append_to_check(collapse, p + delta, depth-1)
     }
 }
 
@@ -534,9 +540,13 @@ draw_wave :: proc (using collapse: ^Collapse, wave: WaveFunction, p: v2, size: v
     when true {
         total := cast(f32) len(tiles)
         count := cast(f32) wave.states_count
-        ratio := (1-safe_ratio_0(count, total))
-        color := cast(rl.Color) vec_cast(u8, v4{ratio, ratio, ratio, 1-ratio} * 255)
-        rl.DrawRectangleRec({p.x, p.y, size.x, size.y}, color)
+        if count != 0 {
+            ratio := (1-safe_ratio_0(count, total))
+            color := cast(rl.Color) vec_cast(u8, v4{ratio, ratio, ratio, 1-ratio} * 255)
+            rl.DrawRectangleRec({p.x, p.y, size.x, size.y}, color)
+        } else {
+            rl.DrawRectangleRec({p.x, p.y, size.x, size.y}, {0xff, 0, 0xff, 0xff})
+        }
     } else {
         count: f32
         sum:   v4
@@ -550,9 +560,13 @@ draw_wave :: proc (using collapse: ^Collapse, wave: WaveFunction, p: v2, size: v
             }
         }
         
-        average := safe_ratio_0(sum, count)
-        color := cast(rl.Color) vec_cast(u8, average)
-        rl.DrawRectangleRec({p.x, p.y, size.x, size.y}, color)
+        if count != 0 {
+            average := safe_ratio_0(sum, count)
+            color := cast(rl.Color) vec_cast(u8, average)
+            rl.DrawRectangleRec({p.x, p.y, size.x, size.y}, color)
+        } else {
+            rl.DrawRectangleRec({p.x, p.y, size.x, size.y}, rl.RED)
+        }
     }
 }
 

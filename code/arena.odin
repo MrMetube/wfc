@@ -1,6 +1,8 @@
 #+vet !unused-procedures
 package main
 
+import m "core:mem"
+
 Arena :: struct {
     storage:    []u8,
     used:       u64,
@@ -188,4 +190,34 @@ end_temporary_memory :: proc(temp_mem: TemporaryMemory) {
 
 check_arena :: proc(arena: ^Arena) {
     assert(arena.temp_count == 0)
+}
+
+to_allocator :: proc (arena: ^Arena) -> (m.Allocator) {
+    result := m.Allocator {
+        procedure = proc(allocator_data: rawptr, mode: m.Allocator_Mode, size, alignment: int, old_memory: rawptr, old_size: int, location := #caller_location) -> ([]byte, m.Allocator_Error) {
+            arena := cast(^Arena) allocator_data
+            
+            switch mode {
+              case .Alloc:            return push_slice(arena, u8, size, align_clear(alignment)),    .None
+              case .Alloc_Non_Zeroed: return push_slice(arena, u8, size, align_no_clear(alignment)), .None
+              case .Free_All:
+                assert(arena.temp_count == 0)
+                arena.used = 0
+              
+              case .Query_Features:
+                set := (^m.Allocator_Mode_Set)(old_memory)
+                if set != nil {
+                    set^ = {.Alloc, .Alloc_Non_Zeroed, .Free_All, .Query_Features}
+                }
+                
+              case .Free, .Resize, .Resize_Non_Zeroed, .Query_Info:
+                return nil, .Mode_Not_Implemented
+            }
+            
+            return nil, nil
+        },
+        data = arena,
+    }
+    
+    return result
 }

@@ -200,7 +200,7 @@ visit_and_check_printlikes :: proc(visitor: ^ast.Visitor, node: ^ast.Node) -> ^a
 White  :: ansi.CSI + ansi.FG_BRIGHT_WHITE  + ansi.SGR
 Red    :: ansi.CSI + ansi.FG_BRIGHT_RED    + ansi.SGR
 Yellow :: ansi.CSI + ansi.FG_BRIGHT_YELLOW + ansi.SGR
-Blue   :: ansi.CSI + ansi.FG_BLUE          + ansi.SGR
+Blue   :: ansi.CSI + ansi.FG_BRIGHT_BLUE   + ansi.SGR
 Green  :: ansi.CSI + ansi.FG_BRIGHT_GREEN  + ansi.SGR
 Reset  :: ansi.CSI + ansi.FG_DEFAULT       + ansi.SGR
 
@@ -238,7 +238,9 @@ report_printlike_error :: proc (call: ^ast.Call_Expr, expected, actual: int) {
     }
     
     fmt.printfln("%v\n", Reset)
-    if expected != 0 {
+    if expected == 1 {
+        fmt.printfln("\tThe percent sign that consumes an argument in the format string is highlighted.\n")
+    } else if expected != 0 {
         fmt.printfln("\tThe percent signs that consume an argument in the format string are highlighted.\n")
     }
 }

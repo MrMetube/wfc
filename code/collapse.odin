@@ -21,6 +21,8 @@ CollapseState :: enum {
 Collapse :: struct {
     state: CollapseState,
     
+    entropy: ^RandomSeries,
+    
     grid:    [] Cell, 
     tiles:   [dynamic] Tile,
     
@@ -31,12 +33,11 @@ Collapse :: struct {
     to_check:       [dynamic] Check,
     
     lowest_entropies: [dynamic] ^Cell,
+    
+    max_frequency: f32
 }
 
 Cell :: struct {
-    checked: b32,
-    changed: b32,
-    
     p: v2i,
     value: union {
         TileIndex,
@@ -47,16 +48,13 @@ Cell :: struct {
 TileIndex :: int
 
 WaveFunction :: struct {
-    states: SuperPosition,
+    // states[0] <=> tiles[0] is possible
+    states:       [] b32,
     states_count: u32,
     
     total_frequency: f32,
     entropy: f32,
 }
-
-// s[0] means is tiles[0] possible
-// we assume boolean possibility for now, but could change to real probability which allows for real valued effects and renormilization
-SuperPosition :: []b32
 
 Check :: struct {
     raw_p: v2i,
@@ -75,12 +73,14 @@ Tile :: struct {
 }
 
 Direction :: enum { East=0, North=1, South=2, West=3 }
+
 Opposite_Direction := [Direction] Direction {
     .East  = .West,
     .North = .South,
     .West  = .East,
     .South = .North,
 }
+
 Delta := [Direction] v2i {
     .East  = {+1,  0},
     .North = { 0, -1},
@@ -88,8 +88,9 @@ Delta := [Direction] v2i {
     .South = { 0, +1},
 }
 
-init_collapse :: proc (collapse: ^Collapse, dimension: v2i) {
+init_collapse :: proc (collapse: ^Collapse, dimension: v2i, entropy: ^RandomSeries) {
     collapse.dimension = dimension
+    collapse.entropy   = entropy
     collapse.full_region = rectangle_min_dimension(v2i{}, dimension)
     
     collapse.grid             = make([] Cell, collapse.dimension.x * collapse.dimension.y)
@@ -98,59 +99,48 @@ init_collapse :: proc (collapse: ^Collapse, dimension: v2i) {
     collapse.lowest_entropies = make([dynamic] ^Cell)
 }
 
-entangle_grid :: proc(using collapse: ^Collapse, region: Rectangle2i, check_region_border := false) {
+cell_entangle :: proc(using collapse: ^Collapse, cell: ^Cell, p: v2i) {
+    cell.p = p
+            
+    wave, ok := &cell.value.(WaveFunction)
+    if ok {
+        delete(wave.states)
+        wave ^= {}
+    } else {
+        cell.value = WaveFunction{}
+        wave = &cell.value.(WaveFunction)
+    }
+    
+    wave.total_frequency = max_frequency
+    wave.states = make([] b32, len(tiles))
+    wave.states_count = auto_cast len(wave.states)
+    
+    for &it in wave.states do it = true
+    
+    wave_recompute_entropy(collapse, wave)
+}
+
+entangle_grid :: proc(using collapse: ^Collapse, region: Rectangle2i, region_border_check_depth: i32 = 0) {
     clear(&lowest_entropies)
     clear(&to_check)
     to_check_index = 0
     
-    max_frequency: f32
-    for tile in tiles do max_frequency += cast(f32) tile.frequency
+    if max_frequency == 0 {
+        for tile in tiles do max_frequency += cast(f32) tile.frequency
+    }
     
     for y in region.min.y..<region.max.y {
         for x in region.min.x..<region.max.x {
             wrapped := rectangle_modulus(full_region, v2i{x,y})
             cell := &grid[wrapped.x + wrapped.y * dimension.x]
-            
-            cell.changed = false
-            cell.checked = false
-            cell.p = wrapped
-            
-            wave, ok := &cell.value.(WaveFunction)
-            if ok {
-                delete(wave.states)
-                wave ^= {}
-            } else {
-                cell.value = WaveFunction{}
-                wave = &cell.value.(WaveFunction)
-            }
-            
-            wave.total_frequency = max_frequency
-            wave.states = make(SuperPosition, len(tiles))
-            wave.states_count = auto_cast len(wave.states)
-            
-            for &it in wave.states do it = true
-            
-            wave_recompute_entropy(collapse, wave)
+            cell_entangle(collapse, cell, wrapped)
         }
     }
     
-    if check_region_border {
-        for y in region.min.y..<region.max.y {
-            maybe_append_to_check(collapse, {region.min.x, y}, 1)
-            maybe_append_to_check(collapse, {region.max.x-1, y}, 1)
-        }
-        for x in region.min.x..<region.max.x {
-            maybe_append_to_check(collapse, {x, region.min.y}, 1)
-            maybe_append_to_check(collapse, {x, region.max.y-1}, 1)
-        }
-        collapse.state = .Propagation
-    } else {
-        collapse.state = .FindLowestEntropy
-    }
-    
+    collapse.state = .FindLowestEntropy
 }
 
-collapse_one_of_the_cells_with_lowest_entropy :: proc (using collapse: ^Collapse, entropy: ^RandomSeries) -> (cell: ^Cell) {
+collapse_one_of_the_cells_with_lowest_entropy :: proc (using collapse: ^Collapse) -> (cell: ^Cell) {
     assert(len(lowest_entropies) != 0)
     
     cell = random_value(entropy, lowest_entropies[:])
@@ -160,16 +150,16 @@ collapse_one_of_the_cells_with_lowest_entropy :: proc (using collapse: ^Collapse
     total_freq := cast(u32) wave.total_frequency
     choice := random_between_u32(entropy, 0, total_freq)
     
-    pick: TileIndex
-    for state, tile_index in wave.states {
-        if !state do continue
-        option := tiles[tile_index]
+    pick: TileIndex = -1
+    for state, index in wave.states do if state {
+        option := tiles[index]
         if choice <= option.frequency {
-            pick = tile_index
+            pick = index
             break
         }
         choice -= option.frequency
     }
+    assert(pick != -1)
     
     wave_collapse(collapse, cell, pick)
     
@@ -190,23 +180,20 @@ find_lowest_entropy :: proc (using collapse: ^Collapse, region: Rectangle2i) -> 
             wrapped := rectangle_modulus(full_region, v2i{x,y})
             cell := &grid[wrapped.x + wrapped.y * dimension.x]
             
-            cell.checked = false
-            cell.changed = false
-            
             if wave, ok := &cell.value.(WaveFunction); ok {
                 collapsed_all_wavefunctions = false
                 if wave.states_count == 0 {
                     no_contradictions = false
                     break loop
-                }
-                
-                if lowest_entropy > wave.entropy {
-                    lowest_entropy = wave.entropy
-                    clear(&lowest_entropies)
-                }
-                
-                if lowest_entropy == wave.entropy {
-                    append_elem(&lowest_entropies, cell)
+                } else {
+                    if lowest_entropy > wave.entropy {
+                        lowest_entropy = wave.entropy
+                        clear(&lowest_entropies)
+                    }
+                    
+                    if lowest_entropy == wave.entropy {
+                        append_elem(&lowest_entropies, cell)
+                    }
                 }
             }
         }
@@ -279,29 +266,37 @@ matches_tile :: proc(using collapse: ^Collapse, a_index, b_index: TileIndex, dir
     return result
 }
 
-wave_collapse :: proc (using collapse: ^Collapse, cell: ^Cell, pick: TileIndex) {
+wave_collapse :: proc { wave_collapse_to_pick, wave_collapse_only_one_state }
+wave_collapse_to_pick :: proc (using collapse: ^Collapse, cell: ^Cell, pick: TileIndex) {
     wave := cell.value.(WaveFunction)
     cell.value = pick
     delete(wave.states)
 }
 
-wave_remove_state :: proc (collapse: ^Collapse, cell: ^Cell, wave: ^WaveFunction, state_index: TileIndex) {
-    cell.changed = true
-    wave.states[state_index] = false
+wave_collapse_only_one_state :: proc (using collapse: ^Collapse, cell: ^Cell) {
+    wave := cell.value.(WaveFunction)
+    assert(wave.states_count == 1)
+    
+    for state, index in wave.states do if state {
+        cell.value = index
+        delete(wave.states)
+        break
+    }
+}
+
+wave_remove_state :: proc (collapse: ^Collapse, cell: ^Cell, wave: ^WaveFunction, index: TileIndex) {
     wave.states_count -= 1
-    wave.total_frequency -= cast(f32) collapse.tiles[state_index].frequency
+    wave.states[index] = false
+    
+    wave.total_frequency -= cast(f32) collapse.tiles[index].frequency
 }
 
 wave_recompute_entropy :: proc (using collapse: ^Collapse, wave: ^WaveFunction) {
-    when true {
-        wave.entropy = 0
-        for state, index in wave.states do if state {
-            frequency := cast(f32) tiles[index].frequency
-            probability := frequency / wave.total_frequency
-            // Shannon entropy is the negative sum of P * log2(P)
-            wave.entropy -= probability * log2(probability)
-        }
-    } else {
-        wave.entropy = cast(f32) wave.states_count
+    wave.entropy = 0
+    for state, index in wave.states do if state {
+        frequency := cast(f32) tiles[index].frequency
+        probability := frequency / wave.total_frequency
+        // Shannon entropy is the negative sum of P * log2(P)
+        wave.entropy -= probability * log2(probability)
     }
 }
