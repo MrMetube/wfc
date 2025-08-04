@@ -34,7 +34,7 @@ print_to_console :: proc (format: string, args: ..any, flags: FormatContextFlags
 }
 
 @(printlike)
-print_to_allocator :: proc (format: string, args: ..any, flags: FormatContextFlags = {}, allocator: runtime.Allocator = {}) -> (result: string) {
+print_to_allocator :: proc (allocator: runtime.Allocator, format: string, args: ..any, flags: FormatContextFlags = {}) -> (result: string) {
     s := print(buffer = console_buffer[:], format = format, args = args, flags = flags)
     buffer := make([]u8, len(s), allocator)
     copy(buffer, s)
@@ -44,8 +44,8 @@ print_to_allocator :: proc (format: string, args: ..any, flags: FormatContextFla
 
 ////////////////////////////////////////////////
 
-@(printlike) tprint :: proc (format: string, args: ..any, flags: FormatContextFlags = {}, allocator := context.temp_allocator) -> (result: string) { return print_to_allocator(format = format, args = args, flags = flags, allocator = allocator) }
-@(printlike) sprint :: proc (format: string, args: ..any, flags: FormatContextFlags = {}, allocator := context.allocator)      -> (result: string) { return print_to_allocator(format = format, args = args, flags = flags, allocator = allocator) }
+@(printlike) tprint :: proc (format: string, args: ..any, flags: FormatContextFlags = {}, allocator := context.temp_allocator) -> (result: string) { return print_to_allocator(allocator = allocator, format = format, args = args, flags = flags) }
+@(printlike) sprint :: proc (format: string, args: ..any, flags: FormatContextFlags = {}, allocator := context.allocator)      -> (result: string) { return print_to_allocator(allocator = allocator, format = format, args = args, flags = flags) }
 
 @(printlike) println  :: proc(format: string, args: ..any, flags: FormatContextFlags = {}) { print_to_console(format = format, args = args, flags = flags + { .AppendNewlineToResult }) }
 @(printlike) sprintln :: proc(format: string, args: ..any, flags: FormatContextFlags = {}) { sprint(format           = format, args = args, flags = flags + { .AppendNewlineToResult }) }

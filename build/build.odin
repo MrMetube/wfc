@@ -16,7 +16,7 @@ Pedantic      :: false
 
 flags    :: ` -error-pos-style:unix -vet-cast -vet-shadowing -ignore-vs-search -use-single-module -microarch:native -target:windows_amd64`
 debug    :: ` -debug `
-windows  := true ? ` -subsystem:windows ` : ` -subsystem:console `
+windows  := !true ? ` -subsystem:windows ` : ` -subsystem:console `
 pedantic :: ` -warnings-as-errors -vet-unused-imports -vet-semicolon -vet-unused-variables -vet-style -vet-packages:main -vet-unused-procedures` 
 check    :: ` -custom-attribute:printlike `
 flags_for_imgui :: ` -extra-linker-flags:"/NODEFAULTLIB:LIBCMTD" `

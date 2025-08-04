@@ -65,47 +65,42 @@ random_bilateral :: proc(series: ^RandomSeries, $T: typeid) -> (result: T) {
 
 
 
-random_choice :: proc { random_choice_integer_0_max, random_choice_integer_min_max }
-random_choice_integer_0_max :: proc(series: ^RandomSeries, max: u32) -> (result: u32) {
-    result = next_random_u32(series) % max
-    return result
-}
-random_choice_integer_min_max :: proc(series: ^RandomSeries, min, max: u32) -> (result: u32) {
-    result = next_random_u32(series) % (max - min) + min
-    return result
-}
 random_pointer :: proc(series: ^RandomSeries, data: []$T) -> (result: ^T) {
     assert(len(data) != 0)
-    result = &data[random_choice(series, auto_cast len(data))]
+    index := random_between(series, i32, 0, cast(i32) len(data)-1)
+    result = &data[index]
     return result
 }
 random_value :: proc(series: ^RandomSeries, data: []$T) -> (result: T) {
     assert(len(data) != 0)
-    result = data[random_choice(series, auto_cast len(data))]
+    index := random_between(series, i32, 0, cast(i32) len(data)-1)
+    result = data[index]
     return result
 }
 
-random_between_i32 :: proc(series: ^RandomSeries, min, max: i32) -> (result: i32) {
-    assert(min < max)
-    result = min + cast(i32)(next_random_u32(series) % cast(u32)((max+1)-min))
-    
-    return result
+random_between :: proc(series: ^RandomSeries, $T: typeid, min, max: T) -> (result: T) {
+    assert(min <= max)
+         when T == i32 do return random_between_integer(series, T, min, max)
+    else when T == u32 do return random_between_integer(series, T, min, max)
+    else when T == f32 do return random_between_f32(series, min, max)
+    else {
+        #assert(false)
+        unreachable()
+    }
 }
 
-random_between_u32 :: proc(series: ^RandomSeries, min, max: u32) -> (result: u32) {
-    assert(min < max)
-    result = min + (next_random_u32(series) % ((max+1)-min))
-    assert(result >= min)
-    assert(result <= max)
+random_between_integer :: proc(series: ^RandomSeries, $T: typeid, min, max: T) -> (result: T) 
+where size_of(T) <= size_of(u32) {
+    span := cast(u32) ((max+1)-min)
+    result = min + cast(T) (next_random_u32(series) % span)
+
     return result
 }
 
 random_between_f32 :: proc(series: ^RandomSeries, min, max: f32) -> (result: f32) {
-    assert(min < max)
     value := random_unilateral(series, f32)
     range := max - min
     result = min + value * range
-    assert(result >= min)
-    assert(result <= max)
+    
     return result
 }

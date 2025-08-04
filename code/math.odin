@@ -279,6 +279,16 @@ V4_xy_z_w :: proc(xy: [2]$T, z, w: T) -> (result: [4]T) {
     return result
 }
 
+v4_to_rgba :: proc(rgba: v4) -> (result: [4]u8) {
+    result = vec_cast(u8, rgba * 255)
+    return result
+}
+rgba_to_v4 :: proc(rgba: [4]u8) -> (result: v4) {
+    result = vec_cast(f32, rgba)
+    result /= 255
+    return result
+}
+
 perpendicular :: proc(v: v2) -> (result: v2) {
     result = { -v.y, v.x }
     return result
@@ -481,6 +491,14 @@ contains :: proc(rect: Rectangle($T), point: T) -> (result: b32) {
     result = true
     #unroll for i in 0..<len(T) {
         result &&= rect.min[i] <= point[i] && point[i] < rect.max[i] 
+    }
+    return result
+}
+
+dimension_contains :: proc(dimension: $V/[$N]$T, point: V) -> (result: b32) {
+    result = true
+    #unroll for i in 0..<N {
+        result &&= 0 <= point[i] && point[i] < dimension[i] 
     }
     return result
 }
