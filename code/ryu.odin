@@ -23,6 +23,7 @@
 // - the removal of the HAS_64_BIT_INTRINSICS
 // - the removal of the ryu_generic code
 // - the removal of the RYU_DEBUG define and any debug prints
+#+private file
 #+vet !semicolon !unused-procedures !style
 package main
 
@@ -718,12 +719,14 @@ d2d_small_int :: proc (ieeeMantissa: u64, ieeeExponent: i32, v: ^floating_decima
     return true;
 }
 
+@(private="package")
 d2s :: proc(f: f64, allocator := context.allocator) -> (result: string) {
     buffer := make([]u8, 25, allocator)
     result = d2s_buffered(f, buffer); 
     return result;
 }
 
+@(private="package")
 d2s_buffered :: proc (f: f64, buffer: []u8) -> (result: string) {
     // Step 1: Decode the floating-point number, and unify normalized and subnormal cases.
     bits: u64 = double_to_bits(f);
@@ -990,12 +993,14 @@ to_chars_32 :: proc (v: floating_decimal_32, sign: bool, result: []u8) -> int {
     return index;
 }
 
+@(private="package")
 f2s :: proc (f: f32, allocator := context.allocator) -> string {
     buffer := make([]u8, 16, allocator)
     result := f2s_buffered(f, buffer); 
     return result;
 }
 
+@(private="package")
 f2s_buffered :: proc (f: f32,  buffer: []u8) -> (result: string) {
     // Step 1: Decode the floating-point number, and unify normalized and subnormal cases.
     bits: u32 = float_to_bits(f);
@@ -1241,12 +1246,14 @@ copy_special_str_printf :: proc (result: []u8, sign: bool, mantissa: u64) -> int
     return cast(int) sign + 8;
 }
 
+@(private="package")
 d2fixed :: proc (d: f64, precision: u32, allocator:= context.allocator) -> (result: string) {
     buffer: []u8 = make([]u8, 2000, allocator);
     result = d2fixed_buffered(d, precision, buffer);
     return result
 }
 
+@(private="package")
 d2fixed_buffered :: proc (d: f64, precision: u32, buffer: []u8) -> (result: string) {
     bits: u64 = double_to_bits(d);
     
@@ -1682,6 +1689,7 @@ int64Bits2Double :: proc (bits: u64) -> f64 {
     return f;
 }
 
+@(private="package")
 s2d_n :: proc ( buffer: []u8, len: int, result: ^f64) -> Status {
     if (len == 0) {
         return .INPUT_TOO_SHORT;
@@ -1852,6 +1860,7 @@ s2d_n :: proc ( buffer: []u8, len: int, result: ^f64) -> Status {
     return .SUCCESS;
 }
 
+@(private="package")
 s2d :: proc (buffer: string) -> (f64) {
     result: f64
     _= s2d_n(transmute([]u8) buffer, len(buffer), &result);
@@ -1874,6 +1883,7 @@ int32Bits2Float :: proc (bits: u32) -> f32 {
     return f;
 }
 
+@(private="package")
 s2f_n :: proc (buffer: []u8, len: int, result: ^f32) -> Status {
     if (len == 0) {
         return .INPUT_TOO_SHORT;
@@ -2045,6 +2055,7 @@ s2f_n :: proc (buffer: []u8, len: int, result: ^f32) -> Status {
     return .SUCCESS;
 }
 
+@(private="package")
 s2f :: proc (buffer: []u8, result: ^f32) -> Status {
     return s2f_n(buffer, len(buffer), result);
 }

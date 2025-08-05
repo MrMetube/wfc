@@ -9,7 +9,6 @@ import rl "vendor:raylib"
 import imgui "../lib/odin-imgui/"
 import rlimgui "../lib/odin-imgui/examples/raylib"
 
-// @important @todo(viktor): should north be +1 or -1 ! Check this!
 Deltas := [Direction] v2i { .East = {1,0}, .West = {-1,0}, .North = {0,-1}, .South = {0,1}}
 
 Screen_Size :: v2i{1920, 1080}
@@ -23,6 +22,8 @@ TargetFrameTime :: 1./TargetFps
 
 ////////////////////////////////////////////////
 
+N: i32 = 3
+
 first_time := true
 should_restart: b32
 t_restart: f32
@@ -31,11 +32,13 @@ wait_time: f32 = 0.1
 
 dimension: v2i = {150, 100}
 grid: [] Cell
+
 average_colors: [] Average_Color
 Average_Color :: struct {
     color: rl.Color,
     states_count_when_computed: u32,
 }
+render_wavefunction_as_average: b32 = true
 
 Cell :: struct {
     p: v2i,
@@ -57,8 +60,7 @@ Support :: struct {
     amount: [Direction] i32
 }
 
-Matches :: [/* a State_Id */] [Direction] [/* b State_Id */] b32
-matches: Matches
+supports: [/* from State_Id */][Direction][/* to State_Id */] i32
 
 Direction :: enum {
     East, North, West, South,
@@ -70,7 +72,18 @@ textures_and_images: [dynamic] struct {
     texture: rl.Texture,
 }
 states_direction: Direction
-render_wavefunction_as_average: b32
+
+to_be_collapsed: ^Cell
+
+changes: [dynamic] Change
+changes_cursor: int
+
+Change :: struct {
+    p: v2i,
+    removed_states: [dynamic] State_Id,
+}
+
+is_done: b32
 
 main :: proc () {
     size: f32
@@ -156,14 +169,15 @@ main :: proc () {
         // UI
         
         imgui.text("Choose Input Image")
+        imgui.slider_int("Tile Pattern Size", &N, 1, 10)
         imgui.columns(4)
         for _, &image in images {
             imgui.push_id(&image)
             if imgui.image_button(auto_cast &image.texture.id, 30) {
                 assert(image.image.format == .UNCOMPRESSED_R8G8B8A8)
                 
-                if collapse._states != nil {
-                    resize(&collapse._states, 0)
+                if collapse.states != nil {
+                    resize(&collapse.states, 0)
                     collapse.Extraction = {} // @leak
                 }
                 
@@ -181,7 +195,7 @@ main :: proc () {
         }
         imgui.columns(1)
         
-        if len(collapse._states) != 0 {
+        if len(collapse.states) != 0 {
             if imgui.button(paused_update ? "Unpause" : "Pause") {
                 paused_update = !paused_update
             }
@@ -199,6 +213,8 @@ main :: proc () {
         }
         
         imgui.text("Stats")
+        tile_count := len(collapse.states)
+        imgui.text_colored(tile_count > 200 ? Red : White, tprint("Tile count %", tile_count))
         is_late := cast(f32) time.duration_seconds(_update) > TargetFrameTime
         imgui.text_colored(is_late ? Orange : White, tprint(`Update %`, _update))
         imgui.text(tprint("Render %", _render))
@@ -225,9 +241,9 @@ main :: proc () {
                 }
             }
             
-            // if collapse.state != .Done {
+            if !is_done {
                 _total = time.since(_total_start)
-            // }
+            }
         }
         
         ////////////////////////////////////////////////
@@ -239,6 +255,7 @@ main :: proc () {
         render_start := time.now()
         rl.BeginMode2D(camera)
         
+        is_done = true
         for y in 0..<dimension.y {
             for x in 0..<dimension.x {
                 index := x + y * dimension.x
@@ -248,6 +265,7 @@ main :: proc () {
                 rect := rl.Rectangle {p.x, p.y, size, size}
                 switch value in cell.value {
                   case WaveFunction: 
+                    is_done = false
                     if len(value.supports) == 0 {
                         color := rl.Color { 255, 0, 255, 255 }
                         rl.DrawRectangleRec(rect, color)
@@ -260,8 +278,8 @@ main :: proc () {
                                 color: [4]f32
                                 count: f32
                                 for support in value.supports {
-                                    state := collapse._states[support.id]
-                                    value := cast([4]u8) state.values[1 + 1 * 3] // middle
+                                    state := collapse.states[support.id]
+                                    value := cast([4]u8) state.values[0] // middle
                                     color += rgba_to_v4(value) * cast(f32) state.frequency
                                     count += cast(f32) state.frequency
                                 }
@@ -279,8 +297,8 @@ main :: proc () {
                     }
                     
                   case Collapsed:
-                    values := collapse._states[value.value].values
-                    color := values[1 + 1 * 3] // middle
+                    values := collapse.states[value.value].values
+                    color := values[0] // middle
                     rl.DrawRectangleRec(rect, color)
                 }
             }
@@ -300,18 +318,18 @@ main :: proc () {
         rl.EndMode2D()
         _render = time.since(render_start)
         
-        if collapse._states != nil {
-            if textures_length != len(collapse._states) {
+        if collapse.states != nil {
+            if textures_length != len(collapse.states) {
                 for it in textures_and_images do rl.UnloadTexture(it.texture)
                 
-                textures_length = len(collapse._states)
+                textures_length = len(collapse.states)
                 resize(&textures_and_images, textures_length)
                 
-                for &state, index in collapse._states {
+                for &state, index in collapse.states {
                     image := rl.Image {
                         data = raw_data(state.values),
-                        width  = 3,
-                        height = 3,
+                        width  = N,
+                        height = N,
                         mipmaps = 1,
                         format = .UNCOMPRESSED_R8G8B8A8,
                     }
@@ -319,44 +337,6 @@ main :: proc () {
                     textures_and_images[index].image   = image
                     textures_and_images[index].texture = rl.LoadTextureFromImage(image)
                 }
-            }
-            
-            when false {
-                imgui.begin("States")
-                
-                if imgui.button("East") do states_direction = .East
-                if imgui.button("West") do states_direction = .West
-                if imgui.button("North") do states_direction = .North
-                if imgui.button("South") do states_direction = .South
-                
-                imgui.columns(auto_cast len(collapse._states)+1)
-                for &a, a_index in collapse._states {
-                    for &b, b_index in collapse._states {
-                        if a_index == 0 {
-                            imgui.push_id(cast(i32) textures_and_images[a_index].texture.id)
-                            imgui.image_button(auto_cast &textures_and_images[a_index].texture.id, 15)
-                            imgui.pop_id()
-                            imgui.next_column()
-                        } else if b_index == 0 {
-                            // imgui.push_id(cast(i32) b_index)
-                            imgui.image_button(auto_cast &textures_and_images[b_index].texture.id, 15)
-                            // imgui.pop_id()
-                            imgui.next_column()
-                        }
-                        
-                        if matches[a_index][states_direction][b_index] {
-                            a := a
-                            b := b
-                            imgui.text("o")
-                        } else {
-                            // imgui.text("x")
-                        }
-                        
-                        imgui.next_column()
-                    }
-                }
-                imgui.columns(1)
-                imgui.end()
             }
         }
         
@@ -367,13 +347,12 @@ main :: proc () {
 }
 
 extract_tiles :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
-    N :: 3
-    // @Incomplete: make N a parameter, Allow for rotations and mirroring here
+    // @Incomplete: Allow for rotations and mirroring here
     for by in 0..<height {
         for bx in 0..<width {
             begin_state(c)
-            for dy in cast(i32) 0..<N {
-                for dx in cast(i32) 0..<N {
+            for dy in 0..<N {
+                for dx in 0..<N {
                     x := (bx + dx) % width
                     y := (by + dy) % height
                     append_state_value(c, pixels[x + y * width])
@@ -381,9 +360,12 @@ extract_tiles :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
             }
             end_state(c)
         }
-    }
     
-    matches = make(Matches, len(c._states))
+        print("Extraction: State extraction % %%\r", view_percentage(by, height))
+    }
+    println("Extraction: State extraction done         ")
+    
+    matches := make([] [Direction] [] b8, len(c.states), context.temp_allocator)
     offsets := [Direction] v2i {
         .East  = {-1,0},
         .North = {0, 1},
@@ -391,19 +373,19 @@ extract_tiles :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
         .South = {0,-1},
     }
     
-    for a in c._states {
+    for a, a_index in c.states {
         for offset, d in offsets {
-            matches[a.id][d] = make([] b32, len(c._states))
+            matches[a.id][d] = make([] b8, len(c.states), context.temp_allocator)
             
-            region := rectangle_min_dimension(cast(i32) 0,0,N,N)
+            region := rectangle_min_dimension(cast(i32) 0, 0, N, N)
             dim := get_dimension(region)
-            for b in c._states {
-                does_match: b32 = true
+            for b in c.states {
+                does_match: b8 = true
                 // @speed we could hash these regions and only compare hashes in the n²-loop
                 loop: for y in 0..<dim.y {
                     for x in 0..<dim.x {
-                        ap := v2i{x,y}
-                        bp := v2i{x,y} + offset
+                        ap := v2i{x, y}
+                        bp := v2i{x, y} + offset
                         
                         if contains(region, bp) {
                             a_value := a.values[ap.x + ap.y * dim.x]
@@ -419,42 +401,61 @@ extract_tiles :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
                 matches[a.id][d][b.id] = does_match
             }
         }
+        
+        print("Extraction: Matches generation % %%\r", view_percentage(a_index, len(c.states)))
+    }
+    println("Extraction: Matches generation done        ")
+    
+    // @todo(viktor): Matches is symmetric so we only need to store about half as many values as we currently do
+    when false {
+        for as, a in matches {
+            for ds, d in as {
+                for ok, b in ds {
+                    assert(ok == matches[b][opposite(d)][a])
+                }
+            }
+            print("Extraction: Matches sanity check % %% \r", view_percentage(a, len(matches)))
+        }
+        println("Extraction: Matches sanity check done         ")
     }
     
-    for as, a in matches {
-        for ds, d in as {
-            for ok, b in ds {
-                assert(ok == matches[b][opposite(d)][a])
+    delete(supports)
+    supports = make([][Direction][]i32, len(c.states))
+    
+    for from in c.states {
+        for direction in Direction {
+            if supports[from.id][direction] == nil {
+                supports[from.id][direction] = make([]i32, len(c.states))
+            }
+            
+            for to in c.states {
+                if matches[from.id][direction][to.id] {
+                    supports[from.id][direction][to.id] += 1
+                }
             }
         }
     }
 }
 
-to_be_collapsed: ^Cell
-changes: [dynamic] Change
-Change :: struct {
-    p: v2i,
-    removed_states: [dynamic] State_Id,
-}
-changes_cursor: int
-
-update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
+update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
     update_start := time.now()
     defer _update = time.since(update_start)
     
     update: for {
-        if collapse._states == nil do break update
+        if c.states == nil do break update
         
         if len(changes) == 0 {
             if to_be_collapsed == nil {
+                // Find next cell to be collapsed 
+                
                 cells_with_lowest_entropy := make([dynamic]^Cell, context.temp_allocator)
                 lowest_entropy := max(u32)
                 
-                if !true {
+                if false {
                     // Linear
                     search: for &cell in grid do if wave, ok := cell.value.(WaveFunction); ok {
                         if len(wave.supports) == 0 {
-                            restart(collapse)
+                            restart(c)
                             break update
                         }
                         
@@ -466,16 +467,8 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
                 } else {
                     // Entropy
                     for &cell in grid do if wave, ok := cell.value.(WaveFunction); ok {
-                        when false {
-                            count: u32
-                            for support in wave.states do if support > 0 {
-                                count += 1
-                            }
-                            assert(count == wave.states_count)
-                        }
-                        
                         if len(wave.supports) == 0 {
-                            restart(collapse)
+                            restart(c)
                             break update
                         }
                         
@@ -499,11 +492,13 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
                     }
                 }
             } else {
+                // Collapse chosen cell
+                
                 wave := to_be_collapsed.value.(WaveFunction)
                 pick := Invalid_Id
                 if len(wave.supports) == 1 {
                     for support in wave.supports {
-                        state := &collapse._states[support.id]
+                        state := &c.states[support.id]
                         pick = support.id
                         break
                     }
@@ -512,12 +507,12 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
                     // Random
                     total_frequency: i32
                     for support in wave.supports {
-                        total_frequency += collapse._states[support.id].frequency
+                        total_frequency += c.states[support.id].frequency
                     }
                     
                     target := random_between(entropy, i32, 0, total_frequency)
                     picking: for support in wave.supports {
-                        state := &collapse._states[support.id]
+                        state := &c.states[support.id]
                         target -= state.frequency
                         if target <= 0 {
                             pick = support.id
@@ -534,8 +529,8 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
                     i: i32
                     for support in wave.supports {
                         id := support.id
-                        state := collapse._states[id]
-                        color := state.values[1+1*3]
+                        state := c.states[id]
+                        color := state.values[0] // middle
                         
                         if imgui.color_button(tprint("choose-%", id), rgba_to_v4(cast([4]u8) color)) {
                             pick = id
@@ -562,11 +557,15 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
                     delete(wave.supports)
                     to_be_collapsed.value = Collapsed { pick }
                     
-                    append(&changes, change)
+                    if len(change.removed_states) > 0 {
+                        append(&changes, change)
+                    }
                     to_be_collapsed = nil
                 }
             }
         } else {
+            // Propagate changes
+            
             if changes_cursor >= len(changes) {
                 changes_cursor = 0
                 for it in changes {
@@ -575,125 +574,74 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
                 clear(&changes)
             } else {
                 change := changes[changes_cursor]
-                p := change.p
-                from_cell := &grid[p.x + p.y * dimension.x]
+                assert(len(change.removed_states) > 0)
+                
+                from_cell := &grid[change.p.x + change.p.y * dimension.x]
                 changes_cursor += 1
                 
                 for delta, direction in Deltas {
-                    np := p + delta
-                    if !dimension_contains(dimension, np) do continue 
+                    to_p := change.p + delta
+                    // @wrapping
+                    if !dimension_contains(dimension, to_p) do continue 
                     
-                    to_cell := &grid[np.x + np.y * dimension.x]
-                    if to_wave, ok := &to_cell.value.(WaveFunction); ok {
-                        next_change := Change { p = to_cell.p }
+                    to_cell := &grid[to_p.x + to_p.y * dimension.x]
+                    to_wave, ok := &to_cell.value.(WaveFunction)
+                    if !ok do continue 
+                    
+                    next_change := Change { p = to_cell.p }
+                    #reverse for &to_support, sup_index in to_wave.supports {
+                        amount := &to_support.amount[direction]
+                        support_before := amount^
                         
-                        if !true {
-                            #reverse for &sup, sup_index in to_wave.supports {
-                                to_id := sup.id
-                                if true {
-                                    support_now: i32
-                                    switch from in from_cell.value {
-                                      case Collapsed:
-                                        if matches[from.value][direction][to_id] {
-                                            support_now += 1
-                                        }
-                                      case WaveFunction:
-                                        for from_support in from.supports {
-                                            if matches[from_support.id][direction][to_id] {
-                                                support_now += 1
-                                            }
-                                        }
-                                    }
-                                    
-                                    sup.amount[direction] = support_now
-                                } else {
-                                    support_before := sup.amount[direction]
-                                    removed_support: i32
-                                    for from_id in change.removed_states {
-                                        if matches[from_id][direction][to_id] {
-                                            removed_support += 1
-                                        }
-                                    }
-                                    
-                                    sup.amount[direction] -= removed_support
-                                }
-                                
-                                if sup.amount[direction] <= 0 {
-                                    append(&next_change.removed_states, to_id)
-                                    sup.amount = {}
-                                    unordered_remove(&to_wave.supports, sup_index)
-                                    if len(to_wave.supports) == 0 {
-                                        break update
-                                    }
-                                }
-                            }
+                        remove: b32
+                        if support_before == 0 {
+                            remove = true
                         } else {
-                            #reverse for &to_support, sup_index in to_wave.supports {
-                                any_matches := false
-                                support_count: i32
-                                switch from in from_cell.value {
-                                  case Collapsed:
-                                    if matches[from.value][direction][to_support.id] {
-                                        any_matches = true
-                                        support_count += 1
-                                    }
-                                  case WaveFunction:
-                                    for from_support in from.supports {
-                                        if matches[from_support.id][direction][to_support.id] {
-                                            any_matches = true
-                                            support_count += 1
-                                        }
-                                    }
-                                }
-                                
-                                to_support.amount[direction] = support_count
-                                if !any_matches {
-                                    assert(support_count == 0)
-                                    append(&next_change.removed_states, to_support.id)
-                                    to_support.amount = {}
-                                    unordered_remove(&to_wave.supports, sup_index)
-                                    if len(to_wave.supports) == 0 {
-                                        break update
-                                    }
-                                }
+                            removed_support: i32
+                            for from_id in change.removed_states {
+                                removed_support += supports[from_id][direction][to_support.id]
                             }
                             
-                            when false {
-                                for support in to_wave.supports {
-                                    maximum_support: i32
-                                    minimum_support: i32 = max(i32)
-                                    if support.amount > 0 {
-                                        for b_direction in Direction {
-                                            maximum_support_per_direction: i32
-                                            
-                                            dp := to_cell.p + Deltas[b_direction]
-                                            if !dimension_contains(dimension, dp) do continue
-                                            
-                                            other := grid[dp.x + dp.y * dimension.x]
-                                            switch other_value in other.value {
-                                            case Collapsed:
-                                                maximum_support_per_direction += matches[id][b_direction][other_value.value] ? 1 : 0
-                                            case WaveFunction:
-                                                for it, other_id in other_value.supports do if it.amount > 0 {
-                                                    maximum_support_per_direction += matches[id][b_direction][other_id] ? 1 : 0
-                                                }
-                                            }
-                                            
-                                            minimum_support = min(minimum_support, maximum_support_per_direction)
-                                            maximum_support += maximum_support_per_direction
-                                        }
-                                    }
-                                    if minimum_support == max(i32) do minimum_support = 0
-                                    assert(support.amount <= maximum_support)
-                                }
-                            }
+                            amount^ -= removed_support
+                            amount^ = max(0, amount^)
+                        }
+                        assert(amount^ >= 0)
+                        
+                        if amount^ == 0 {
+                            remove = true
                         }
                         
-                        if len(next_change.removed_states) != 0 {
-                            append(&changes, next_change)
+                        if remove {
+                            append(&next_change.removed_states, to_support.id)
+                            to_support.amount = {}
+                            unordered_remove(&to_wave.supports, sup_index)
+                            if len(to_wave.supports) == 0 {
+                                break update
+                            }
                         }
                     }
                     
+                    if len(next_change.removed_states) > 0 {
+                        found: b32
+                        entry: ^Change
+                        for &other in changes[changes_cursor:] {
+                            if other.p == next_change.p {
+                                found = true
+                                entry = &other
+                            }
+                        }
+                        
+                        if !found {
+                            assert(len(next_change.removed_states) > 0)
+                            append(&changes, Change { p = next_change.p })
+                            entry = &changes[len(changes)-1]
+                        }
+                        assert(entry != nil)
+                        
+                        for it in next_change.removed_states {
+                            append(&entry.removed_states, it)
+                        }
+                    }
                 }
             }
         }
@@ -704,20 +652,22 @@ update :: proc (collapse: ^Collapse, entropy: ^RandomSeries) {
     }
 }
 
-get_maximum_support :: proc (c: ^Collapse, a: State_Id, direction: Direction) -> (result: i32) {
-    a_matches_in_direction := matches[a][direction]
-    for b in c._states {
-        if a_matches_in_direction[b.id] do result += 1
-    }
-    return result
-}
-
 restart :: proc (c: ^Collapse) {
-    println("Restarting")
-    for it in changes do delete(it.removed_states)
+    for it in changes { delete(it.removed_states) }
     clear(&changes)
     changes_cursor = 0
     to_be_collapsed = nil
+    
+    amounts_cache := make([][Direction] i32, len(c.states), context.temp_allocator)
+    for from, index in c.states {
+        for &amounts, id in amounts_cache {
+            for &amount, direction in amounts {
+                amount += supports[from.id][direction][id]
+            }
+        }
+        print("Restart: calculate maximum support % %% \r", view_percentage(index, len(c.states)))
+    }
+    println("Restart: calculate maximum support done          ")
     
     for y in 0..<dimension.y {
         for x in 0..<dimension.x {
@@ -730,26 +680,18 @@ restart :: proc (c: ^Collapse) {
                 wave = &cell.value.(WaveFunction)
             }
             
-            wave.supports = make([dynamic] Support, len(c._states))
-            for &it, index in wave.supports do it.id = cast(State_Id) index
-        }
-    }
-    
-    for y in 0..<dimension.y {
-        for x in 0..<dimension.x {
-            cell := &grid[x + y * dimension.x]
-            wave := &cell.value.(WaveFunction)
-            
-            for &it in wave.supports {
-                for delta, direction in Deltas {
-                    dp := cell.p + delta
-                    if !dimension_contains(dimension, dp) do continue
-                    it.amount[direction] += get_maximum_support(c, it.id, direction)
+            wave.supports = make([dynamic] Support, len(c.states))
+            for &it, index in wave.supports {
+                it.id = cast(State_Id) index
+                for &amount, direction in it.amount {
+                    support_now := amounts_cache[it.id][direction]
+                    amount = support_now
                 }
             }
-            cell = cell
         }
+        print("Restart: initialize support % %% \r", view_percentage(y, dimension.y))
     }
+    println("Restart: initialize support done           ")
 }
 
 opposite :: proc (direction: Direction) -> Direction {

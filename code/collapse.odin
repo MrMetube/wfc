@@ -7,7 +7,7 @@ import rl "vendor:raylib"
 Value :: rl.Color
 
 Collapse :: struct {
-    _states: [dynamic] State,
+    states: [dynamic] State,
 
     Extraction: struct {
         is_defining_state:  b32,
@@ -44,7 +44,7 @@ end_state   :: proc (c: ^Collapse) {
     c.Extraction.is_defining_state = false
     
     id := Invalid_Id
-    search: for state in c._states {
+    search: for state in c.states {
         if len(c.Extraction.temp_state_values) != len(state.values) do continue search
         
         for value, index in state.values {
@@ -58,17 +58,17 @@ end_state   :: proc (c: ^Collapse) {
     }
     
     if id == Invalid_Id {
-        assert(c.Extraction._last_used_state_id == auto_cast len(c._states))
+        assert(c.Extraction._last_used_state_id == auto_cast len(c.states))
         id = c.Extraction._last_used_state_id
         c.Extraction._last_used_state_id += 1
         
         values := make([] Value, len(c.Extraction.temp_state_values))
         copy(values, c.Extraction.temp_state_values[:])
-        append(&c._states, State { id = id, values = values, frequency = 1 })
+        append(&c.states, State { id = id, values = values, frequency = 1 })
         
-        assert(c.Extraction._last_used_state_id == auto_cast len(c._states))
+        assert(c.Extraction._last_used_state_id == auto_cast len(c.states))
     } else {
-        c._states[id].frequency += 1
+        c.states[id].frequency += 1
     }
     assert(id != Invalid_Id)
     
