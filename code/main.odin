@@ -4,6 +4,10 @@ import "core:os/os2"
 import "core:strings"
 import "core:time"
 
+import "core:prof/spall"
+
+spall_ctx: spall.Context
+@(thread_local) spall_buffer: spall.Buffer
 
 import rl "vendor:raylib"
 import imgui "../lib/odin-imgui/"
@@ -13,7 +17,7 @@ Deltas := [Direction] v2i { .East = {1,0}, .West = {-1,0}, .North = {0,-1}, .Sou
 
 Screen_Size :: v2i{1920, 1080}
 
-_total, _update, _render: time.Duration
+_total: time.Duration
 _total_start: time.Time
 
 
@@ -21,24 +25,36 @@ TargetFps       :: 144
 TargetFrameTime :: 1./TargetFps
 
 ////////////////////////////////////////////////
+// App
+
+should_restart: b32
+t_restart: f32
+update_state: Update_State
+Update_State :: enum {
+    Paused, Step, Unpaused, Done,
+}
+wait_time: f32 = 0.1
+
+screen_size_factor: f32
+
+average_colors: [] Average_Color
+Average_Color :: struct {
+    states_count_when_computed: u32,
+    color: rl.Color,
+}
+render_wavefunction_as_average: b32 = true
+
+////////////////////////////////////////////////
+
+////////////////////////////////////////////////
 
 N: i32 = 3
 
 first_time := true
-should_restart: b32
-t_restart: f32
-paused_update: b32
-wait_time: f32 = 0.1
+
 
 dimension: v2i = {150, 100}
 grid: [] Cell
-
-average_colors: [] Average_Color
-Average_Color :: struct {
-    color: rl.Color,
-    states_count_when_computed: u32,
-}
-render_wavefunction_as_average: b32 = true
 
 Cell :: struct {
     p: v2i,
@@ -49,18 +65,35 @@ Cell :: struct {
     },
 }
 
-Collapsed :: struct {
-    value: State_Id
-}
+Collapsed :: State_Id
 WaveFunction :: struct {
     supports: [dynamic] Support,
 }
-Support :: struct {
-    id:     State_Id,
-    amount: [Direction] i32
+
+cell_entropy: [] Entropy
+Entropy :: struct {
+    states_count_when_computed: u32,
+    entropy: f32,
 }
 
-supports: [/* from State_Id */][Direction][/* to State_Id */] i32
+selected_group: int = -1
+draw_groups:    [dynamic] Draw_Group
+Draw_Group :: struct {
+    color: rl.Color,
+    ids:   [dynamic]State_Id
+}
+
+supports: [/* from State_Id */] [Direction] [dynamic/* ascending */] Directional_Support
+Directional_Support :: struct {
+    id:     State_Id,
+    amount: i32,
+}
+Support :: struct {
+    id:     State_Id,
+    amount: [Direction] i32,
+}
+
+maximum_support: [][Direction] i32
 
 Direction :: enum {
     East, North, West, South,
@@ -80,19 +113,20 @@ changes_cursor: int
 
 Change :: struct {
     p: v2i,
-    removed_states: [dynamic] State_Id,
+    removed_support: [Direction] [/* State_Id */] Directional_Support,
 }
 
-is_done: b32
+Search_Mode :: enum {
+    Scanline, States, Entropy, 
+}
+search_mode := Search_Mode.Entropy
 
 main :: proc () {
-    size: f32
-    
     ratio := vec_cast(f32, Screen_Size) / vec_cast(f32, dimension+10)
     if ratio.x < ratio.y {
-        size = ratio.x
+        screen_size_factor = ratio.x
     } else {
-        size = ratio.y 
+        screen_size_factor = ratio.y 
     }
     
     rl.SetTraceLogLevel(.WARNING)
@@ -149,11 +183,27 @@ main :: proc () {
     ////////////////////////////////////////////////
     ////////////////////////////////////////////////
     
+    spall_ctx = spall.context_create("trace_test.spall", 10 * time.Millisecond)
+	defer spall.context_destroy(&spall_ctx)
+
+	buffer_backing := make([]u8, spall.BUFFER_DEFAULT_SIZE)
+	defer delete(buffer_backing)
+
+	spall_buffer = spall.buffer_create(buffer_backing, 0)
+	defer spall.buffer_destroy(&spall_ctx, &spall_buffer)
+
+	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
+    
+    ////////////////////////////////////////////////
+    ////////////////////////////////////////////////
+    ////////////////////////////////////////////////
+    
     entropy := seed_random_series(123)
     collapse: Collapse
     
     grid = make(type_of(grid), dimension.x * dimension.y)
     average_colors = make(type_of(average_colors), dimension.x * dimension.y)
+    cell_entropy = make(type_of(cell_entropy), dimension.x * dimension.y)
     for y in 0..<dimension.y do for x in 0..<dimension.x {
         grid[x + y * dimension.x].p = {x,y}
     }
@@ -196,10 +246,6 @@ main :: proc () {
         imgui.columns(1)
         
         if len(collapse.states) != 0 {
-            if imgui.button(paused_update ? "Unpause" : "Pause") {
-                paused_update = !paused_update
-            }
-            
             if imgui.button(should_restart ? tprint("Restarting in %", view_seconds(t_restart, precision = 3)) : "Restart") {
                 if !should_restart {
                     should_restart = true
@@ -209,60 +255,146 @@ main :: proc () {
                 }
             }
             
+            switch update_state {
+              case .Step: 
+                update_state = .Paused
+                fallthrough
+              case .Paused:
+               if imgui.button("Unpause") do update_state = .Unpaused
+               if imgui.button("Step")    do update_state = .Step
+               
+              case .Unpaused:
+               if imgui.button("Pause") do update_state = .Paused
+            
+              case .Done:
+            }
+            
             imgui.checkbox("Average Color", auto_cast &render_wavefunction_as_average)
+            modes := [Search_Mode] string {
+                .Scanline = "top to bottom, left to right",
+                .States = "fewest possible states",
+                .Entropy = "lowest entropy",
+            }
+            for text, mode in modes {
+                if imgui.radio_button(text, mode == search_mode) {
+                    search_mode = mode
+                }
+            }
         }
         
         imgui.text("Stats")
         tile_count := len(collapse.states)
         imgui.text_colored(tile_count > 200 ? Red : White, tprint("Tile count %", tile_count))
-        is_late := cast(f32) time.duration_seconds(_update) > TargetFrameTime
-        imgui.text_colored(is_late ? Orange : White, tprint(`Update %`, _update))
-        imgui.text(tprint("Render %", _render))
-        imgui.text(tprint("Total %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)))
+        imgui.text(tprint("Total time %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)))
+        
+        imgui.text("Pick a color to Draw")
+        imgui.columns(2)
+        _id: i32
+        for &group, index in draw_groups {
+            selected := index == selected_group
+            if imgui.radio_button(tprint("%", index), selected) {
+                selected_group = selected ? -1 : index
+            }
+            imgui.next_column()
+            
+            flags: imgui.Color_Edit_Flags = .NoPicker | .NoOptions | .NoSmallPreview | .NoInputs | .NoTooltip | .NoSidePreview | .NoDragDrop
+            imgui.color_button("", rgba_to_v4(cast([4]u8) group.color), flags = flags)
+            imgui.next_column()
+        }
+        imgui.columns()
+        
+        sp := rl.GetMousePosition()
+        wp := screen_to_world(sp)
+        if dimension_contains(dimension, wp) {
+            if selected_group != -1 {
+                place  := rl.IsMouseButtonDown(.LEFT)
+                remove := rl.IsMouseButtonDown(.RIGHT)
+                // @todo(viktor): Instead of directly modifying we should make a separate structure to keep these restrictions around and apply them again
+                if remove ~ place {
+                    cell := &grid[wp.x + wp.y * dimension.x]
+                    if wave, ok := cell.value.(WaveFunction); ok {
+                        for it in wave.supports {
+                            is_selected: b32
+                            for id in draw_groups[selected_group].ids {
+                                if it.id == id {
+                                    is_selected = true
+                                    break
+                                }
+                            }
+                            
+                            if remove && is_selected || place && !is_selected {
+                                remove_state(&collapse, wp, it.id)
+                            }
+                        }
+                    }
+                }
+            }
+        }
         
         ////////////////////////////////////////////////
         // Update 
         
-        if !paused_update {
-            if !should_restart {
-                update(&collapse, &entropy)
-            } else {
-                t_restart -= rl.GetFrameTime()
-                if t_restart <= 0 {
-                    t_restart = 0
-                    should_restart = false
-                    if first_time {
-                        first_time = false
-                        
-                        _total_start = time.now()
-                    } else {
-                        restart(&collapse)
-                    }
+        if !should_restart {
+            update(&collapse, &entropy)
+        } else {
+            t_restart -= rl.GetFrameTime()
+            if t_restart <= 0 {
+                t_restart = 0
+                should_restart = false
+                if first_time {
+                    first_time = false
+                    
+                    _total_start = time.now()
+                } else {
+                    update_state = .Paused
+                    restart(&collapse)
                 }
             }
             
-            if !is_done {
+            if update_state != .Done {
                 _total = time.since(_total_start)
             }
         }
         
         ////////////////////////////////////////////////
         // Render
+        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Render")
         
         rl.BeginDrawing()
         rl.ClearBackground({0x54, 0x57, 0x66, 0xFF})
         
-        render_start := time.now()
         rl.BeginMode2D(camera)
         
-        is_done = true
+        if collapse.states != nil {
+            if textures_length != len(collapse.states) {
+                for it in textures_and_images do rl.UnloadTexture(it.texture)
+                
+                textures_length = len(collapse.states)
+                resize(&textures_and_images, textures_length)
+                
+                for &state, index in collapse.states {
+                    image := rl.Image {
+                        data = raw_data(state.values),
+                        width  = N,
+                        height = N,
+                        mipmaps = 1,
+                        format = .UNCOMPRESSED_R8G8B8A8,
+                    }
+                    
+                    textures_and_images[index].image   = image
+                    textures_and_images[index].texture = rl.LoadTextureFromImage(image)
+                }
+            }
+        }
+        
+        is_done := true
         for y in 0..<dimension.y {
             for x in 0..<dimension.x {
                 index := x + y * dimension.x
                 cell := grid[index]
-                p := get_screen_p(dimension, size, {x, y})
+                p := world_to_screen({x, y})
                 
-                rect := rl.Rectangle {p.x, p.y, size, size}
+                rect := rl.Rectangle {p.x, p.y, screen_size_factor, screen_size_factor}
                 switch value in cell.value {
                   case WaveFunction: 
                     is_done = false
@@ -291,54 +423,46 @@ main :: proc () {
                                 average.color = cast(rl.Color) v4_to_rgba(color)
                             }
                             rl.DrawRectangleRec(rect, average.color)
+                            rl.DrawRectangleLinesEx(rect, 2,  rl.BLACK)
+                            rl.DrawRectangleLinesEx(rect, 1,  rl.WHITE)
                         } else {
                             rl.DrawRectangleRec(rect, {0,255,255,32})
                         }
                     }
                     
                   case Collapsed:
-                    values := collapse.states[value.value].values
+                    values := collapse.states[value].values
                     color := values[0] // middle
                     rl.DrawRectangleRec(rect, color)
                 }
             }
         }
         
+        if is_done do update_state = .Done
+        
         for change in changes[changes_cursor:] {
-            p := get_screen_p(dimension, size, change.p)
-            rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(rl.YELLOW, 0.4))
+            p := world_to_screen(change.p)
+            rl.DrawRectangleRec({p.x, p.y, screen_size_factor, screen_size_factor}, rl.ColorAlpha(rl.YELLOW, 0.4))
         }
         
         if to_be_collapsed != nil {
-            p := get_screen_p(dimension, size, to_be_collapsed.p)
+            p := world_to_screen(to_be_collapsed.p)
             color := rl.PURPLE
-            rl.DrawRectangleRec({p.x, p.y, size, size}, rl.ColorAlpha(color, 0.8))
+            rl.DrawRectangleRec({p.x, p.y, screen_size_factor, screen_size_factor}, rl.ColorAlpha(color, 0.8))
+        }
+        
+        if selected_group != -1 {
+            if dimension_contains(dimension, wp) {
+                wsp := world_to_screen(wp)
+                rect := rl.Rectangle {wsp.x, wsp.y, screen_size_factor, screen_size_factor}
+                
+                rl.DrawRectangleRec(rect, collapse.states[draw_groups[selected_group].ids[0]].values[0])
+                rl.DrawRectangleLinesEx(rect, 2,  rl.BLACK)
+                rl.DrawRectangleLinesEx(rect, 1,  rl.WHITE)
+            }
         }
         
         rl.EndMode2D()
-        _render = time.since(render_start)
-        
-        if collapse.states != nil {
-            if textures_length != len(collapse.states) {
-                for it in textures_and_images do rl.UnloadTexture(it.texture)
-                
-                textures_length = len(collapse.states)
-                resize(&textures_and_images, textures_length)
-                
-                for &state, index in collapse.states {
-                    image := rl.Image {
-                        data = raw_data(state.values),
-                        width  = N,
-                        height = N,
-                        mipmaps = 1,
-                        format = .UNCOMPRESSED_R8G8B8A8,
-                    }
-                    
-                    textures_and_images[index].image   = image
-                    textures_and_images[index].texture = rl.LoadTextureFromImage(image)
-                }
-            }
-        }
         
         imgui.render()
         rlimgui.ImGui_ImplRaylib_Render(imgui.get_draw_data())
@@ -346,163 +470,35 @@ main :: proc () {
     }
 }
 
-extract_tiles :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
-    // @Incomplete: Allow for rotations and mirroring here
-    for by in 0..<height {
-        for bx in 0..<width {
-            begin_state(c)
-            for dy in 0..<N {
-                for dx in 0..<N {
-                    x := (bx + dx) % width
-                    y := (by + dy) % height
-                    append_state_value(c, pixels[x + y * width])
-                }
-            }
-            end_state(c)
-        }
-    
-        print("Extraction: State extraction % %%\r", view_percentage(by, height))
-    }
-    println("Extraction: State extraction done         ")
-    
-    matches := make([] [Direction] [] b8, len(c.states), context.temp_allocator)
-    offsets := [Direction] v2i {
-        .East  = {-1,0},
-        .North = {0, 1},
-        .West  = { 1,0},
-        .South = {0,-1},
-    }
-    
-    for a, a_index in c.states {
-        for offset, d in offsets {
-            matches[a.id][d] = make([] b8, len(c.states), context.temp_allocator)
-            
-            region := rectangle_min_dimension(cast(i32) 0, 0, N, N)
-            dim := get_dimension(region)
-            for b in c.states {
-                does_match: b8 = true
-                // @speed we could hash these regions and only compare hashes in the n²-loop
-                loop: for y in 0..<dim.y {
-                    for x in 0..<dim.x {
-                        ap := v2i{x, y}
-                        bp := v2i{x, y} + offset
-                        
-                        if contains(region, bp) {
-                            a_value := a.values[ap.x + ap.y * dim.x]
-                            b_value := b.values[bp.x + bp.y * dim.x]
-                            if a_value != b_value {
-                                does_match = false
-                                break loop
-                            }
-                        }
-                    }
-                }
-                
-                matches[a.id][d][b.id] = does_match
-            }
-        }
-        
-        print("Extraction: Matches generation % %%\r", view_percentage(a_index, len(c.states)))
-    }
-    println("Extraction: Matches generation done        ")
-    
-    // @todo(viktor): Matches is symmetric so we only need to store about half as many values as we currently do
-    when false {
-        for as, a in matches {
-            for ds, d in as {
-                for ok, b in ds {
-                    assert(ok == matches[b][opposite(d)][a])
-                }
-            }
-            print("Extraction: Matches sanity check % %% \r", view_percentage(a, len(matches)))
-        }
-        println("Extraction: Matches sanity check done         ")
-    }
-    
-    delete(supports)
-    supports = make([][Direction][]i32, len(c.states))
-    
-    for from in c.states {
-        for direction in Direction {
-            if supports[from.id][direction] == nil {
-                supports[from.id][direction] = make([]i32, len(c.states))
-            }
-            
-            for to in c.states {
-                if matches[from.id][direction][to.id] {
-                    supports[from.id][direction][to.id] += 1
-                }
-            }
-        }
-    }
-}
-
 update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
+	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     update_start := time.now()
-    defer _update = time.since(update_start)
     
     update: for {
         if c.states == nil do break update
         
         if len(changes) == 0 {
             if to_be_collapsed == nil {
+                if update_state == .Paused do break update
+                
                 // Find next cell to be collapsed 
+                spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Find next cell to be collapsed")
                 
                 cells_with_lowest_entropy := make([dynamic]^Cell, context.temp_allocator)
-                lowest_entropy := max(u32)
                 
-                if false {
-                    // Linear
-                    search: for &cell in grid do if wave, ok := cell.value.(WaveFunction); ok {
-                        if len(wave.supports) == 0 {
-                            restart(c)
-                            break update
-                        }
-                        
-                        entropy := cast(u32) len(wave.supports)
-                        lowest_entropy = entropy
-                        append(&cells_with_lowest_entropy, &cell)
-                        break search
-                    }
-                } else {
-                    // Entropy
-                    for &cell in grid do if wave, ok := cell.value.(WaveFunction); ok {
-                        if len(wave.supports) == 0 {
-                            restart(c)
-                            break update
-                        }
-                        
-                        // @todo(viktor): Measure entropy
-                        entropy := cast(u32) len(wave.supports)
-                        if lowest_entropy > entropy {
-                            lowest_entropy = entropy
-                            clear(&cells_with_lowest_entropy)
-                        }
-                        
-                        if lowest_entropy == entropy {
-                            append(&cells_with_lowest_entropy, &cell)
-                        }
-                    }
-                }
+                find_cells(c, &cells_with_lowest_entropy, search_mode)
                 
-                
-                if lowest_entropy != max(u32) {
-                    if len(cells_with_lowest_entropy) > 0 {
-                        to_be_collapsed = random_value(entropy, cells_with_lowest_entropy[:])
-                    }
+                if len(cells_with_lowest_entropy) > 0 {
+                    to_be_collapsed = random_value(entropy, cells_with_lowest_entropy[:])
                 }
             } else {
                 // Collapse chosen cell
+                spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Collapse chosen cell")
                 
                 wave := to_be_collapsed.value.(WaveFunction)
                 pick := Invalid_Id
                 if len(wave.supports) == 1 {
-                    for support in wave.supports {
-                        state := &c.states[support.id]
-                        pick = support.id
-                        break
-                    }
-                    assert(pick != Invalid_Id)
+                    pick = wave.supports[0].id
                 } else if true {
                     // Random
                     total_frequency: i32
@@ -545,39 +541,28 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
                 }
                 
                 if pick != Invalid_Id {
-                    change: Change
-                    change.p = to_be_collapsed.p
                     for support in wave.supports {
                         id := support.id
                         if pick != id {
-                            append(&change.removed_states, id)
+                            remove_state(c, to_be_collapsed.p, id)
                         }
                     }
                     
                     delete(wave.supports)
-                    to_be_collapsed.value = Collapsed { pick }
-                    
-                    if len(change.removed_states) > 0 {
-                        append(&changes, change)
-                    }
+                    to_be_collapsed.value = pick
                     to_be_collapsed = nil
                 }
             }
         } else {
             // Propagate changes
+            spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Propagate changes")
             
             if changes_cursor >= len(changes) {
-                changes_cursor = 0
-                for it in changes {
-                    delete(it.removed_states)
-                }
-                clear(&changes)
+                clear_changes()
             } else {
                 change := changes[changes_cursor]
-                assert(len(change.removed_states) > 0)
-                
-                from_cell := &grid[change.p.x + change.p.y * dimension.x]
                 changes_cursor += 1
+                assert(len(change.removed_support) > 0)
                 
                 for delta, direction in Deltas {
                     to_p := change.p + delta
@@ -588,58 +573,23 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
                     to_wave, ok := &to_cell.value.(WaveFunction)
                     if !ok do continue 
                     
-                    next_change := Change { p = to_cell.p }
                     #reverse for &to_support, sup_index in to_wave.supports {
+                        removed := change.removed_support[direction][to_support.id]
+                        if removed.id != to_support.id do continue
+                        
                         amount := &to_support.amount[direction]
-                        support_before := amount^
+                        assert(amount^ != 0)
                         
-                        remove: b32
-                        if support_before == 0 {
-                            remove = true
-                        } else {
-                            removed_support: i32
-                            for from_id in change.removed_states {
-                                removed_support += supports[from_id][direction][to_support.id]
-                            }
+                        amount^ -= removed.amount
+                        // assert(amount^ >= 0)
+                        
+                        if amount^ <= 0 {
+                            remove_state(c, to_p, to_support.id)
                             
-                            amount^ -= removed_support
-                            amount^ = max(0, amount^)
-                        }
-                        assert(amount^ >= 0)
-                        
-                        if amount^ == 0 {
-                            remove = true
-                        }
-                        
-                        if remove {
-                            append(&next_change.removed_states, to_support.id)
-                            to_support.amount = {}
                             unordered_remove(&to_wave.supports, sup_index)
                             if len(to_wave.supports) == 0 {
                                 break update
                             }
-                        }
-                    }
-                    
-                    if len(next_change.removed_states) > 0 {
-                        found: b32
-                        entry: ^Change
-                        for &other in changes[changes_cursor:] {
-                            if other.p == next_change.p {
-                                found = true
-                                entry = &other
-                            }
-                        }
-                        
-                        if !found {
-                            assert(len(next_change.removed_states) > 0)
-                            append(&changes, Change { p = next_change.p })
-                            entry = &changes[len(changes)-1]
-                        }
-                        assert(entry != nil)
-                        
-                        for it in next_change.removed_states {
-                            append(&entry.removed_states, it)
                         }
                     }
                 }
@@ -652,22 +602,113 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
     }
 }
 
-restart :: proc (c: ^Collapse) {
-    for it in changes { delete(it.removed_states) }
-    clear(&changes)
+clear_changes :: proc () {
     changes_cursor = 0
-    to_be_collapsed = nil
+    for it in changes {
+        for d in Direction {
+            delete(it.removed_support[d])
+        }
+    }
+    clear(&changes)
+}
+
+find_cells :: proc (c: ^Collapse, cells: ^[dynamic]^Cell, mode := Search_Mode.States) -> (found_invalid: b32) {
+    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
+    lowest_count   := max(u32)
+    lowest_entropy := PositiveInfinity
     
-    amounts_cache := make([][Direction] i32, len(c.states), context.temp_allocator)
-    for from, index in c.states {
-        for &amounts, id in amounts_cache {
-            for &amount, direction in amounts {
-                amount += supports[from.id][direction][id]
+    search: for &cell, index in grid do if wave, ok := cell.value.(WaveFunction); ok {
+        if len(wave.supports) == 0 {
+            should_restart = true
+            found_invalid = true
+            break search
+        }
+        
+        switch mode {
+          case .Scanline: 
+            append(cells, &cell)
+            break search
+          
+          case .Entropy:
+            cell_entropy := &cell_entropy[index]
+            if cell_entropy.states_count_when_computed != auto_cast len(wave.supports) {
+                cell_entropy.states_count_when_computed = auto_cast len(wave.supports)
+                
+                // @speed this could be done iteratively if neede
+                total_frequency: f32
+                cell_entropy.entropy = 0
+                for support in wave.supports {
+                    total_frequency += cast(f32) c.states[support.id].frequency
+                }
+                
+                for support in wave.supports {
+                    frequency := cast(f32) c.states[support.id].frequency
+                    probability := frequency / total_frequency
+                    // Shannon entropy is the negative sum of P * log2(P)
+                    cell_entropy.entropy -= probability * log2(probability)
+                }
+            }
+            
+            entropy := cell_entropy.entropy
+            if lowest_entropy > entropy {
+                lowest_entropy = entropy
+                clear(cells)
+            }
+            
+            if lowest_entropy == entropy {
+                append(cells, &cell)
+            }
+            
+          case .States:
+            count := cast(u32) len(wave.supports)
+            if lowest_count > count {
+                lowest_count = count
+                clear(cells)
+            }
+            
+            if lowest_count == count {
+                append(cells, &cell)
             }
         }
-        print("Restart: calculate maximum support % %% \r", view_percentage(index, len(c.states)))
     }
-    println("Restart: calculate maximum support done          ")
+    
+    return found_invalid
+}
+
+
+remove_state :: proc (c: ^Collapse, p: v2i, removed_state: State_Id) {
+	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
+    
+    change: ^Change
+    for &other in changes[changes_cursor:] {
+        if other.p == p {
+            change = &other
+        }
+    }
+    
+    if change == nil {
+        append(&changes, Change { p = p })
+        change = &changes[len(changes)-1]
+    }
+    
+    for direction in Direction {
+        for removed in supports[removed_state][direction] {
+            if change.removed_support[direction] == nil {
+                change.removed_support[direction] = make([] Directional_Support, len(c.states))
+            }
+            change.removed_support[direction][removed.id].id = removed.id
+            change.removed_support[direction][removed.id].amount += removed.amount
+        }
+    }
+}
+
+restart :: proc (c: ^Collapse) {
+	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
+    
+    clear_changes()
+    to_be_collapsed = nil
+    
+    
     
     for y in 0..<dimension.y {
         for x in 0..<dimension.x {
@@ -684,7 +725,7 @@ restart :: proc (c: ^Collapse) {
             for &it, index in wave.supports {
                 it.id = cast(State_Id) index
                 for &amount, direction in it.amount {
-                    support_now := amounts_cache[it.id][direction]
+                    support_now := maximum_support[it.id][direction]
                     amount = support_now
                 }
             }
@@ -692,6 +733,118 @@ restart :: proc (c: ^Collapse) {
         print("Restart: initialize support % %% \r", view_percentage(y, dimension.y))
     }
     println("Restart: initialize support done           ")
+}
+
+extract_tiles :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
+    for &group in draw_groups {
+        delete(group.ids)
+    }
+    clear(&draw_groups)
+    selected_group = -1
+    
+    // @Incomplete: Allow for rotations and mirroring here
+    for by in 0..<height {
+        for bx in 0..<width {
+            begin_state(c)
+            for dy in 0..<N {
+                for dx in 0..<N {
+                    x := (bx + dx) % width
+                    y := (by + dy) % height
+                    append_state_value(c, pixels[x + y * width])
+                }
+            }
+            end_state(c)
+        }
+    
+        print("Extraction: State extraction % %%\r", view_percentage(by, height))
+    }
+    println("Extraction: State extraction done         ")
+    
+    offsets := [Direction] v2i {
+        .East  = {-1,0},
+        .North = {0, 1},
+        .West  = { 1,0},
+        .South = {0,-1},
+    }
+    
+    for a in supports do for d in a do delete(d)
+    delete(supports)
+    supports = make([][Direction][dynamic] Directional_Support, len(c.states))
+    
+    for a, a_index in c.states {
+        assert(a.id == auto_cast a_index)
+        for offset, d in offsets {
+            region := rectangle_min_dimension(cast(i32) 0, 0, N, N)
+            dim := get_dimension(region)
+            for b in c.states {
+                does_match: b8 = true
+                // @speed we could hash these regions and only compare hashes in the n²-loop
+                loop: for y in 0..<dim.y {
+                    for x in 0..<dim.x {
+                        ap := v2i{x, y}
+                        bp := v2i{x, y} + offset
+                        
+                        if contains(region, bp) {
+                            a_value := a.values[ap.x + ap.y * dim.x]
+                            b_value := b.values[bp.x + bp.y * dim.x]
+                            if a_value != b_value {
+                                does_match = false
+                                break loop
+                            }
+                        }
+                    }
+                }
+                
+                if does_match {
+                    found_support: b32
+                    for &support in supports[a.id][d] {
+                        if support.id == b.id {
+                            found_support = true
+                            support.amount += 1
+                        }
+                    }
+                    // @todo(viktor): Think if this is even reasonably
+                    if !found_support {
+                        append(&supports[a.id][d], Directional_Support {b.id, 1})
+                    }
+                }
+            }
+        }
+        
+        print("Extraction: Supports generation % %%\r", view_percentage(a_index, len(c.states)))
+    }
+    println("Extraction: Supports generation done        ")
+
+    for state in c.states {
+        color := state.values[1 + 1 * N] // middle
+        group: ^Draw_Group
+        for &it in draw_groups {
+            if it.color == color {
+                group = &it
+                break
+            }
+        }
+        if group == nil {
+            append(&draw_groups, Draw_Group { color = color })
+            group = &draw_groups[len(draw_groups)-1]
+        }
+        
+        append(&group.ids, state.id)
+    }
+    
+    delete(maximum_support)
+    maximum_support = make([][Direction] i32, len(c.states))
+        
+    for from, index in c.states {
+        for direction in Direction {
+            for support in supports[from.id][direction] {
+                amount := &maximum_support[support.id][direction]
+                amount^ += support.amount
+            }
+        }
+        print("Extraction: calculate maximum support % %% \r", view_percentage(index, len(c.states)))
+    }
+    println("Extraction: calculate maximum support done          ")
 }
 
 opposite :: proc (direction: Direction) -> Direction {
@@ -704,11 +857,15 @@ opposite :: proc (direction: Direction) -> Direction {
     unreachable()
 }
 
-
-get_screen_p :: proc (dimension: v2i, size: f32, p: v2i) -> (result: v2) {
-    result = vec_cast(f32, p) * size
+world_to_screen :: proc (p: v2i) -> (result: v2) {
+    result = vec_cast(f32, p) * screen_size_factor
     
-    result += (vec_cast(f32, Screen_Size) - (size * vec_cast(f32, dimension))) * 0.5
+    result += (vec_cast(f32, Screen_Size) - (screen_size_factor * vec_cast(f32, dimension))) * 0.5
     
     return result
+}
+screen_to_world :: proc (screen: v2) -> (world: v2i) {
+    world  = vec_cast(i32, (screen - (vec_cast(f32, Screen_Size) - (screen_size_factor * vec_cast(f32, dimension))) * 0.5) / screen_size_factor)
+    
+    return world
 }

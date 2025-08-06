@@ -1,14 +1,11 @@
 #+private
 package build
-
 import "base:intrinsics"
-
 import "core:fmt"
 import "core:os"
 import "core:os/os2"
 import "core:strings"
 import "core:time"
-
 import win "core:sys/windows"
 
 optimizations := false ? ` -o:speed ` : ` -o:none `
@@ -138,6 +135,11 @@ go_rebuild_yourself :: proc() -> Error {
     }
     
     needs_rebuild := false
+    if len(os.args) > 1 {
+        // @todo(viktor): validate param
+        needs_rebuild = true
+    }
+    
     build_exe_info, err := os.stat(build_exe_path)
     if err != nil {
         needs_rebuild = true
@@ -155,12 +157,12 @@ go_rebuild_yourself :: proc() -> Error {
         }
     }
     
-    // @todo(viktor): do we still need the old one? 
+    // @todo(viktor): do we still need the old one?
     old_path := fmt.tprintf("%s-old", build_exe_path)
     remove_if_exists(old_path)
     
     if needs_rebuild {
-        fmt.println("Rebuilding!") 
+        fmt.println("Rebuilding!")
         
         pdb_path, _ := strings.replace_all(build_exe_path, ".exe", ".pdb")
         remove_if_exists(pdb_path)
@@ -233,7 +235,7 @@ run_command_or_exit :: proc(program: string, args: []string) {
     }
 }
 
-run_command :: proc(program: string, args: []string) -> (success: b32) {
+run_command :: proc(program: string, args: []string = {}) -> (success: b32) {
     startup_info := win.STARTUPINFOW{ cb = size_of(win.STARTUPINFOW) }
     process_info := win.PROCESS_INFORMATION{}
     
@@ -241,7 +243,7 @@ run_command :: proc(program: string, args: []string) -> (success: b32) {
     working_directory := win.utf8_to_wstring(os.get_current_directory())
     joined_args := strings.join(args, "")
     
-    fmt.println("CMD:", program, " - ", joined_args)
+    fmt.println("CMD:", joined_args, "#", program)
     
     if win.CreateProcessW(win.utf8_to_wstring(program), win.utf8_to_wstring(joined_args), nil, nil, win.TRUE, 0, nil, working_directory, &startup_info, &process_info) {
         win.WaitForSingleObject(process_info.hProcess, win.INFINITE)
@@ -253,7 +255,7 @@ run_command :: proc(program: string, args: []string) -> (success: b32) {
         win.CloseHandle(process_info.hProcess)
         win.CloseHandle(process_info.hThread)
     } else {
-        fmt.printfln("ERROR: Command `%s %s` failed with error %s", program, args, os.error_string(os.get_last_error()))
+        fmt.printfln("ERROR: Command failed to start with error '%s'", os.error_string(os.get_last_error()))
         success = false
     }
     return
