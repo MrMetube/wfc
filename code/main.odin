@@ -17,6 +17,7 @@ Deltas := [Direction] v2i { .East = {1,0}, .West = {-1,0}, .North = {0,-1}, .Sou
 
 Screen_Size :: v2i{1920, 1080}
 
+// @todo(viktor): make time spent accumalative and dont count paused time
 _total: time.Duration
 _total_start: time.Time
 
@@ -33,7 +34,6 @@ update_state: Update_State
 Update_State :: enum {
     Paused, Step, Unpaused, Done,
 }
-wait_time: f32 = 0.1
 
 screen_size_factor: f32
 
@@ -48,10 +48,14 @@ render_wavefunction_as_average: b32 = true
 
 ////////////////////////////////////////////////
 
+ /*
+ * if we ignore even N values then the difference between overlapping and tiled mode is:
+ * overlapping: tiles match on a side if N-1 rows/columns match
+ * tiled:       tiles match on a side if   1 row/column matches
+*/
 N: i32 = 3
 
 first_time := true
-
 
 dimension: v2i = {150, 100}
 grid: [] Cell
@@ -68,12 +72,6 @@ Cell :: struct {
 Collapsed :: State_Id
 WaveFunction :: struct {
     supports: [dynamic] Support,
-}
-
-cell_entropy: [] Entropy
-Entropy :: struct {
-    states_count_when_computed: u32,
-    entropy: f32,
 }
 
 selected_group: int = -1
@@ -201,12 +199,10 @@ main :: proc () {
     entropy := seed_random_series(123)
     collapse: Collapse
     
-    grid = make(type_of(grid), dimension.x * dimension.y)
-    average_colors = make(type_of(average_colors), dimension.x * dimension.y)
-    cell_entropy = make(type_of(cell_entropy), dimension.x * dimension.y)
-    for y in 0..<dimension.y do for x in 0..<dimension.x {
-        grid[x + y * dimension.x].p = {x,y}
-    }
+    make(&grid, dimension.x * dimension.y)
+    make(&average_colors, dimension.x * dimension.y)
+    
+    for y in 0..<dimension.y do for x in 0..<dimension.x do grid[x + y * dimension.x].p = {x, y}
     
     for !rl.WindowShouldClose() {
         free_all(context.temp_allocator)
@@ -226,11 +222,7 @@ main :: proc () {
             if imgui.image_button(auto_cast &image.texture.id, 30) {
                 assert(image.image.format == .UNCOMPRESSED_R8G8B8A8)
                 
-                if collapse.states != nil {
-                    resize(&collapse.states, 0)
-                    collapse.Extraction = {} // @leak
-                }
-                
+                reset_collapse(&collapse)
                 pixels := slice_from_parts(rl.Color, image.image.data, image.image.width * image.image.height)
                 extract_tiles(&collapse, pixels, image.image.width, image.image.height)
                 
@@ -342,9 +334,9 @@ main :: proc () {
                 t_restart = 0
                 should_restart = false
                 if first_time {
-                    first_time = false
                     
                     _total_start = time.now()
+                    first_time = false
                 } else {
                     update_state = .Paused
                     restart(&collapse)
@@ -483,13 +475,31 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
                 
                 // Find next cell to be collapsed 
                 spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Find next cell to be collapsed")
+    
+                begin_search(c, search_mode)
                 
-                cells_with_lowest_entropy := make([dynamic]^Cell, context.temp_allocator)
+                found_invalid: b32
+                search: for &cell, index in grid {
+                    if wave, ok := &cell.value.(WaveFunction); ok {
+                        switch test_search_cell(c, &cell, wave) {
+                        case .Continue: // nothing
+                        case .Done:     break search
+                        
+                        case .Found_Invalid: 
+                            found_invalid = true
+                            break search
+                        }
+                    }
+                }
                 
-                find_cells(c, &cells_with_lowest_entropy, search_mode)
-                
-                if len(cells_with_lowest_entropy) > 0 {
-                    to_be_collapsed = random_value(entropy, cells_with_lowest_entropy[:])
+                cells := end_search(c)
+                if found_invalid {
+                    should_restart = true
+                    break update
+                } else {
+                    if len(cells) > 0 {
+                        to_be_collapsed = random_value(entropy, cells)
+                    }
                 }
             } else {
                 // Collapse chosen cell
@@ -581,7 +591,7 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
                         assert(amount^ != 0)
                         
                         amount^ -= removed.amount
-                        // assert(amount^ >= 0)
+                        // assert(amount^ >= 0) // this could become negative if the user draws in and thereby removes states
                         
                         if amount^ <= 0 {
                             remove_state(c, to_p, to_support.id)
@@ -611,70 +621,6 @@ clear_changes :: proc () {
     }
     clear(&changes)
 }
-
-find_cells :: proc (c: ^Collapse, cells: ^[dynamic]^Cell, mode := Search_Mode.States) -> (found_invalid: b32) {
-    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
-    lowest_count   := max(u32)
-    lowest_entropy := PositiveInfinity
-    
-    search: for &cell, index in grid do if wave, ok := cell.value.(WaveFunction); ok {
-        if len(wave.supports) == 0 {
-            should_restart = true
-            found_invalid = true
-            break search
-        }
-        
-        switch mode {
-          case .Scanline: 
-            append(cells, &cell)
-            break search
-          
-          case .Entropy:
-            cell_entropy := &cell_entropy[index]
-            if cell_entropy.states_count_when_computed != auto_cast len(wave.supports) {
-                cell_entropy.states_count_when_computed = auto_cast len(wave.supports)
-                
-                // @speed this could be done iteratively if neede
-                total_frequency: f32
-                cell_entropy.entropy = 0
-                for support in wave.supports {
-                    total_frequency += cast(f32) c.states[support.id].frequency
-                }
-                
-                for support in wave.supports {
-                    frequency := cast(f32) c.states[support.id].frequency
-                    probability := frequency / total_frequency
-                    // Shannon entropy is the negative sum of P * log2(P)
-                    cell_entropy.entropy -= probability * log2(probability)
-                }
-            }
-            
-            entropy := cell_entropy.entropy
-            if lowest_entropy > entropy {
-                lowest_entropy = entropy
-                clear(cells)
-            }
-            
-            if lowest_entropy == entropy {
-                append(cells, &cell)
-            }
-            
-          case .States:
-            count := cast(u32) len(wave.supports)
-            if lowest_count > count {
-                lowest_count = count
-                clear(cells)
-            }
-            
-            if lowest_count == count {
-                append(cells, &cell)
-            }
-        }
-    }
-    
-    return found_invalid
-}
-
 
 remove_state :: proc (c: ^Collapse, p: v2i, removed_state: State_Id) {
 	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)

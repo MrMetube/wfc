@@ -270,12 +270,17 @@ view_string :: proc(value: string) -> (result: View) {
 // @todo(viktor): implement all cases
 // @todo(viktor): use temp views here where needed
 
+view_variable :: proc(value: $T, op := " = ", expression := #caller_expression(value)) -> (TempViews) {
+    begin_temp_views()
+    append_temp_view(view_string(expression))
+    append_temp_view(view_string(op))
+    // @todo(viktor): rethink views
+    append_temp_view(view_integer(value))
+    return end_temp_views()
+}
+
 view_raw :: proc (value: $T) -> (result: View) {}
 view_no_addr :: proc (value: $T) {}
-
-view_variable :: proc(value: $T, op := "=", expression := #caller_expression(value)) -> (string, string, T) {
-    return expression, op, value
-}
 
 view_sequence :: proc (value: $T) { unimplemented() }
 

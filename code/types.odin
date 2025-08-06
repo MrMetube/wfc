@@ -14,7 +14,10 @@ FixedArray :: struct ($N: i64, $T: typeid) {
     count: i64,
 }
 
-append :: proc { append_fixed_array, append_array, append_array_, append_array_many, append_fixed_array_many, append_string, builtin.append_elem }
+append :: proc { 
+    append_fixed_array, append_array, append_array_, append_array_many, append_fixed_array_many, append_string, 
+    builtin.append_elem, builtin.append_elems,
+}
 @(require_results) append_array_ :: proc(a: ^Array($T)) -> (result: ^T) {
     result = &a.data[a.count]
     a.count += 1

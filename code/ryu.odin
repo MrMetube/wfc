@@ -1248,7 +1248,7 @@ copy_special_str_printf :: proc (result: []u8, sign: bool, mantissa: u64) -> int
 
 @(private="package")
 d2fixed :: proc (d: f64, precision: u32, allocator:= context.allocator) -> (result: string) {
-    buffer: []u8 = make([]u8, 2000, allocator);
+    buffer := make([]u8, 2000, allocator);
     result = d2fixed_buffered(d, precision, buffer);
     return result
 }
@@ -1430,7 +1430,7 @@ d2fixed_buffered :: proc (d: f64, precision: u32, buffer: []u8) -> (result: stri
 }
 
 d2exp :: proc (d: f64, precision: u32, allocator := context.allocator) -> (result: string) {
-    buffer: []u8 = make([]u8, 2000, allocator);
+    buffer := make([]u8, 2000, allocator);
     result = d2exp_buffered(d, precision, buffer);
     return result;
 }
