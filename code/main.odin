@@ -5,6 +5,7 @@ import "core:strings"
 import "core:time"
 
 import "core:prof/spall"
+spall :: spall
 
 spall_ctx: spall.Context
 @(thread_local) spall_buffer: spall.Buffer
@@ -18,6 +19,7 @@ Deltas := [Direction] v2i { .East = {1,0}, .West = {-1,0}, .North = {0,-1}, .Sou
 Screen_Size :: v2i{1920, 1080}
 
 // @todo(viktor): make time spent accumalative and dont count paused time
+first_time := true
 _total: time.Duration
 _total_start: time.Time
 
@@ -71,67 +73,16 @@ selected_group: ^Draw_Group
 draw_board:     [] ^Draw_Group
 draw_groups:    [dynamic] Draw_Group
 
-////////////////////////////////////////////////
-
-////////////////////////////////////////////////
-
- /*
- * if we ignore even N values then the difference between overlapping and tiled mode is:
- * overlapping: tiles match on a side if N-1 rows/columns match
- * tiled:       tiles match on a side if   1 row/column matches
- * 
- * overlapping: extract NxN at every pixel
- * tiled:       extract NxN at every N-th pixel
-*/
-N: i32 = 3
-mirror_input: bool
-
-first_time := true
-
 dimension: v2i = {150, 100}
-grid: [] Cell
 
-Cell :: struct {
-    p: v2i,
-    
-    value: union {
-        Collapsed,
-        WaveFunction,
-    },
-}
-
-Collapsed :: State_Id
-WaveFunction :: struct {
-    supports: [dynamic] Support,
-}
-
-supports: [/* from State_Id */] [Direction] [dynamic/* ascending */] Directional_Support
-Directional_Support :: struct {
-    id:     State_Id,
-    amount: i32,
-}
-Support :: struct {
-    id:     State_Id,
-    amount: [Direction] i32,
-}
-
-maximum_support: [][Direction] i32
+////////////////////////////////////////////////
 
 Direction :: enum {
     East, North, West, South,
 }
 
-states_direction: Direction
-
-to_be_collapsed: ^Cell
-
-doing_changes: b32
-changes: map[v2i]Change
-Change :: struct {
-    removed_support: [Direction] [/* State_Id */] Directional_Support,
-}
-
-search_mode := Search_Mode.Entropy
+search_mode   := Search_Mode.Metric
+search_metric := Search_Metric.Entropy
 
 main :: proc () {
     ratio := vec_cast(f32, Screen_Size) / vec_cast(f32, dimension+10)
@@ -215,10 +166,10 @@ main :: proc () {
     entropy := seed_random_series(123)
     collapse: Collapse
     
-    make(&grid, dimension.x * dimension.y)
-    make(&average_colors, dimension.x * dimension.y)
-    make(&draw_board, dimension.x * dimension.y)
-    
+    area := dimension.x * dimension.y
+    make(&grid, area)
+    make(&average_colors, area)
+    make(&draw_board, area)
     for y in 0..<dimension.y do for x in 0..<dimension.x do grid[x + y * dimension.x].p = {x, y}
     
     for !rl.WindowShouldClose() {
@@ -233,7 +184,6 @@ main :: proc () {
         
         imgui.text("Choose Input Image")
         imgui.slider_int("Tile Size", &desired_N, 1, 10)
-        imgui.checkbox("Mirror", &mirror_input)
         imgui.columns(4)
         for _, &image in images {
             imgui.push_id(&image)
@@ -294,8 +244,12 @@ main :: proc () {
         }
         
         imgui.checkbox("Average Color", auto_cast &render_wavefunction_as_average)
+        
         modes := [Search_Mode] string {
             .Scanline = "top to bottom, left to right",
+            .Metric   = "search by a metric",
+        }
+        metrics := [Search_Metric] string {
             .States   = "fewest possible states",
             .Entropy  = "lowest entropy",
         }
@@ -303,6 +257,15 @@ main :: proc () {
             if imgui.radio_button(text, mode == search_mode) {
                 search_mode = mode
             }
+        }
+        if search_mode == .Metric {
+            imgui.tree_push("Metric")
+            for text, metric in metrics {
+                if imgui.radio_button(text, metric == search_metric) {
+                    search_metric = metric
+                }
+            }
+            imgui.tree_pop()
         }
         
         imgui.text("Stats")
@@ -315,12 +278,19 @@ main :: proc () {
             clear_draw_board()
             restart(&collapse)
         }
-        imgui.columns(4)
+        
+        imgui.columns(2)
         _id: i32
+        if imgui.radio_button("All", selected_group == nil) {
+            selected_group = nil
+        }
+        imgui.next_column()
+        imgui.next_column()
+        
         for &group, index in draw_groups {
             selected := &group == selected_group
             if imgui.radio_button(tprint("%", index), selected) {
-                selected_group = selected ? nil : &group
+                selected_group = &group
             }
             imgui.next_column()
             
@@ -340,22 +310,44 @@ main :: proc () {
         brush_size = clamp(brush_size, 0.3, 10)
         
         if dimension_contains(dimension, wp) {
-            if selected_group != nil {
-                if rl.IsMouseButtonDown(.LEFT) {
-                    diameter := max(1, round(i32, brush_size))
-                    area := rectangle_center_dimension(wp, diameter)
-                    for y in area.min.y..<area.max.y {
-                        for x in area.min.x..<area.max.x {
-                            p := v2i{x, y}
-                            if dimension_contains(dimension, p) && length_squared(p - wp) < square(diameter) {
-                                index := x + y * dimension.x
-                                draw_board[index] = selected_group
+            if rl.IsMouseButtonDown(.LEFT) {
+                diameter := max(1, round(i32, brush_size))
+                area := rectangle_center_dimension(wp, diameter)
+                for y in area.min.y..<area.max.y {
+                    for x in area.min.x..<area.max.x {
+                        p := v2i{x, y}
+                        if dimension_contains(dimension, p) && length_squared(p - wp) < square(diameter) {
+                            index := x + y * dimension.x
+                            draw_board[index] = selected_group
+                            if selected_group != nil {
                                 restrict_cell_to_drawn(&collapse, p, selected_group)
+                            } else {
+                                //  @copypasta from restart
+                                cell := &grid[index]
+                                wave, ok := &cell.value.(WaveFunction)
+                                if ok {
+                                    delete(wave.supports)
+                                } else {
+                                    cell.value = WaveFunction  {}
+                                    wave = &cell.value.(WaveFunction)
+                                }
+                                
+                                wave.supports = make([dynamic] Supported_State, len(collapse.states))
+                                for &it, index in wave.supports {
+                                    it.id = cast(State_Id) index
+                                    for &amount, direction in it.amount {
+                                        support_now := maximum_support[it.id][direction]
+                                        amount = support_now
+                                    }
+                                }
+                                
+                                delete_key(&changes, p)
                             }
                         }
                     }
                 }
             }
+            
         }
         
         ////////////////////////////////////////////////
@@ -461,7 +453,7 @@ main :: proc () {
                         }
                     }
                     
-                  case Collapsed:
+                  case State_Id:
                     values := collapse.states[value].values
                     color := values[N/4+N/4*N] // middle
                     rl.DrawRectangleRec(rect, color)
@@ -480,14 +472,13 @@ main :: proc () {
             rl.DrawRectangleRec({p.x, p.y, screen_size_factor, screen_size_factor}, rl.ColorAlpha(color, 0.8))
         }
         
-        if selected_group != nil {
-            if dimension_contains(dimension, wp) {
-                wsp := world_to_screen(wp)
-                rect := rl.Rectangle {wsp.x, wsp.y, screen_size_factor, screen_size_factor}
-                
-                rl.DrawRectangleRec(rect, selected_group.color)
-                rl.DrawCircleLinesV(sp,   brush_size * screen_size_factor, rl.YELLOW)
-            }
+        if dimension_contains(dimension, wp) {
+            wsp := world_to_screen(wp)
+            rect := rl.Rectangle {wsp.x, wsp.y, screen_size_factor, screen_size_factor}
+            
+            color := selected_group == nil ? rl.RAYWHITE : selected_group.color
+            rl.DrawRectangleRec(rect, color)
+            rl.DrawCircleLinesV(sp,   brush_size * screen_size_factor, rl.YELLOW)
         }
         
         rl.EndMode2D()
@@ -495,257 +486,6 @@ main :: proc () {
         imgui.render()
         rlimgui.ImGui_ImplRaylib_Render(imgui.get_draw_data())
         rl.EndDrawing()
-    }
-}
-
-spall :: spall
-
-update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
-	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
-    update_start := time.now()
-    
-    update: for {
-        if c.states == nil do break update
-        
-        if !doing_changes {
-            if to_be_collapsed == nil {
-                // Find next cell to be collapsed 
-                spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Find next cell to be collapsed")
-                
-                Data :: struct {
-                    search:  Search,
-                    
-                    grid_section:  [] Cell,
-                    found_invalid: b32,
-                    reached_end: b32,
-                }
-                
-                rows := dimension.y / 4
-                work_units := make([] Data, rows, context.temp_allocator)
-                for &work, row in work_units {
-                    size := dimension.x * 4
-                    work.grid_section = grid[cast(i32) row * size:][:size]
-                    
-                    init_search(&work.search, c, search_mode, context.temp_allocator)
-                    
-                    enqueue_work_t(&work_queue, &work, proc (work: ^Data) {
-                        using work
-                        loop: for &cell in grid_section {
-                            if wave, ok := &cell.value.(WaveFunction); ok {
-                                switch test_search_cell(&search, &cell, wave) {
-                                case .Continue: // nothing
-                                case .Done:     break loop
-                                
-                                case .Found_Invalid: 
-                                    found_invalid = true
-                                    break loop
-                                }
-                            }
-                        }
-                        
-                        reached_end = true
-                    })
-                }
-                complete_all_work(&work_queue)
-                
-                // join 
-                spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Join searches")
-                
-                all_reached_end := true
-                minimal: Search
-                init_search(&minimal, c, search_mode, context.temp_allocator)
-                
-                least: for work in work_units {
-                    all_reached_end &&= work.reached_end
-                    if work.found_invalid {
-                        should_restart = true
-                        break update
-                    } else {
-                        if len(work.search.cells) > 0 {
-                            if search_mode == .Scanline {
-                                minimal = work.search
-                                break least
-                            }
-                            
-                            // @todo(viktor): Scanline needs special handling herre and in the test_search_cell, just make it a special case in general. It should also not need the multithreaded search as it is always just the first value
-                            assert(search_mode != .Scanline)
-                            if minimal.lowest > work.search.lowest {
-                                minimal = work.search
-                            } else if minimal.lowest == work.search.lowest {
-                                append(&minimal.cells, ..work.search.cells[:])
-                            }
-                        }
-                    }
-                }
-                
-                if len(minimal.cells) > 0 {
-                    to_be_collapsed = random_value(entropy, minimal.cells[:])
-                } else {
-                    if all_reached_end {
-                        break update
-                    }
-                }
-            } else {
-                // Collapse chosen cell
-                spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Collapse chosen cell")
-                
-                wave := to_be_collapsed.value.(WaveFunction)
-                pick := Invalid_Id
-                if len(wave.supports) == 1 {
-                    pick = wave.supports[0].id
-                } else {
-                    if update_state == .Paused {
-                        to_be_collapsed = nil
-                        break update
-                    }
-                    
-                    // Random
-                    total_frequency: i32
-                    for support in wave.supports {
-                        total_frequency += c.states[support.id].frequency
-                    }
-                    
-                    target := random_between(entropy, i32, 0, total_frequency)
-                    picking: for support in wave.supports {
-                        state := &c.states[support.id]
-                        target -= state.frequency
-                        if target <= 0 {
-                            pick = support.id
-                            break picking
-                        }
-                    }
-                    assert(pick != Invalid_Id)
-                }
-                
-                if pick != Invalid_Id {
-                    for support in wave.supports {
-                        id := support.id
-                        if pick != id {
-                            remove_state(c, to_be_collapsed.p, id)
-                        }
-                    }
-                    
-                    delete(wave.supports)
-                    to_be_collapsed.value = pick
-                    to_be_collapsed = nil
-                    doing_changes = true
-                }
-            }
-        } else {
-            // Propagate changes
-            spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Propagate changes")
-            
-            if len(changes) == 0 {
-                drawing_initializing = false
-                doing_changes = false
-            } else {
-                change_p: v2i
-                change: Change
-                for k, v in changes {
-                    change_p = k
-                    change = v
-                    break
-                }
-                delete_key(&changes, change_p)
-                assert(len(change.removed_support) > 0)
-                
-                for delta, direction in Deltas {
-                    to_p := change_p + delta
-                    // @wrapping
-                    if !dimension_contains(dimension, to_p) do continue 
-                    
-                    to_cell := &grid[to_p.x + to_p.y * dimension.x]
-                    to_wave, ok := &to_cell.value.(WaveFunction)
-                    if !ok do continue 
-                    
-                    #reverse for &to_support, sup_index in to_wave.supports {
-                        removed := change.removed_support[direction][to_support.id]
-                        if removed.id != to_support.id do continue
-                        
-                        amount := &to_support.amount[direction]
-                        assert(amount^ != 0)
-                        
-                        amount^ -= removed.amount
-                        // assert(amount^ >= 0) // this could become negative if the user draws in and thereby removes states
-                        
-                        if amount^ <= 0 {
-                            remove_state(c, to_p, to_support.id)
-                            
-                            unordered_remove(&to_wave.supports, sup_index)
-                            if len(to_wave.supports) == 0 {
-                                should_restart = true
-                                break update
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        if false && time.duration_seconds(time.since(update_start)) > TargetFrameTime * 0.9 {
-            break update
-        }
-    }
-}
-
-remove_state :: proc (c: ^Collapse, p: v2i, removed_state: State_Id) {
-	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
-    
-    change, ok := &changes[p]
-    if !ok {
-        changes[p] = {}
-        change = &changes[p]
-    }
-    
-    for direction in Direction {
-        for removed in supports[removed_state][direction] {
-            if change.removed_support[direction] == nil {
-                change.removed_support[direction] = make([] Directional_Support, len(c.states))
-            }
-            change.removed_support[direction][removed.id].id = removed.id
-            change.removed_support[direction][removed.id].amount += removed.amount
-        }
-    }
-}
-
-restart :: proc (c: ^Collapse) {
-	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
-    
-    clear(&changes)
-    to_be_collapsed = nil
-    
-    for y in 0..<dimension.y {
-        for x in 0..<dimension.x {
-            cell := &grid[x + y * dimension.x]
-            wave, ok := &cell.value.(WaveFunction)
-            if ok {
-                delete(wave.supports)
-            } else {
-                cell.value = WaveFunction  {}
-                wave = &cell.value.(WaveFunction)
-            }
-            
-            wave.supports = make([dynamic] Support, len(c.states))
-            for &it, index in wave.supports {
-                it.id = cast(State_Id) index
-                for &amount, direction in it.amount {
-                    support_now := maximum_support[it.id][direction]
-                    amount = support_now
-                }
-            }
-        }
-        print("Restart: initialize support % %% \r", view_percentage(y, dimension.y))
-    }
-    println("Restart: initialize support done           ")
-    
-    for y in 0..<dimension.y {
-        for x in 0..<dimension.x {
-            group := draw_board[x + y * dimension.x]
-            if group != nil {
-                restrict_cell_to_drawn(c, {x, y}, group)
-                drawing_initializing = true
-            }
-        }
     }
 }
 
@@ -767,150 +507,6 @@ restrict_cell_to_drawn :: proc (c: ^Collapse, p: v2i, group: ^Draw_Group) {
         }
     }
 }
-        
-extract_tiles :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
-    for &group in draw_groups {
-        delete(group._ids)
-    }
-    clear(&draw_groups)
-    selected_group = nil
-    clear_draw_board()
-    
-    // @incomplete: Allow for rotations and mirroring here
-    if mirror_input {
-        // @incomplete: Assuming mirror on x axis
-        for by in 0..<height {
-            for bx in 0..<width {
-                begin_state(c)
-                for dy in 0..<N {
-                    for dx := N-1; dx >= 0; dx -= 1 {
-                        x := (bx + dx) % width
-                        y := (by + dy) % height
-                        append_state_value(c, pixels[x + y * width])
-                    }
-                }
-                end_state(c)
-            }
-        
-            print("Extraction: State extraction % %%\r", view_percentage(by, height))
-        }
-        println("Extraction: State extraction done         ")
-    }
-    
-    for by in 0..<height {
-        for bx in 0..<width {
-            begin_state(c)
-            for dy in 0..<N {
-                for dx in 0..<N {
-                    x := (bx + dx) % width
-                    y := (by + dy) % height
-                    append_state_value(c, pixels[x + y * width])
-                }
-            }
-            end_state(c)
-        }
-    
-        print("Extraction: State extraction % %%\r", view_percentage(by, height))
-    }
-    println("Extraction: State extraction done         ")
-    
-    offsets := [Direction] v2i {
-        .East  = {-1,0},
-        .North = {0, 1},
-        .West  = { 1,0},
-        .South = {0,-1},
-    }
-    
-    for a in supports do for d in a do delete(d)
-    delete(supports)
-    supports = make([][Direction][dynamic] Directional_Support, len(c.states))
-    
-    for a, a_index in c.states {
-        assert(a.id == auto_cast a_index)
-        for offset, d in offsets {
-            region := rectangle_min_dimension(cast(i32) 0, 0, N, N)
-            dim := get_dimension(region)
-            for b in c.states {
-                does_match: b8 = true
-                // @speed we could hash these regions and only compare hashes in the n²-loop
-                loop: for y: i32; y < dim.y; y += 1 {
-                    for x: i32; x < dim.x; x += 1 {
-                        ap := v2i{x, y}
-                        bp := v2i{x, y} + offset
-                        
-                        if contains(region, bp) {
-                            a_value := a.values[ap.x + ap.y * dim.x]
-                            b_value := b.values[bp.x + bp.y * dim.x]
-                            if a_value != b_value {
-                                does_match = false
-                                break loop
-                            }
-                        }
-                    }
-                }
-            
-                if does_match {
-                    found_support: b32
-                    for &support in supports[a.id][d] {
-                        if support.id == b.id {
-                            found_support = true
-                            support.amount += 1
-                        }
-                    }
-                    // @todo(viktor): Think if this is even reasonably
-                    if !found_support {
-                        append(&supports[a.id][d], Directional_Support {b.id, 1})
-                    }
-                }
-            }
-        }
-        
-        print("Extraction: Supports generation % %%\r", view_percentage(a_index, len(c.states)))
-    }
-    println("Extraction: Supports generation done        ")
-
-    for state in c.states {
-        color := state.values[1 + 1 * N] // middle
-        group: ^Draw_Group
-        for &it in draw_groups {
-            if it.color == color {
-                group = &it
-                break
-            }
-        }
-        if group == nil {
-            append(&draw_groups, Draw_Group { color = color })
-            group = &draw_groups[len(draw_groups)-1]
-            make(&group._ids, len(c.states))
-        }
-        
-        group._ids[state.id] = true
-    }
-    
-    delete(maximum_support)
-    maximum_support = make([][Direction] i32, len(c.states))
-        
-    for from, index in c.states {
-        for direction in Direction {
-            for support in supports[from.id][direction] {
-                amount := &maximum_support[support.id][direction]
-                amount^ += support.amount
-            }
-        }
-        print("Extraction: calculate maximum support % %% \r", view_percentage(index, len(c.states)))
-    }
-    println("Extraction: calculate maximum support done          ")
-}
-
-opposite :: proc (direction: Direction) -> Direction {
-    switch direction {
-      case .East: return .West
-      case .West: return .East
-      case .North: return .South
-      case .South: return .North
-    }
-    unreachable()
-}
 
 world_to_screen :: proc (p: v2i) -> (result: v2) {
     result = vec_cast(f32, p) * screen_size_factor
@@ -919,6 +515,7 @@ world_to_screen :: proc (p: v2i) -> (result: v2) {
     
     return result
 }
+
 screen_to_world :: proc (screen: v2) -> (world: v2i) {
     world  = vec_cast(i32, (screen - (vec_cast(f32, Screen_Size) - (screen_size_factor * vec_cast(f32, dimension))) * 0.5) / screen_size_factor)
     

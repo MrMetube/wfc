@@ -12,16 +12,14 @@ Collapse :: struct {
     // Extraction
     is_defining_state:  b32,
     temp_state_values:  [dynamic] Value,
-    _last_used_state_id: State_Id,
 }
 
 Search :: struct {
     c: ^Collapse,
     
     lowest: f32,
-    mode:   Search_Mode,
+    metric: Search_Metric,
     cells:  [dynamic] ^Cell,
-    cell_entropies: map[^Cell] Entropy,
 }
 
 State_Id :: distinct u32
@@ -32,7 +30,8 @@ State    :: struct {
     frequency: i32,
 }
 
-Search_Mode   :: enum { Scanline, States, Entropy, }
+Search_Mode   :: enum { Scanline, Metric, }
+Search_Metric :: enum { States, Entropy, }
 Search_Result :: enum { Continue, Done, Found_Invalid, }
 
 Entropy :: struct {
@@ -45,7 +44,7 @@ Entropy :: struct {
 reset_collapse :: proc (c: ^Collapse) {
     // @todo(viktor): there should be an easier way
     // println("%", view_variable(size_of(Collapse)))
-    #assert(size_of(Collapse) == 96, "members have changed")
+    #assert(size_of(Collapse) == 88, "members have changed")
     delete(c.states)
     delete(c.temp_state_values)
     c ^= {}
@@ -85,15 +84,11 @@ end_state   :: proc (c: ^Collapse) {
     }
     
     if id == Invalid_Id {
-        assert(c._last_used_state_id == auto_cast len(c.states))
-        id = c._last_used_state_id
-        c._last_used_state_id += 1
+        id = auto_cast len(c.states)
         
         values := make([] Value, len(c.temp_state_values))
         copy(values, c.temp_state_values[:])
         append(&c.states, State { id = id, values = values, frequency = 1 })
-        
-        assert(c._last_used_state_id == auto_cast len(c.states))
     } else {
         c.states[id].frequency += 1
     }
@@ -106,11 +101,11 @@ Invalid_Id :: max(State_Id)
 
 ////////////////////////////////////////////////
 
-init_search :: proc (search: ^Search, c: ^Collapse, mode: Search_Mode, allocator := context.allocator) {
+init_search :: proc (search: ^Search, c: ^Collapse, metric: Search_Metric, allocator := context.allocator) {
     search.lowest = PositiveInfinity
     
-    search.c    = c
-    search.mode = mode
+    search.c      = c
+    search.metric = metric
     make(&search.cells, allocator)
 }
 
@@ -123,49 +118,41 @@ test_search_cell :: proc (search: ^Search, cell: ^Cell, wave: ^WaveFunction) -> 
         should_restart = true
         result = .Found_Invalid
     } else {
-        if search_mode == .Scanline {
+        value: f32
+        switch search.metric {
+          case .Entropy: 
+            entry := &cell.entry
+            if entry.states_count_when_computed != auto_cast len(wave.supports) {
+                entry.states_count_when_computed = auto_cast len(wave.supports)
+                
+                // @speed this could be done iteratively if needed, but its fast enough for now
+                total_frequency: f32
+                entry.entropy = 0
+                for support in wave.supports {
+                    total_frequency += cast(f32) search.c.states[support.id].frequency
+                }
+                
+                for support in wave.supports {
+                    frequency := cast(f32) search.c.states[support.id].frequency
+                    probability := frequency / total_frequency
+                    // Shannon entropy is the negative sum of P * log2(P)
+                    entry.entropy -= probability * log2(probability)
+                }
+            }
+            
+            value = entry.entropy
+            
+          case .States:
+            value = cast(f32) len(wave.supports)
+        }
+        
+        if search.lowest > value {
+            search.lowest = value
+            clear(&search.cells)
+        }
+        
+        if search.lowest == value {
             append(&search.cells, cell)
-            result = .Done
-        } else {
-            value: f32
-            if search.mode == .Entropy {
-                entry, ok := &search.cell_entropies[cell]
-                if !ok {
-                    search.cell_entropies[cell] = {}
-                    entry = &search.cell_entropies[cell]
-                }
-                
-                if entry.states_count_when_computed != auto_cast len(wave.supports) {
-                    entry.states_count_when_computed = auto_cast len(wave.supports)
-                    
-                    // @speed this could be done iteratively if needed
-                    total_frequency: f32
-                    entry.entropy = 0
-                    for support in wave.supports {
-                        total_frequency += cast(f32) search.c.states[support.id].frequency
-                    }
-                    
-                    for support in wave.supports {
-                        frequency := cast(f32) search.c.states[support.id].frequency
-                        probability := frequency / total_frequency
-                        // Shannon entropy is the negative sum of P * log2(P)
-                        entry.entropy -= probability * log2(probability)
-                    }
-                }
-                
-                value = entry.entropy
-            } else {
-                value = cast(f32) len(wave.supports)
-            }
-            
-            if search.lowest > value {
-                search.lowest = value
-                clear(&search.cells)
-            }
-            
-            if search.lowest == value {
-                append(&search.cells, cell)
-            }
         }
     }
     
