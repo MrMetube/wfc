@@ -223,7 +223,7 @@ fractional :: proc(x: $F) -> (fractional: F, integer: i32) {
     return 
 }
 
-distance :: proc (a: $T, b: T) -> (result: T) {
+distance :: proc (to: $T, from: T) -> (result: T) {
     return abs(a - b)
 }
 

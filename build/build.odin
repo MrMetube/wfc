@@ -30,6 +30,9 @@ code_dir  :: `..\code`
 main :: proc() {
     context.allocator = context.temp_allocator
     
+    // @todo(viktor): I am no longer using any of the vscode features for debugging and running so why am I not just making a tiny build app that has some global keyboard shortcuts for the stuff i need? I could delete so much javascript from this world <3. 
+    
+    // @todo(viktor): make force rebuild param explicit
     go_rebuild_yourself()
     
     make_directory_if_not_exists(data_dir)
@@ -40,6 +43,7 @@ main :: proc() {
     if !check_printlikes(code_dir) do os.exit(1)
     
     debug_exe :: `debug.exe`
+    // @todo(viktor): make .Kill and such also setable from the command line
     if handle_running_exe_gracefully(debug_exe, .Kill) {
         args: [dynamic]string
         odin_build(&args, code_dir, `.\`+debug_exe)

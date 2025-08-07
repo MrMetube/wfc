@@ -30,9 +30,13 @@ TargetFrameTime :: 1./TargetFps
 
 should_restart: b32
 t_restart: f32
+is_done: b32
+
+work_queue: WorkQueue
+
 update_state: Update_State
 Update_State :: enum {
-    Paused, Step, Unpaused, Done,
+    Paused, Step, Unpaused,
 }
 
 screen_size_factor: f32
@@ -44,6 +48,29 @@ Average_Color :: struct {
 }
 render_wavefunction_as_average: b32 = true
 
+desired_N: i32 = N
+
+textures_length: int
+textures_and_images: [dynamic] struct {
+    image:   rl.Image,
+    texture: rl.Texture,
+}
+
+Draw_Group :: struct {
+    color: rl.Color,
+    _ids:   []b32,
+}
+
+brush_size_speed: f32 = 30
+brush_size: f32 = 1
+d_brush_size: f32 = 0
+dd_brush_size: f32 = 0
+
+drawing_initializing: b32
+selected_group: ^Draw_Group
+draw_board:     [] ^Draw_Group
+draw_groups:    [dynamic] Draw_Group
+
 ////////////////////////////////////////////////
 
 ////////////////////////////////////////////////
@@ -52,8 +79,12 @@ render_wavefunction_as_average: b32 = true
  * if we ignore even N values then the difference between overlapping and tiled mode is:
  * overlapping: tiles match on a side if N-1 rows/columns match
  * tiled:       tiles match on a side if   1 row/column matches
+ * 
+ * overlapping: extract NxN at every pixel
+ * tiled:       extract NxN at every N-th pixel
 */
 N: i32 = 3
+mirror_input: bool
 
 first_time := true
 
@@ -74,13 +105,6 @@ WaveFunction :: struct {
     supports: [dynamic] Support,
 }
 
-selected_group: int = -1
-draw_groups:    [dynamic] Draw_Group
-Draw_Group :: struct {
-    color: rl.Color,
-    ids:   [dynamic]State_Id
-}
-
 supports: [/* from State_Id */] [Direction] [dynamic/* ascending */] Directional_Support
 Directional_Support :: struct {
     id:     State_Id,
@@ -97,26 +121,16 @@ Direction :: enum {
     East, North, West, South,
 }
 
-textures_length: int
-textures_and_images: [dynamic] struct {
-    image:   rl.Image,
-    texture: rl.Texture,
-}
 states_direction: Direction
 
 to_be_collapsed: ^Cell
 
-changes: [dynamic] Change
-changes_cursor: int
-
+doing_changes: b32
+changes: map[v2i]Change
 Change :: struct {
-    p: v2i,
     removed_support: [Direction] [/* State_Id */] Directional_Support,
 }
 
-Search_Mode :: enum {
-    Scanline, States, Entropy, 
-}
 search_mode := Search_Mode.Entropy
 
 main :: proc () {
@@ -135,6 +149,8 @@ main :: proc () {
     
     arena: Arena
     init_arena(&arena, make([]u8, 128*Megabyte))
+    
+    init_work_queue(&work_queue, 11)
     
     File :: struct {
         name: string,
@@ -201,6 +217,7 @@ main :: proc () {
     
     make(&grid, dimension.x * dimension.y)
     make(&average_colors, dimension.x * dimension.y)
+    make(&draw_board, dimension.x * dimension.y)
     
     for y in 0..<dimension.y do for x in 0..<dimension.x do grid[x + y * dimension.x].p = {x, y}
     
@@ -215,15 +232,29 @@ main :: proc () {
         // UI
         
         imgui.text("Choose Input Image")
-        imgui.slider_int("Tile Pattern Size", &N, 1, 10)
+        imgui.slider_int("Tile Size", &desired_N, 1, 10)
+        imgui.checkbox("Mirror", &mirror_input)
         imgui.columns(4)
         for _, &image in images {
             imgui.push_id(&image)
             if imgui.image_button(auto_cast &image.texture.id, 30) {
-                assert(image.image.format == .UNCOMPRESSED_R8G8B8A8)
+                pixels: []rl.Color
+                if image.image.format == .UNCOMPRESSED_R8G8B8 {
+                    pixels = make([]rl.Color, image.image.width * image.image.height)
+                    // @leak
+                    raw := slice_from_parts([3]u8, image.image.data, image.image.width * image.image.height)
+                    for &pixel, index in pixels {
+                        pixel.rgb = raw[index]
+                        pixel.a   = 255
+                    }
+                } else if image.image.format == .UNCOMPRESSED_R8G8B8A8 {
+                    pixels = slice_from_parts(rl.Color, image.image.data, image.image.width * image.image.height)
+                } else {
+                    unreachable()
+                }
                 
+                N = desired_N
                 reset_collapse(&collapse)
-                pixels := slice_from_parts(rl.Color, image.image.data, image.image.width * image.image.height)
                 extract_tiles(&collapse, pixels, image.image.width, image.image.height)
                 
                 restart(&collapse)
@@ -246,31 +277,31 @@ main :: proc () {
                     t_restart = 0
                 }
             }
+        } else {
+            imgui.text("Select an input image")
+        }
             
-            switch update_state {
-              case .Step: 
-                update_state = .Paused
-                fallthrough
-              case .Paused:
-               if imgui.button("Unpause") do update_state = .Unpaused
-               if imgui.button("Step")    do update_state = .Step
-               
-              case .Unpaused:
-               if imgui.button("Pause") do update_state = .Paused
-            
-              case .Done:
-            }
-            
-            imgui.checkbox("Average Color", auto_cast &render_wavefunction_as_average)
-            modes := [Search_Mode] string {
-                .Scanline = "top to bottom, left to right",
-                .States = "fewest possible states",
-                .Entropy = "lowest entropy",
-            }
-            for text, mode in modes {
-                if imgui.radio_button(text, mode == search_mode) {
-                    search_mode = mode
-                }
+        switch update_state {
+          case .Step: 
+            update_state = .Paused
+            fallthrough
+          case .Paused:
+           if imgui.button("Unpause") do update_state = .Unpaused
+           if imgui.button("Step")    do update_state = .Step
+           
+          case .Unpaused:
+           if imgui.button("Pause") do update_state = .Paused
+        }
+        
+        imgui.checkbox("Average Color", auto_cast &render_wavefunction_as_average)
+        modes := [Search_Mode] string {
+            .Scanline = "top to bottom, left to right",
+            .States   = "fewest possible states",
+            .Entropy  = "lowest entropy",
+        }
+        for text, mode in modes {
+            if imgui.radio_button(text, mode == search_mode) {
+                search_mode = mode
             }
         }
         
@@ -280,12 +311,16 @@ main :: proc () {
         imgui.text(tprint("Total time %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)))
         
         imgui.text("Pick a color to Draw")
-        imgui.columns(2)
+        if imgui.button("Clear drawing") {
+            clear_draw_board()
+            restart(&collapse)
+        }
+        imgui.columns(4)
         _id: i32
         for &group, index in draw_groups {
-            selected := index == selected_group
+            selected := &group == selected_group
             if imgui.radio_button(tprint("%", index), selected) {
-                selected_group = selected ? -1 : index
+                selected_group = selected ? nil : &group
             }
             imgui.next_column()
             
@@ -297,25 +332,25 @@ main :: proc () {
         
         sp := rl.GetMousePosition()
         wp := screen_to_world(sp)
+        
+        dd_brush_size = -rl.GetMouseWheelMove() * min(300, brush_size_speed * brush_size)
+        d_brush_size += dd_brush_size * rl.GetFrameTime()
+        d_brush_size += -d_brush_size * rl.GetFrameTime() * 10
+        brush_size += d_brush_size * rl.GetFrameTime()
+        brush_size = clamp(brush_size, 0.3, 10)
+        
         if dimension_contains(dimension, wp) {
-            if selected_group != -1 {
-                place  := rl.IsMouseButtonDown(.LEFT)
-                remove := rl.IsMouseButtonDown(.RIGHT)
-                // @todo(viktor): Instead of directly modifying we should make a separate structure to keep these restrictions around and apply them again
-                if remove ~ place {
-                    cell := &grid[wp.x + wp.y * dimension.x]
-                    if wave, ok := cell.value.(WaveFunction); ok {
-                        for it in wave.supports {
-                            is_selected: b32
-                            for id in draw_groups[selected_group].ids {
-                                if it.id == id {
-                                    is_selected = true
-                                    break
-                                }
-                            }
-                            
-                            if remove && is_selected || place && !is_selected {
-                                remove_state(&collapse, wp, it.id)
+            if selected_group != nil {
+                if rl.IsMouseButtonDown(.LEFT) {
+                    diameter := max(1, round(i32, brush_size))
+                    area := rectangle_center_dimension(wp, diameter)
+                    for y in area.min.y..<area.max.y {
+                        for x in area.min.x..<area.max.x {
+                            p := v2i{x, y}
+                            if dimension_contains(dimension, p) && length_squared(p - wp) < square(diameter) {
+                                index := x + y * dimension.x
+                                draw_board[index] = selected_group
+                                restrict_cell_to_drawn(&collapse, p, selected_group)
                             }
                         }
                     }
@@ -329,21 +364,25 @@ main :: proc () {
         if !should_restart {
             update(&collapse, &entropy)
         } else {
-            t_restart -= rl.GetFrameTime()
-            if t_restart <= 0 {
-                t_restart = 0
-                should_restart = false
-                if first_time {
+            if drawing_initializing {
+                // @todo(viktor): Tell the user it doesnt work
+                update_state = .Paused
+            } else {
+                t_restart -= rl.GetFrameTime()
+                if t_restart <= 0 {
+                    t_restart = 0
+                    should_restart = false
                     
-                    _total_start = time.now()
-                    first_time = false
-                } else {
-                    update_state = .Paused
-                    restart(&collapse)
+                    if first_time {
+                        _total_start = time.now()
+                        first_time = false
+                    } else {
+                        restart(&collapse)
+                    }
                 }
             }
             
-            if update_state != .Done {
+            if !is_done {
                 _total = time.since(_total_start)
             }
         }
@@ -379,7 +418,7 @@ main :: proc () {
             }
         }
         
-        is_done := true
+        is_done = true
         for y in 0..<dimension.y {
             for x in 0..<dimension.x {
                 index := x + y * dimension.x
@@ -403,7 +442,7 @@ main :: proc () {
                                 count: f32
                                 for support in value.supports {
                                     state := collapse.states[support.id]
-                                    value := cast([4]u8) state.values[0] // middle
+                                    value := cast([4]u8) state.values[N/4+N/4*N] // middle
                                     color += rgba_to_v4(value) * cast(f32) state.frequency
                                     count += cast(f32) state.frequency
                                 }
@@ -415,8 +454,8 @@ main :: proc () {
                                 average.color = cast(rl.Color) v4_to_rgba(color)
                             }
                             rl.DrawRectangleRec(rect, average.color)
-                            rl.DrawRectangleLinesEx(rect, 2,  rl.BLACK)
-                            rl.DrawRectangleLinesEx(rect, 1,  rl.WHITE)
+                            // rl.DrawRectangleLinesEx(rect, 4,  rl.BLACK)
+                            // rl.DrawRectangleLinesEx(rect, 1,  rl.WHITE)
                         } else {
                             rl.DrawRectangleRec(rect, {0,255,255,32})
                         }
@@ -424,16 +463,14 @@ main :: proc () {
                     
                   case Collapsed:
                     values := collapse.states[value].values
-                    color := values[0] // middle
+                    color := values[N/4+N/4*N] // middle
                     rl.DrawRectangleRec(rect, color)
                 }
             }
         }
         
-        if is_done do update_state = .Done
-        
-        for change in changes[changes_cursor:] {
-            p := world_to_screen(change.p)
+        for p, _ in changes {
+            p := world_to_screen(p)
             rl.DrawRectangleRec({p.x, p.y, screen_size_factor, screen_size_factor}, rl.ColorAlpha(rl.YELLOW, 0.4))
         }
         
@@ -443,14 +480,13 @@ main :: proc () {
             rl.DrawRectangleRec({p.x, p.y, screen_size_factor, screen_size_factor}, rl.ColorAlpha(color, 0.8))
         }
         
-        if selected_group != -1 {
+        if selected_group != nil {
             if dimension_contains(dimension, wp) {
                 wsp := world_to_screen(wp)
                 rect := rl.Rectangle {wsp.x, wsp.y, screen_size_factor, screen_size_factor}
                 
-                rl.DrawRectangleRec(rect, collapse.states[draw_groups[selected_group].ids[0]].values[0])
-                rl.DrawRectangleLinesEx(rect, 2,  rl.BLACK)
-                rl.DrawRectangleLinesEx(rect, 1,  rl.WHITE)
+                rl.DrawRectangleRec(rect, selected_group.color)
+                rl.DrawCircleLinesV(sp,   brush_size * screen_size_factor, rl.YELLOW)
             }
         }
         
@@ -462,6 +498,8 @@ main :: proc () {
     }
 }
 
+spall :: spall
+
 update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
 	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     update_start := time.now()
@@ -469,36 +507,82 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
     update: for {
         if c.states == nil do break update
         
-        if len(changes) == 0 {
+        if !doing_changes {
             if to_be_collapsed == nil {
-                if update_state == .Paused do break update
-                
                 // Find next cell to be collapsed 
                 spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Find next cell to be collapsed")
-    
-                begin_search(c, search_mode)
                 
-                found_invalid: b32
-                search: for &cell, index in grid {
-                    if wave, ok := &cell.value.(WaveFunction); ok {
-                        switch test_search_cell(c, &cell, wave) {
-                        case .Continue: // nothing
-                        case .Done:     break search
+                Data :: struct {
+                    search:  Search,
+                    
+                    grid_section:  [] Cell,
+                    found_invalid: b32,
+                    reached_end: b32,
+                }
+                
+                rows := dimension.y / 4
+                work_units := make([] Data, rows, context.temp_allocator)
+                for &work, row in work_units {
+                    size := dimension.x * 4
+                    work.grid_section = grid[cast(i32) row * size:][:size]
+                    
+                    init_search(&work.search, c, search_mode, context.temp_allocator)
+                    
+                    enqueue_work_t(&work_queue, &work, proc (work: ^Data) {
+                        using work
+                        loop: for &cell in grid_section {
+                            if wave, ok := &cell.value.(WaveFunction); ok {
+                                switch test_search_cell(&search, &cell, wave) {
+                                case .Continue: // nothing
+                                case .Done:     break loop
+                                
+                                case .Found_Invalid: 
+                                    found_invalid = true
+                                    break loop
+                                }
+                            }
+                        }
                         
-                        case .Found_Invalid: 
-                            found_invalid = true
-                            break search
+                        reached_end = true
+                    })
+                }
+                complete_all_work(&work_queue)
+                
+                // join 
+                spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Join searches")
+                
+                all_reached_end := true
+                minimal: Search
+                init_search(&minimal, c, search_mode, context.temp_allocator)
+                
+                least: for work in work_units {
+                    all_reached_end &&= work.reached_end
+                    if work.found_invalid {
+                        should_restart = true
+                        break update
+                    } else {
+                        if len(work.search.cells) > 0 {
+                            if search_mode == .Scanline {
+                                minimal = work.search
+                                break least
+                            }
+                            
+                            // @todo(viktor): Scanline needs special handling herre and in the test_search_cell, just make it a special case in general. It should also not need the multithreaded search as it is always just the first value
+                            assert(search_mode != .Scanline)
+                            if minimal.lowest > work.search.lowest {
+                                minimal = work.search
+                            } else if minimal.lowest == work.search.lowest {
+                                append(&minimal.cells, ..work.search.cells[:])
+                            }
                         }
                     }
                 }
                 
-                cells := end_search(c)
-                if found_invalid {
-                    should_restart = true
-                    break update
+                if len(minimal.cells) > 0 {
+                    to_be_collapsed = random_value(entropy, minimal.cells[:])
                 } else {
-                    if len(cells) > 0 {
-                        to_be_collapsed = random_value(entropy, cells)
+                    if all_reached_end {
+                        break update
                     }
                 }
             } else {
@@ -509,7 +593,12 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
                 pick := Invalid_Id
                 if len(wave.supports) == 1 {
                     pick = wave.supports[0].id
-                } else if true {
+                } else {
+                    if update_state == .Paused {
+                        to_be_collapsed = nil
+                        break update
+                    }
+                    
                     // Random
                     total_frequency: i32
                     for support in wave.supports {
@@ -526,28 +615,6 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
                         }
                     }
                     assert(pick != Invalid_Id)
-                } else {
-                    // User choses
-                    imgui.begin_child("Choose")
-                    
-                    column_count := ceil(i32, square_root(cast(f32) len(wave.supports)))
-                    imgui.columns(column_count)
-                    i: i32
-                    for support in wave.supports {
-                        id := support.id
-                        state := c.states[id]
-                        color := state.values[0] // middle
-                        
-                        if imgui.color_button(tprint("choose-%", id), rgba_to_v4(cast([4]u8) color)) {
-                            pick = id
-                        }
-                        
-                        if i % column_count == 0 {
-                            imgui.next_column()
-                        }
-                        i += 1
-                    }
-                    imgui.end_child()
                 }
                 
                 if pick != Invalid_Id {
@@ -561,21 +628,29 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
                     delete(wave.supports)
                     to_be_collapsed.value = pick
                     to_be_collapsed = nil
+                    doing_changes = true
                 }
             }
         } else {
             // Propagate changes
             spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Propagate changes")
             
-            if changes_cursor >= len(changes) {
-                clear_changes()
+            if len(changes) == 0 {
+                drawing_initializing = false
+                doing_changes = false
             } else {
-                change := changes[changes_cursor]
-                changes_cursor += 1
+                change_p: v2i
+                change: Change
+                for k, v in changes {
+                    change_p = k
+                    change = v
+                    break
+                }
+                delete_key(&changes, change_p)
                 assert(len(change.removed_support) > 0)
                 
                 for delta, direction in Deltas {
-                    to_p := change.p + delta
+                    to_p := change_p + delta
                     // @wrapping
                     if !dimension_contains(dimension, to_p) do continue 
                     
@@ -598,6 +673,7 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
                             
                             unordered_remove(&to_wave.supports, sup_index)
                             if len(to_wave.supports) == 0 {
+                                should_restart = true
                                 break update
                             }
                         }
@@ -606,35 +682,19 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
             }
         }
         
-        if time.duration_seconds(time.since(update_start)) > TargetFrameTime * 0.9 {
+        if false && time.duration_seconds(time.since(update_start)) > TargetFrameTime * 0.9 {
             break update
         }
     }
 }
 
-clear_changes :: proc () {
-    changes_cursor = 0
-    for it in changes {
-        for d in Direction {
-            delete(it.removed_support[d])
-        }
-    }
-    clear(&changes)
-}
-
 remove_state :: proc (c: ^Collapse, p: v2i, removed_state: State_Id) {
 	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     
-    change: ^Change
-    for &other in changes[changes_cursor:] {
-        if other.p == p {
-            change = &other
-        }
-    }
-    
-    if change == nil {
-        append(&changes, Change { p = p })
-        change = &changes[len(changes)-1]
+    change, ok := &changes[p]
+    if !ok {
+        changes[p] = {}
+        change = &changes[p]
     }
     
     for direction in Direction {
@@ -651,10 +711,8 @@ remove_state :: proc (c: ^Collapse, p: v2i, removed_state: State_Id) {
 restart :: proc (c: ^Collapse) {
 	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     
-    clear_changes()
+    clear(&changes)
     to_be_collapsed = nil
-    
-    
     
     for y in 0..<dimension.y {
         for x in 0..<dimension.x {
@@ -679,16 +737,66 @@ restart :: proc (c: ^Collapse) {
         print("Restart: initialize support % %% \r", view_percentage(y, dimension.y))
     }
     println("Restart: initialize support done           ")
+    
+    for y in 0..<dimension.y {
+        for x in 0..<dimension.x {
+            group := draw_board[x + y * dimension.x]
+            if group != nil {
+                restrict_cell_to_drawn(c, {x, y}, group)
+                drawing_initializing = true
+            }
+        }
+    }
 }
 
+clear_draw_board :: proc () {
+    for &it in draw_board do it = nil
+}
+
+restrict_cell_to_drawn :: proc (c: ^Collapse, p: v2i, group: ^Draw_Group) {
+	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
+    selected := group._ids
+    
+    cell := &grid[p.x + p.y * dimension.x]
+    if wave, ok := cell.value.(WaveFunction); ok {
+        for it in wave.supports {
+            is_selected:= selected[it.id]
+            if !is_selected {
+                remove_state(c, p, it.id)
+            }
+        }
+    }
+}
+        
 extract_tiles :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
     for &group in draw_groups {
-        delete(group.ids)
+        delete(group._ids)
     }
     clear(&draw_groups)
-    selected_group = -1
+    selected_group = nil
+    clear_draw_board()
     
-    // @Incomplete: Allow for rotations and mirroring here
+    // @incomplete: Allow for rotations and mirroring here
+    if mirror_input {
+        // @incomplete: Assuming mirror on x axis
+        for by in 0..<height {
+            for bx in 0..<width {
+                begin_state(c)
+                for dy in 0..<N {
+                    for dx := N-1; dx >= 0; dx -= 1 {
+                        x := (bx + dx) % width
+                        y := (by + dy) % height
+                        append_state_value(c, pixels[x + y * width])
+                    }
+                }
+                end_state(c)
+            }
+        
+            print("Extraction: State extraction % %%\r", view_percentage(by, height))
+        }
+        println("Extraction: State extraction done         ")
+    }
+    
     for by in 0..<height {
         for bx in 0..<width {
             begin_state(c)
@@ -725,8 +833,8 @@ extract_tiles :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
             for b in c.states {
                 does_match: b8 = true
                 // @speed we could hash these regions and only compare hashes in the n²-loop
-                loop: for y in 0..<dim.y {
-                    for x in 0..<dim.x {
+                loop: for y: i32; y < dim.y; y += 1 {
+                    for x: i32; x < dim.x; x += 1 {
                         ap := v2i{x, y}
                         bp := v2i{x, y} + offset
                         
@@ -740,7 +848,7 @@ extract_tiles :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
                         }
                     }
                 }
-                
+            
                 if does_match {
                     found_support: b32
                     for &support in supports[a.id][d] {
@@ -773,9 +881,10 @@ extract_tiles :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
         if group == nil {
             append(&draw_groups, Draw_Group { color = color })
             group = &draw_groups[len(draw_groups)-1]
+            make(&group._ids, len(c.states))
         }
         
-        append(&group.ids, state.id)
+        group._ids[state.id] = true
     }
     
     delete(maximum_support)

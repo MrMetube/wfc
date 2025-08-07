@@ -8,6 +8,8 @@ import win "core:sys/windows"
 WorkQueueCallback :: #type proc(data: pmm)
 
 WorkQueue :: struct {
+    worker_count: u32,
+    
     semaphore_handle: win.HANDLE,
     
     completion_goal, 
@@ -47,6 +49,8 @@ init_work_queue :: proc(queue: ^WorkQueue, count: u32) {
         
         thread.create_and_start_with_data(&info, worker_thread)
     }
+    
+    queue.worker_count = count
 }
 
 enqueue_work_or_do_immediatly :: proc { enqueue_work_or_do_immediatly_t, enqueue_work_or_do_immediatly_any }
@@ -79,6 +83,7 @@ enqueue_work_any :: proc(queue: ^WorkQueue, data: pmm, callback: WorkQueueCallba
 }
 
 complete_all_work :: proc(queue: ^WorkQueue) {
+    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Find next cell to be collapsed")
     if queue == nil do return
     
     for queue.completion_count != queue.completion_goal {

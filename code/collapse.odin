@@ -9,17 +9,18 @@ Value :: rl.Color
 Collapse :: struct {
     states: [dynamic] State,
 
-    // 
+    // Extraction
     is_defining_state:  b32,
     temp_state_values:  [dynamic] Value,
     _last_used_state_id: State_Id,
+}
+
+Search :: struct {
+    c: ^Collapse,
     
-    // Search
-    is_searching: b32,
-    mode:  Search_Mode,
-    cells: [dynamic] ^Cell,
-    lowest_count:   u32,
-    lowest_entropy: f32,
+    lowest: f32,
+    mode:   Search_Mode,
+    cells:  [dynamic] ^Cell,
     cell_entropies: map[^Cell] Entropy,
 }
 
@@ -31,7 +32,8 @@ State    :: struct {
     frequency: i32,
 }
 
-Search_Result :: enum { Continue, Done, Found_Invalid }
+Search_Mode   :: enum { Scanline, States, Entropy, }
+Search_Result :: enum { Continue, Done, Found_Invalid, }
 
 Entropy :: struct {
     states_count_when_computed: u32,
@@ -41,18 +43,12 @@ Entropy :: struct {
 ////////////////////////////////////////////////
 
 reset_collapse :: proc (c: ^Collapse) {
+    // @todo(viktor): there should be an easier way
     // println("%", view_variable(size_of(Collapse)))
-    #assert(size_of(Collapse) == 184, "members have changed")
-    clear(&c.states)
-    clear(&c.temp_state_values)
-    clear(&c.cells)
-    clear(&c.cell_entropies)
-    c.is_defining_state = {}
-    c._last_used_state_id = {}
-    c.is_searching = {}
-    c.mode = {}
-    c.lowest_count = {}
-    c.lowest_entropy = {}
+    #assert(size_of(Collapse) == 96, "members have changed")
+    delete(c.states)
+    delete(c.temp_state_values)
+    c ^= {}
 }
 
 ////////////////////////////////////////////////
@@ -110,82 +106,68 @@ Invalid_Id :: max(State_Id)
 
 ////////////////////////////////////////////////
 
-begin_search     :: proc (c: ^Collapse, mode: Search_Mode) {
-    assert(!c.is_searching)
-    c.is_searching = true
+init_search :: proc (search: ^Search, c: ^Collapse, mode: Search_Mode, allocator := context.allocator) {
+    search.lowest = PositiveInfinity
     
-    c.lowest_count   = max(u32)
-    c.lowest_entropy = PositiveInfinity
-    c.mode = mode
-    clear(&c.cells)
+    search.c    = c
+    search.mode = mode
+    make(&search.cells, allocator)
 }
 
 // @todo(viktor): what information do we acutally need, is cell/wave function the minimal set?
-test_search_cell :: proc (c: ^Collapse, cell: ^Cell, wave: ^WaveFunction) -> (result: Search_Result) {
-    assert(c.is_searching)
+// @todo(viktor): gumin add some noise to the entropy: 1e-6 * random.NextDouble();
+test_search_cell :: proc (search: ^Search, cell: ^Cell, wave: ^WaveFunction) -> (result: Search_Result) {
     result = .Continue
     
     if len(wave.supports) == 0 {
         should_restart = true
         result = .Found_Invalid
     } else {
-        switch c.mode {
-          case .Scanline: 
-            append(&c.cells, cell)
+        if search_mode == .Scanline {
+            append(&search.cells, cell)
             result = .Done
-          
-          case .Entropy:
-            entry, ok := &c.cell_entropies[cell]
-            if !ok {
-                c.cell_entropies[cell] = {}
-                entry = &c.cell_entropies[cell]
-            }
-            
-            if entry.states_count_when_computed != auto_cast len(wave.supports) {
-                entry.states_count_when_computed = auto_cast len(wave.supports)
-                
-                // @speed this could be done iteratively if needed
-                total_frequency: f32
-                entry.entropy = 0
-                for support in wave.supports {
-                    total_frequency += cast(f32) c.states[support.id].frequency
+        } else {
+            value: f32
+            if search.mode == .Entropy {
+                entry, ok := &search.cell_entropies[cell]
+                if !ok {
+                    search.cell_entropies[cell] = {}
+                    entry = &search.cell_entropies[cell]
                 }
                 
-                for support in wave.supports {
-                    frequency := cast(f32) c.states[support.id].frequency
-                    probability := frequency / total_frequency
-                    // Shannon entropy is the negative sum of P * log2(P)
-                    entry.entropy -= probability * log2(probability)
+                if entry.states_count_when_computed != auto_cast len(wave.supports) {
+                    entry.states_count_when_computed = auto_cast len(wave.supports)
+                    
+                    // @speed this could be done iteratively if needed
+                    total_frequency: f32
+                    entry.entropy = 0
+                    for support in wave.supports {
+                        total_frequency += cast(f32) search.c.states[support.id].frequency
+                    }
+                    
+                    for support in wave.supports {
+                        frequency := cast(f32) search.c.states[support.id].frequency
+                        probability := frequency / total_frequency
+                        // Shannon entropy is the negative sum of P * log2(P)
+                        entry.entropy -= probability * log2(probability)
+                    }
                 }
+                
+                value = entry.entropy
+            } else {
+                value = cast(f32) len(wave.supports)
             }
             
-            if c.lowest_entropy > entry.entropy {
-                c.lowest_entropy = entry.entropy
-                clear(&c.cells)
+            if search.lowest > value {
+                search.lowest = value
+                clear(&search.cells)
             }
             
-            if c.lowest_entropy == entry.entropy {
-                append(&c.cells, cell)
-            }
-            
-          case .States:
-            count := cast(u32) len(wave.supports)
-            if c.lowest_count > count {
-                c.lowest_count = count
-                clear(&c.cells)
-            }
-            
-            if c.lowest_count == count {
-                append(&c.cells, cell)
+            if search.lowest == value {
+                append(&search.cells, cell)
             }
         }
     }
     
     return result
-}
-
-end_search :: proc (c: ^Collapse) -> (cells: []^Cell) {
-    assert(c.is_searching)
-    c.is_searching = false
-    return c.cells[:]
 }
