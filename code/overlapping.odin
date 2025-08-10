@@ -259,19 +259,20 @@ remove_state :: proc (c: ^Collapse, p: v2i, removed_state: State_Id) {
     
     change, ok := &changes[p]
     if !ok {
-        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "not found")
         changes[p] = {}
         change = &changes[p]
     }
     
     {
-        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "accum removed support")
+        // @todo(viktor): We could just have a flat buffer of all these removals and only accumulate them in the update loop itself once the change is being processed
+        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "remove_state: accum removed support")
         for direction in Direction {
             for removed in supports[removed_state][direction] {
                 if change.removed_support[direction] == nil {
-                    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "make slice")
+                    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "remove_state: make removed support")
                     change.removed_support[direction] = make([] Directional_Support, len(c.states))
                 }
+                
                 change.removed_support[direction][removed.id].id = removed.id
                 change.removed_support[direction][removed.id].amount += removed.amount
             }
@@ -285,41 +286,50 @@ restart :: proc (c: ^Collapse) {
     clear(&changes)
     to_be_collapsed = nil
     
-    for y in 0..<dimension.y {
-        for x in 0..<dimension.x {
-            cell := &grid[x + y * dimension.x]
-            wave, ok := &cell.value.(WaveFunction)
-            if ok {
-                delete(wave.supports)
-            } else {
-                cell.value = WaveFunction  {}
-                wave = &cell.value.(WaveFunction)
-            }
-            
-            wave.supports = make([dynamic] Supported_State, len(c.states))
-            for &it, index in wave.supports {
-                it.id = cast(State_Id) index
-                for &amount, direction in it.amount {
-                    amount = maximum_support[it.id][direction]
+    {
+        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Restart: initialize support")
+        for y in 0..<dimension.y {
+            for x in 0..<dimension.x {
+                cell := &grid[x + y * dimension.x]
+                wave, ok := &cell.value.(WaveFunction)
+                if ok {
+                    delete(wave.supports)
+                } else {
+                    cell.value = WaveFunction  {}
+                    wave = &cell.value.(WaveFunction)
+                }
+                
+                wave.supports = make([dynamic] Supported_State, len(c.states))
+                for &it, index in wave.supports {
+                    it.id = cast(State_Id) index
+                    for &amount, direction in it.amount {
+                        amount = maximum_support[it.id][direction]
+                    }
                 }
             }
+            print("Restart: initialize support % %% \r", view_percentage(y, dimension.y))
         }
-        print("Restart: initialize support % %% \r", view_percentage(y, dimension.y))
+        println("Restart: initialize support done           ")
     }
-    println("Restart: initialize support done           ")
     
-    for y in 0..<dimension.y {
-        for x in 0..<dimension.x {
-            group := draw_board[x + y * dimension.x]
-            if group != nil {
-                restrict_cell_to_drawn(c, {x, y}, group)
-                drawing_initializing = true
+    {
+        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Restart: enforce drawing")
+        
+        for y in 0..<dimension.y {
+            for x in 0..<dimension.x {
+                group := draw_board[x + y * dimension.x]
+                if group != nil {
+                    restrict_cell_to_drawn(c, {x, y}, group)
+                    drawing_initializing = true
+                }
             }
         }
     }
 }
 
 extract_tiles :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
+	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
+    
     for &group in draw_groups {
         delete(group._ids)
     }
@@ -328,100 +338,112 @@ extract_tiles :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
     clear_draw_board()
     
     // @incomplete: Allow for rotations and mirroring here
-    for by in 0..<height {
-        for bx in 0..<width {
-            begin_state(c)
-            for dy in 0..<N {
-                for dx in 0..<N {
-                    x := (bx + dx) % width
-                    y := (by + dy) % height
-                    append_state_value(c, pixels[x + y * width])
+    {
+        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "State Extraction")
+        for by in 0..<height {
+            for bx in 0..<width {
+                begin_state(c)
+                for dy in 0..<N {
+                    for dx in 0..<N {
+                        x := (bx + dx) % width
+                        y := (by + dy) % height
+                        append_state_value(c, pixels[x + y * width])
+                    }
                 }
+                end_state(c)
             }
-            end_state(c)
+            
+            print("Extraction: State extraction % %%\r", view_percentage(by, height))
         }
-    
-        print("Extraction: State extraction % %%\r", view_percentage(by, height))
+        println("Extraction: State extraction done         ")
     }
-    println("Extraction: State extraction done         ")
 
     for a in supports do for d in a do delete(d)
     delete(supports)
     supports = make([][Direction][dynamic] Directional_Support, len(c.states))
     
-    for a, a_index in c.states {
-        assert(a.id == auto_cast a_index)
-        for delta, d in Deltas {
-            region := rectangle_min_dimension(cast(i32) 0, 0, N, N)
-            dim := get_dimension(region)
-            for b in c.states {
-                does_match: b8 = true
-                // @speed we could hash these regions and only compare hashes in the n²-loop
-                loop: for y: i32; y < dim.y; y += 1 {
-                    for x: i32; x < dim.x; x += 1 {
-                        ap := v2i{x, y}
-                        bp := v2i{x, y} - delta
-                        
-                        if contains(region, bp) {
-                            a_value := a.values[ap.x + ap.y * dim.x]
-                            b_value := b.values[bp.x + bp.y * dim.x]
-                            if a_value != b_value {
-                                does_match = false
-                                break loop
+    {
+        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Extraction: Supports generation")
+        for a, a_index in c.states {
+            assert(a.id == auto_cast a_index)
+            for delta, d in Deltas {
+                region := rectangle_min_dimension(cast(i32) 0, 0, N, N)
+                dim := get_dimension(region)
+                for b in c.states {
+                    does_match: b8 = true
+                    // @speed we could hash these regions and only compare hashes in the n²-loop
+                    loop: for y: i32; y < dim.y; y += 1 {
+                        for x: i32; x < dim.x; x += 1 {
+                            ap := v2i{x, y}
+                            bp := v2i{x, y} - delta
+                            
+                            if contains(region, bp) {
+                                a_value := a.values[ap.x + ap.y * dim.x]
+                                b_value := b.values[bp.x + bp.y * dim.x]
+                                if a_value != b_value {
+                                    does_match = false
+                                    break loop
+                                }
                             }
                         }
                     }
-                }
-            
-                if does_match {
-                    found_support: b32
-                    for &support in supports[a.id][d] {
-                        if support.id == b.id {
-                            found_support = true
-                            support.amount += 1
+                
+                    if does_match {
+                        found_support: b32
+                        for &support in supports[a.id][d] {
+                            if support.id == b.id {
+                                found_support = true
+                                support.amount += 1
+                            }
+                        }
+                        // @todo(viktor): Think if this is even reasonably
+                        if !found_support {
+                            append(&supports[a.id][d], Directional_Support {b.id, 1})
                         }
                     }
-                    // @todo(viktor): Think if this is even reasonably
-                    if !found_support {
-                        append(&supports[a.id][d], Directional_Support {b.id, 1})
-                    }
                 }
             }
+            
+            print("Extraction: Supports generation % %%\r", view_percentage(a_index, len(c.states)))
         }
-        
-        print("Extraction: Supports generation % %%\r", view_percentage(a_index, len(c.states)))
-    }
-    println("Extraction: Supports generation done        ")
-
-    for state in c.states {
-        color := state.values[1 + 1 * N] // middle
-        group: ^Draw_Group
-        for &it in draw_groups {
-            if it.color == color {
-                group = &it
-                break
-            }
-        }
-        if group == nil {
-            append(&draw_groups, Draw_Group { color = color })
-            group = &draw_groups[len(draw_groups)-1]
-            make(&group._ids, len(c.states))
-        }
-        
-        group._ids[state.id] = true
+        println("Extraction: Supports generation done        ")
     }
     
     delete(maximum_support)
     maximum_support = make([][Direction] i32, len(c.states))
-        
-    for from, index in c.states {
-        for direction in Direction {
-            for support in supports[from.id][direction] {
-                amount := &maximum_support[support.id][direction]
-                amount^ += support.amount
+    {
+        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Extraction: calculate maximum support")
+            
+        for from, index in c.states {
+            for direction in Direction {
+                for support in supports[from.id][direction] {
+                    amount := &maximum_support[support.id][direction]
+                    amount^ += support.amount
+                }
             }
+            print("Extraction: calculate maximum support % %% \r", view_percentage(index, len(c.states)))
         }
-        print("Extraction: calculate maximum support % %% \r", view_percentage(index, len(c.states)))
+        println("Extraction: calculate maximum support done          ")
     }
-    println("Extraction: calculate maximum support done          ")
+    
+    {
+        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Extraction: Draw Groups grouping")
+        for state in c.states {
+            color := state.values[1 + 1 * N] // middle
+            group: ^Draw_Group
+            for &it in draw_groups {
+                if it.color == color {
+                    group = &it
+                    break
+                }
+            }
+            if group == nil {
+                append(&draw_groups, Draw_Group { color = color })
+                group = &draw_groups[len(draw_groups)-1]
+                make(&group._ids, len(c.states))
+            }
+            
+            group._ids[state.id] = true
+        }
+    }
 }

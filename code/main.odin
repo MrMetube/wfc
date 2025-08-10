@@ -60,11 +60,11 @@ textures_and_images: [dynamic] struct {
 
 Draw_Group :: struct {
     color: rl.Color,
-    _ids:   []b32,
+    ids:   []b32,
 }
 
-brush_size_speed: f32 = 30
-brush_size: f32 = 1
+brush_size_speed: f32 = 60
+brush_size: f32 = 2
 d_brush_size: f32 = 0
 dd_brush_size: f32 = 0
 
@@ -312,7 +312,7 @@ main :: proc () {
         
         if dimension_contains(dimension, wp) {
             if rl.IsMouseButtonDown(.LEFT) {
-                diameter := max(1, round(i32, brush_size))
+                diameter := max(1, ceil(i32, brush_size))
                 area := rectangle_center_dimension(wp, diameter)
                 for y in area.min.y..<area.max.y {
                     for x in area.min.x..<area.max.x {
@@ -358,6 +358,7 @@ main :: proc () {
             update(&collapse, &entropy)
         } else {
             if drawing_initializing {
+                drawing_initializing = false
                 // @todo(viktor): Tell the user it doesnt work
                 update_state = .Paused
             } else {
@@ -374,15 +375,14 @@ main :: proc () {
                     }
                 }
             }
+        }
             
-            if !is_done {
-                _total = time.since(_total_start)
-            }
+        if !is_done {
+            _total = time.since(_total_start)
         }
         
         ////////////////////////////////////////////////
         // Render
-        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Render")
         
         rl.BeginDrawing()
         rl.ClearBackground({0x54, 0x57, 0x66, 0xFF})
@@ -496,7 +496,7 @@ clear_draw_board :: proc () {
 
 restrict_cell_to_drawn :: proc (c: ^Collapse, p: v2i, group: ^Draw_Group) {
 	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
-    selected := group._ids
+    selected := group.ids
     
     cell := &grid[p.x + p.y * dimension.x]
     if wave, ok := cell.value.(WaveFunction); ok {
