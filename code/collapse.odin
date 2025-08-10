@@ -120,6 +120,9 @@ test_search_cell :: proc (search: ^Search, cell: ^Cell, wave: ^WaveFunction) -> 
     } else {
         value: f32
         switch search.metric {
+          case .States:
+            value = cast(f32) len(wave.supports)
+            
           case .Entropy: 
             entry := &cell.entry
             if entry.states_count_when_computed != auto_cast len(wave.supports) {
@@ -141,9 +144,6 @@ test_search_cell :: proc (search: ^Search, cell: ^Cell, wave: ^WaveFunction) -> 
             }
             
             value = entry.entropy
-            
-          case .States:
-            value = cast(f32) len(wave.supports)
         }
         
         if search.lowest > value {

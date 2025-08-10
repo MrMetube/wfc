@@ -46,7 +46,7 @@ Directional_Support :: struct {
 }
 Supported_State :: struct {
     id:     State_Id,
-    amount: [Direction] i32,
+    amount: [Direction] /* supports[id][Direction] + summed */i32,
 }
 Change :: struct {
     removed_support: [Direction] [/* State_Id */] Directional_Support,
@@ -80,7 +80,7 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
                         
                         grid_section:  [] Cell,
                         found_invalid: b32,
-                        reached_end: b32,
+                        reached_end:   b32,
                     }
                     
                     rows := dimension.y / 4
@@ -91,7 +91,7 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
                         
                         init_search(&work.search, c, search_metric, context.temp_allocator)
                         
-                        enqueue_work_t(&work_queue, &work, proc (work: ^Data) {
+                        enqueue_work(&work_queue, &work, proc (work: ^Data) {
                             using work
                             loop: for &cell in grid_section {
                                 if wave, ok := &cell.value.(WaveFunction); ok {
@@ -128,7 +128,6 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
                                     break least
                                 }
                                 
-                                // @todo(viktor): Scanline needs special handling herre and in the test_search_cell, just make it a special case in general. It should also not need the multithreaded search as it is always just the first value
                                 assert(search_mode != .Scanline)
                                 if minimal.lowest > work.search.lowest {
                                     minimal = work.search
@@ -171,8 +170,7 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
                     
                     target := random_between(entropy, i32, 0, total_frequency)
                     picking: for support in wave.supports {
-                        state := &c.states[support.id]
-                        target -= state.frequency
+                        target -= c.states[support.id].frequency
                         if target <= 0 {
                             pick = support.id
                             break picking
@@ -215,30 +213,34 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
                 
                 for delta, direction in Deltas {
                     to_p := change_p + delta
-                    // @wrapping
-                    if !dimension_contains(dimension, to_p) do continue 
+                    if !dimension_contains(dimension, to_p) {
+                        // @wrapping
+                        // continue 
+                        to_p = rectangle_modulus(rectangle_min_dimension(v2i{}, dimension), to_p)
+                    }
                     
                     to_cell := &grid[to_p.x + to_p.y * dimension.x]
                     to_wave, ok := &to_cell.value.(WaveFunction)
                     if !ok do continue 
                     
-                    #reverse for &to_support, sup_index in to_wave.supports {
-                        removed := change.removed_support[direction][to_support.id]
-                        if removed.id != to_support.id do continue
-                        
-                        amount := &to_support.amount[direction]
-                        assert(amount^ != 0)
-                        
-                        amount^ -= removed.amount
-                        // assert(amount^ >= 0) // this could become negative if the user draws in and thereby removes states
-                        
-                        if amount^ <= 0 {
-                            remove_state(c, to_p, to_support.id)
+                    {
+                        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "removed support loop")
+                        #reverse for &to_support, sup_index in to_wave.supports {
+                            removed := change.removed_support[direction][to_support.id]
+                            assert((removed.id == to_support.id) || (removed.amount == 0))
                             
-                            unordered_remove(&to_wave.supports, sup_index)
-                            if len(to_wave.supports) == 0 {
-                                should_restart = true
-                                break update
+                            amount := &to_support.amount[direction]
+                            assert(amount^ != 0)
+                            
+                            amount^ -= removed.amount
+                            if amount^ <= 0 {
+                                remove_state(c, to_p, to_support.id)
+                                
+                                unordered_remove(&to_wave.supports, sup_index)
+                                if len(to_wave.supports) == 0 {
+                                    should_restart = true
+                                    break update
+                                }
                             }
                         }
                     }
@@ -257,17 +259,22 @@ remove_state :: proc (c: ^Collapse, p: v2i, removed_state: State_Id) {
     
     change, ok := &changes[p]
     if !ok {
+        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "not found")
         changes[p] = {}
         change = &changes[p]
     }
     
-    for direction in Direction {
-        for removed in supports[removed_state][direction] {
-            if change.removed_support[direction] == nil {
-                change.removed_support[direction] = make([] Directional_Support, len(c.states))
+    {
+        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "accum removed support")
+        for direction in Direction {
+            for removed in supports[removed_state][direction] {
+                if change.removed_support[direction] == nil {
+                    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "make slice")
+                    change.removed_support[direction] = make([] Directional_Support, len(c.states))
+                }
+                change.removed_support[direction][removed.id].id = removed.id
+                change.removed_support[direction][removed.id].amount += removed.amount
             }
-            change.removed_support[direction][removed.id].id = removed.id
-            change.removed_support[direction][removed.id].amount += removed.amount
         }
     }
 }
@@ -293,8 +300,7 @@ restart :: proc (c: ^Collapse) {
             for &it, index in wave.supports {
                 it.id = cast(State_Id) index
                 for &amount, direction in it.amount {
-                    support_now := maximum_support[it.id][direction]
-                    amount = support_now
+                    amount = maximum_support[it.id][direction]
                 }
             }
         }

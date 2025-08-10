@@ -68,6 +68,7 @@ brush_size: f32 = 1
 d_brush_size: f32 = 0
 dd_brush_size: f32 = 0
 
+// @todo(viktor): Rethink this api now that I kinda know what I want to be able to do
 drawing_initializing: b32
 selected_group: ^Draw_Group
 draw_board:     [] ^Draw_Group
@@ -101,7 +102,7 @@ main :: proc () {
     arena: Arena
     init_arena(&arena, make([]u8, 128*Megabyte))
     
-    init_work_queue(&work_queue, 11)
+    init_work_queue(&work_queue, 0)
     
     File :: struct {
         name: string,
