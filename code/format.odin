@@ -1,4 +1,5 @@
 #+vet !unused-procedures
+#+no-instrumentation
 package main
 
 /* 
@@ -1148,7 +1149,6 @@ format_type :: proc(ctx: ^FormatContext, type_info: ^runtime.Type_Info) {
             format_view(ctx, view_string("struct "))
             if .packed    in info.flags  do format_view(ctx, view_string("#packed "))
             if .raw_union in info.flags  do format_view(ctx, view_string("#raw_union "))
-            if .no_copy   in info.flags  do format_view(ctx, view_string("#no_copy "))
             if .align     in info.flags {
                 format_view(ctx, view_string("#align("))
                 format_view(ctx, view_integer(type_info.align))

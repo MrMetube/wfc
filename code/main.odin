@@ -10,6 +10,16 @@ spall :: spall
 spall_ctx: spall.Context
 @(thread_local) spall_buffer: spall.Buffer
 
+@(instrumentation_enter)
+spall_enter :: proc "contextless" (proc_address, call_site_return_address: rawptr, loc := #caller_location) {
+	spall._buffer_begin(&spall_ctx, &spall_buffer, "", "", loc)
+}
+
+@(instrumentation_exit)
+spall_exit :: proc "contextless" (proc_address, call_site_return_address: rawptr, loc := #caller_location) {
+	spall._buffer_end(&spall_ctx, &spall_buffer)
+}
+
 import rl "vendor:raylib"
 import imgui "../lib/odin-imgui/"
 import rlimgui "../lib/odin-imgui/examples/raylib"
@@ -154,13 +164,13 @@ main :: proc () {
     
     spall_ctx = spall.context_create("trace_test.spall", 10 * time.Millisecond)
     defer spall.context_destroy(&spall_ctx)
-
+    
     buffer_backing := make([]u8, spall.BUFFER_DEFAULT_SIZE)
     defer delete(buffer_backing)
-
+    
     spall_buffer = spall.buffer_create(buffer_backing, 0)
     defer spall.buffer_destroy(&spall_ctx, &spall_buffer)
-
+    
     spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     
     ////////////////////////////////////////////////
@@ -315,7 +325,10 @@ main :: proc () {
                 
                 this_update_start := time.now()
                 switch update(&collapse, &entropy) {
-                  case .AllCollapsed, .CollapseUninialized: // nothing
+                  case .CollapseUninialized: // nothing
+                  case .AllCollapsed: 
+                    paused = true
+                    
                   case .FoundContradiction:
                     this_frame.tasks += { .restart }
                     
@@ -329,7 +342,6 @@ main :: proc () {
             }
         }
         
-        assert(this_frame.tasks == {})
         ////////////////////////////////////////////////
         // Render
         
@@ -478,9 +490,8 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i) {
     for y in 0..<new_dimension.y do for x in 0..<new_dimension.x do grid[x + y * new_dimension.x].p = {x, y}
 }
 
-ui :: proc (c: ^Collapse, images: map[string] File, ) {
+ui :: proc (c: ^Collapse, images: map[string] File) {
     imgui.begin("Extract")
-    
         imgui.text("Choose Input Image")
         imgui.slider_int("Tile Size", &this_frame.desired_N, 1, 10)
         imgui.slider_int("Size X", &this_frame.desired_dimension.x, 3, 300)
@@ -489,6 +500,9 @@ ui :: proc (c: ^Collapse, images: map[string] File, ) {
             this_frame.tasks += { .resize_grid }
         }
         
+        if len(c.states) == 0 {
+            imgui.text("Select an input image")
+        }
         imgui.columns(4)
         for _, &image in images {
             imgui.push_id(&image)
@@ -514,10 +528,6 @@ ui :: proc (c: ^Collapse, images: map[string] File, ) {
             imgui.next_column()
         }
         imgui.columns(1)
-    
-        if len(c.states) == 0 {
-            imgui.text("Select an input image")
-        }
     imgui.end()
     
     imgui.text("Stats")
@@ -574,7 +584,6 @@ ui :: proc (c: ^Collapse, images: map[string] File, ) {
         }
         
         imgui.columns(2)
-        _id: i32
         if imgui.radio_button("Erase", selected_group == nil) {
             selected_group = nil
         }
@@ -601,7 +610,6 @@ clear_draw_board :: proc () {
 }
 
 restrict_cell_to_drawn :: proc (c: ^Collapse, p: v2i, group: ^Draw_Group) {
-    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     selected := group.ids
     
     cell := &grid[p.x + p.y * dimension.x]
@@ -615,6 +623,7 @@ restrict_cell_to_drawn :: proc (c: ^Collapse, p: v2i, group: ^Draw_Group) {
     }
 }
 
+@(no_instrumentation)
 world_to_screen :: proc (p: v2i) -> (result: v2) {
     result = vec_cast(f32, p) * cell_size_on_screen
     
@@ -624,7 +633,7 @@ world_to_screen :: proc (p: v2i) -> (result: v2) {
 }
 
 screen_to_world :: proc (screen: v2) -> (world: v2i) {
-    world  = vec_cast(i32, (screen - (vec_cast(f32, Screen_Size) - (cell_size_on_screen * vec_cast(f32, dimension))) * 0.5) / cell_size_on_screen)
+    world = vec_cast(i32, (screen - (vec_cast(f32, Screen_Size) - (cell_size_on_screen * vec_cast(f32, dimension))) * 0.5) / cell_size_on_screen)
     
     return world
 }

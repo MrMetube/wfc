@@ -1,6 +1,5 @@
 package main
 
-import "core:time"
 import rl "vendor:raylib"
 
  /*
@@ -58,10 +57,9 @@ Update_Result :: enum {
     FoundContradiction,
     AllCollapsed,
 }
+
 update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result) {
     if c.states == nil do return .CollapseUninialized
-    
-    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     
     result = .Continue
     if !doing_changes {
@@ -74,7 +72,7 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
             any_found_invalid := false
             switch search_mode {
               case .Scanline:
-                scan: for &cell in grid do if wave, ok := cell.value.(WaveFunction); ok {
+                scan: for &cell in grid do if _, ok := cell.value.(WaveFunction); ok {
                     cells = { &cell }
                     all_reached_end = false
                     break scan
@@ -260,8 +258,6 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
 }
 
 remove_state :: proc (c: ^Collapse, p: v2i, removed_state: State_Id) {
-    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
-    
     change, ok := &changes[p]
     if !ok {
         changes[p] = {}
@@ -286,8 +282,6 @@ remove_state :: proc (c: ^Collapse, p: v2i, removed_state: State_Id) {
 }
 
 restart :: proc (c: ^Collapse) {
-    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
-    
     clear(&changes)
     to_be_collapsed = nil
     
@@ -333,8 +327,6 @@ restart :: proc (c: ^Collapse) {
 }
 
 extract_states :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
-    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
-    
     for a in c.supports do for d in a do delete(d)
     delete(c.supports)
     

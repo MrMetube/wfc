@@ -24,6 +24,7 @@
 // - the removal of the ryu_generic code
 // - the removal of the RYU_DEBUG define and any debug prints
 #+private file
+#+no-instrumentation
 #+vet !semicolon !unused-procedures !style
 package main
 
