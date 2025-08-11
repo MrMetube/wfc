@@ -94,6 +94,15 @@ Task :: enum {
 Tasks :: bit_set[Task]
 do_tasks: Tasks
 
+File :: struct {
+    name: string,
+    data: []u8,
+    image: rl.Image,
+    texture: rl.Texture2D,
+    type: string,
+    read_time: time.Time,
+}
+
 main :: proc () {
     rl.SetTraceLogLevel(.WARNING)
     rl.InitWindow(Screen_Size.x, Screen_Size.y, "Wave Function Collapse")
@@ -105,15 +114,6 @@ main :: proc () {
     init_arena(&arena, make([]u8, 128*Megabyte))
     
     init_work_queue(&work_queue, 0)
-    
-    File :: struct {
-        name: string,
-        data: []u8,
-        image: rl.Image,
-        texture: rl.Texture2D,
-        type: string,
-        read_time: time.Time,
-    }
     
     images: map[string]File
     image_dir := "./images"
@@ -179,116 +179,7 @@ main :: proc () {
         ////////////////////////////////////////////////
         // UI
         
-        imgui.text("Choose Input Image")
-        imgui.slider_int("Tile Size", &desired_N, 1, 10)
-        imgui.slider_int("Size X", &desired_dimension.x, 3, 300)
-        imgui.slider_int("Size Y", &desired_dimension.y, 3, 150)
-        if desired_dimension != dimension {
-            do_tasks += { .resize_grid }
-        }
-        
-        imgui.columns(4)
-        for _, &image in images {
-            imgui.push_id(&image)
-            if imgui.image_button(auto_cast &image.texture.id, 30) {
-                if image.image.format == .UNCOMPRESSED_R8G8B8 {
-                    pixels = make([]rl.Color, image.image.width * image.image.height, context.temp_allocator)
-                    // @leak
-                    raw := slice_from_parts([3]u8, image.image.data, image.image.width * image.image.height)
-                    for &pixel, index in pixels {
-                        pixel.rgb = raw[index]
-                        pixel.a   = 255
-                    }
-                } else if image.image.format == .UNCOMPRESSED_R8G8B8A8 {
-                    pixels = slice_from_parts(rl.Color, image.image.data, image.image.width * image.image.height)
-                } else {
-                    unreachable()
-                }
-                
-                pixels_dimension = {image.image.width, image.image.height}
-                do_tasks += { .extract_states }
-            }
-            imgui.pop_id()
-            imgui.next_column()
-        }
-        imgui.columns(1)
-        
-        if len(collapse.states) != 0 {
-            if imgui.button("Restart") {
-                do_tasks += { .restart }
-            }
-        } else {
-            imgui.text("Select an input image")
-        }
-            
-        switch update_state {
-          case .Step: 
-            update_state = .Paused
-            fallthrough
-          case .Paused:
-           if imgui.button("Unpause") do update_state = .Unpaused
-           if imgui.button("Step")    do update_state = .Step
-           
-          case .Unpaused:
-           if imgui.button("Pause") do update_state = .Paused
-        }
-        
-        imgui.checkbox("Average Color", auto_cast &render_wavefunction_as_average)
-        
-        modes := [Search_Mode] string {
-            .Scanline = "top to bottom, left to right",
-            .Metric   = "search by a metric",
-        }
-        metrics := [Search_Metric] string {
-            .States   = "fewest possible states",
-            .Entropy  = "lowest entropy",
-        }
-        for text, mode in modes {
-            if imgui.radio_button(text, mode == search_mode) {
-                search_mode = mode
-            }
-        }
-        if search_mode == .Metric {
-            imgui.tree_push("Metric")
-            for text, metric in metrics {
-                if imgui.radio_button(text, metric == search_metric) {
-                    search_metric = metric
-                }
-            }
-            imgui.tree_pop()
-        }
-        
-        imgui.text("Stats")
-        tile_count := len(collapse.states)
-        imgui.text_colored(tile_count > 200 ? Red : White, tprint("Tile count %", tile_count))
-        // imgui.text(tprint("Total time %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)))
-        
-        imgui.text("Drawing")
-        if imgui.button("Clear drawing") {
-            do_tasks += { .clear_drawing }
-        }
-        
-        imgui.columns(2)
-        _id: i32
-        if imgui.radio_button("All", selected_group == nil) {
-            selected_group = nil
-        }
-        imgui.next_column()
-        imgui.next_column()
-        
-        for &group, index in draw_groups {
-            selected := &group == selected_group
-            if imgui.radio_button(tprint("%", index), selected) {
-                selected_group = &group
-            }
-            imgui.next_column()
-            
-            flags: imgui.Color_Edit_Flags = .NoPicker | .NoOptions | .NoSmallPreview | .NoInputs | .NoTooltip | .NoSidePreview | .NoDragDrop
-            imgui.color_button("", rgba_to_v4(cast([4]u8) group.color), flags = flags)
-            imgui.next_column()
-        }
-        imgui.columns()
-        
+        ui(&collapse, images)
         sp := rl.GetMousePosition()
         wp := screen_to_world(sp)
         
@@ -341,8 +232,7 @@ main :: proc () {
         ////////////////////////////////////////////////
         // Update 
         
-        // @todo(viktor): if drawing_initializing and do_restart do Tell the user that their drawing may be unsolvable
-        
+        // @todo(viktor): if drawing_initializing and do_restart: Tell the user that their drawing may be unsolvable
         old_dimension, new_dimension := dimension, dimension
         old_grid := grid
         if .resize_grid in do_tasks {
@@ -469,8 +359,6 @@ main :: proc () {
                                 average.color = cast(rl.Color) v4_to_rgba(color)
                             }
                             rl.DrawRectangleRec(rect, average.color)
-                            // rl.DrawRectangleLinesEx(rect, 4,  rl.BLACK)
-                            // rl.DrawRectangleLinesEx(rect, 1,  rl.WHITE)
                         } else {
                             rl.DrawRectangleRec(rect, {0,255,255,32})
                         }
@@ -529,6 +417,118 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i) {
     make(&average_colors, area)
     make(&draw_board, area)
     for y in 0..<new_dimension.y do for x in 0..<new_dimension.x do grid[x + y * new_dimension.x].p = {x, y}
+}
+
+ui :: proc (c: ^Collapse, images: map[string] File, ) {
+    imgui.text("Choose Input Image")
+    imgui.slider_int("Tile Size", &desired_N, 1, 10)
+    imgui.slider_int("Size X", &desired_dimension.x, 3, 300)
+    imgui.slider_int("Size Y", &desired_dimension.y, 3, 150)
+    if desired_dimension != dimension {
+        do_tasks += { .resize_grid }
+    }
+    
+    imgui.columns(4)
+    for _, &image in images {
+        imgui.push_id(&image)
+        if imgui.image_button(auto_cast &image.texture.id, 30) {
+            if image.image.format == .UNCOMPRESSED_R8G8B8 {
+                pixels = make([]rl.Color, image.image.width * image.image.height, context.temp_allocator)
+                // @leak
+                raw := slice_from_parts([3]u8, image.image.data, image.image.width * image.image.height)
+                for &pixel, index in pixels {
+                    pixel.rgb = raw[index]
+                    pixel.a   = 255
+                }
+            } else if image.image.format == .UNCOMPRESSED_R8G8B8A8 {
+                pixels = slice_from_parts(rl.Color, image.image.data, image.image.width * image.image.height)
+            } else {
+                unreachable()
+            }
+            
+            pixels_dimension = {image.image.width, image.image.height}
+            do_tasks += { .extract_states }
+        }
+        imgui.pop_id()
+        imgui.next_column()
+    }
+    imgui.columns(1)
+    
+    if len(c.states) != 0 {
+        if imgui.button("Restart") {
+            do_tasks += { .restart }
+        }
+    } else {
+        imgui.text("Select an input image")
+    }
+        
+    switch update_state {
+      case .Step: 
+        update_state = .Paused
+        fallthrough
+      case .Paused:
+        if imgui.button("Unpause") do update_state = .Unpaused
+        if imgui.button("Step")    do update_state = .Step
+    
+      case .Unpaused:
+        if imgui.button("Pause") do update_state = .Paused
+    }
+    
+    imgui.checkbox("Average Color", auto_cast &render_wavefunction_as_average)
+    
+    modes := [Search_Mode] string {
+        .Scanline = "top to bottom, left to right",
+        .Metric   = "search by a metric",
+    }
+    metrics := [Search_Metric] string {
+        .States   = "fewest possible states",
+        .Entropy  = "lowest entropy",
+    }
+    for text, mode in modes {
+        if imgui.radio_button(text, mode == search_mode) {
+            search_mode = mode
+        }
+    }
+    if search_mode == .Metric {
+        imgui.tree_push("Metric")
+        for text, metric in metrics {
+            if imgui.radio_button(text, metric == search_metric) {
+                search_metric = metric
+            }
+        }
+        imgui.tree_pop()
+    }
+    
+    imgui.text("Stats")
+    tile_count := len(c.states)
+    imgui.text_colored(tile_count > 200 ? Red : White, tprint("Tile count %", tile_count))
+    // imgui.text(tprint("Total time %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)))
+    
+    imgui.text("Drawing")
+    if imgui.button("Clear drawing") {
+        do_tasks += { .clear_drawing }
+    }
+    
+    imgui.columns(2)
+    _id: i32
+    if imgui.radio_button("All", selected_group == nil) {
+        selected_group = nil
+    }
+    imgui.next_column()
+    imgui.next_column()
+    
+    for &group, index in draw_groups {
+        selected := &group == selected_group
+        if imgui.radio_button(tprint("%", index), selected) {
+            selected_group = &group
+        }
+        imgui.next_column()
+        
+        flags: imgui.Color_Edit_Flags = .NoPicker | .NoOptions | .NoSmallPreview | .NoInputs | .NoTooltip | .NoSidePreview | .NoDragDrop
+        imgui.color_button("", rgba_to_v4(cast([4]u8) group.color), flags = flags)
+        imgui.next_column()
+    }
+    imgui.columns()
 }
 
 clear_draw_board :: proc () {

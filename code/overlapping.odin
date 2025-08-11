@@ -37,8 +37,7 @@ WaveFunction :: struct {
     supports: [dynamic] Supported_State,
 }
 
-supports: [/* from State_Id */] [Direction] [dynamic/* ascending */] Directional_Support
-
+// Cached values for restart
 maximum_support: [][Direction] i32
 
 Directional_Support :: struct {
@@ -270,7 +269,7 @@ remove_state :: proc (c: ^Collapse, p: v2i, removed_state: State_Id) {
         // @todo(viktor): We could just have a flat buffer of all these removals and only accumulate them in the update loop itself once the change is being processed
         spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "remove_state: accum removed support")
         for direction in Direction {
-            for removed in supports[removed_state][direction] {
+            for removed in c.supports[removed_state][direction] {
                 if change.removed_support[direction] == nil {
                     spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "remove_state: make removed support")
                     change.removed_support[direction] = make([] Directional_Support, len(c.states))
@@ -333,6 +332,9 @@ restart :: proc (c: ^Collapse) {
 extract_states :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
 	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     
+    for a in c.supports do for d in a do delete(d)
+    delete(c.supports)
+    
     for &group in draw_groups {
         delete(group.ids)
     }
@@ -360,10 +362,8 @@ extract_states :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
         }
         println("Extraction: State extraction done         ")
     }
-
-    for a in supports do for d in a do delete(d)
-    delete(supports)
-    supports = make([][Direction][dynamic] Directional_Support, len(c.states))
+    
+    c.supports = make([][Direction][dynamic] Directional_Support, len(c.states))
     
     {
         spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Extraction: Supports generation")
@@ -393,7 +393,7 @@ extract_states :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
                 
                     if does_match {
                         found_support: b32
-                        for &support in supports[a.id][d] {
+                        for &support in c.supports[a.id][d] {
                             if support.id == b.id {
                                 found_support = true
                                 support.amount += 1
@@ -401,7 +401,7 @@ extract_states :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
                         }
                         // @todo(viktor): Think if this is even reasonably
                         if !found_support {
-                            append(&supports[a.id][d], Directional_Support {b.id, 1})
+                            append(&c.supports[a.id][d], Directional_Support {b.id, 1})
                         }
                     }
                 }
@@ -419,7 +419,7 @@ extract_states :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
             
         for from, index in c.states {
             for direction in Direction {
-                for support in supports[from.id][direction] {
+                for support in c.supports[from.id][direction] {
                     amount := &maximum_support[support.id][direction]
                     amount^ += support.amount
                 }

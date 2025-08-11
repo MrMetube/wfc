@@ -8,6 +8,7 @@ Value :: rl.Color
 
 Collapse :: struct {
     states: [dynamic] State,
+    supports: [/* from State_Id */] [Direction] [dynamic/* ascending */] Directional_Support,
 
     // Extraction
     is_defining_state:  b32,
@@ -44,10 +45,10 @@ Entropy :: struct {
 reset_collapse :: proc (c: ^Collapse) {
     // @todo(viktor): there should be an easier way
     // println("%", view_variable(size_of(Collapse)))
-    #assert(size_of(Collapse) == 88, "members have changed")
+    #assert(size_of(Collapse) <= 104, "members have changed")
     delete(c.states)
     delete(c.temp_state_values)
-    c ^= {}
+    c ^= { supports = c.supports }
 }
 
 ////////////////////////////////////////////////
