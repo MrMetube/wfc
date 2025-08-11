@@ -100,10 +100,10 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
                         loop: for &cell in grid_section {
                             if wave, ok := &cell.value.(WaveFunction); ok {
                                 switch test_search_cell(&search, &cell, wave) {
-                                case .Continue: // nothing
-                                case .Done:     break loop
+                                  case .Continue: // nothing
+                                  case .Done:     break loop
                                 
-                                case .Found_Invalid: 
+                                  case .Found_Invalid: 
                                     found_invalid = true
                                     break loop
                                 }

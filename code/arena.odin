@@ -84,8 +84,6 @@ push_size :: proc(arena: ^Arena, #any_int size_init: u64, params := DefaultPushP
     return result
 }
 
-// @note(viktor): This is generally not for production use, this is probably
-// only really something we need during testing, but who knows
 @(require_results)
 copy_string :: proc(arena: ^Arena, s: string) -> (result: string) {
     buffer := push_slice(arena, u8, len(s), no_clear())

@@ -31,25 +31,119 @@ default_views :: proc() {
 
 ////////////////////////////////////////////////
 
-order_of_magnitude :: proc(value: $T) -> (f64, string) {
-    value := cast(f64) value
+Magnitude :: enum {
+    None,
     
-    if value == 0   do return value,        ""
-    if value < 1e-9 do return value * 1e12, "p"
-    if value < 1e-6 do return value * 1e9,  "n"
-    if value < 1e-3 do return value * 1e6,  "µ"
-    if value < 1e0  do return value * 1e3,  "m"
-    if value < 1e3  do return value * 1e0,  ""
-    if value < 1e6  do return value * 1e-3,  "k"
-    if value < 1e9  do return value * 1e-6,  "M"
-    if value < 1e12 do return value * 1e-9,  "G"
-    if value < 1e15 do return value * 1e-12, "T"
-    if value < 1e18 do return value * 1e-15, "P"
-    if value < 1e21 do return value * 1e-18, "E"
+    Femto,
+    Pico,
+    Nano,
+    Micro,
+    Milli,
     
-    return value, "?"
+    Unit,
+    
+    Kilo,
+    Mega,
+    Giga,
+    Tera,
+    Peta,
+    Exa,
 }
 
+magnitude_to_symbol := [Magnitude] string {
+    .None    = "",
+    
+    .Femto  = "f",
+    .Pico   = "p",
+    .Nano   = "n",
+    .Micro  = "µ",
+    .Milli  = "m",
+    
+    .Unit   = "",
+    
+    .Kilo   = "k",
+    .Mega   = "M",
+    .Giga   = "G",
+    .Tera   = "T",
+    .Peta   = "P",
+    .Exa    = "E",
+}
+
+magnitude_to_factor :: proc ($T: typeid, magnitude: Magnitude) -> (result: T) {
+    switch magnitude {
+      case .None:   unreachable()
+      case .Femto:  when intrinsics.type_is_integer(T) do unreachable(); else do return 1e-15
+      case .Pico:   when intrinsics.type_is_integer(T) do unreachable(); else do return 1e-12
+      case .Nano:   when intrinsics.type_is_integer(T) do unreachable(); else do return 1e-9
+      case .Micro:  when intrinsics.type_is_integer(T) do unreachable(); else do return 1e-6
+      case .Milli:  when intrinsics.type_is_integer(T) do unreachable(); else do return 1e-3
+      case .Unit:   return 1e0
+      case .Kilo:   return 1e3
+      case .Mega:   return 1e6
+      case .Giga:   return 1e9
+      case .Tera:   return 1e12
+      case .Peta:   return 1e15
+      case .Exa:    return 1e18
+    }
+    unreachable()
+}
+
+// @copypasta based on view_time_duration, view_memory_size would be very similar, how can we simplify this process of estimating a magnitude/scale/size and slicing the value into magnitudes/scales/sizes?
+// @todo(viktor): respect magnitude
+view_magnitude :: proc (value: $T, magnitude := Magnitude.None, limit := Magnitude.None, show_limit_as_decimal := false, width: Maybe(u16) = nil, precision: Maybe(u8) = nil) -> (result: TempViews) {
+    magnitude, limit := magnitude, limit
+    rest := value
+    
+    begin_temp_views(width)
+    
+    if rest < 0 {
+        append_temp_view(view_character('-'))
+        rest = -rest
+    }
+    
+    if magnitude == .None {
+        magnitude = Magnitude.Unit when intrinsics.type_is_integer(T) else Magnitude.Nano
+        for magnitude + auto_cast 1 <= .Exa && rest >= magnitude_to_factor(T, magnitude + auto_cast 1) {
+            magnitude += auto_cast 1
+        }
+    }
+    if limit == .None {
+        limit = magnitude
+    }
+    
+    if rest == 0 {
+        append_temp_view(view_integer(rest))
+        append_temp_view(view_string(magnitude_to_symbol[magnitude]))
+    } else {
+        for ; rest > 0 && (show_limit_as_decimal ? magnitude > limit : magnitude >= limit); magnitude -= auto_cast 1 {
+            // @todo(viktor): simplify factors
+            factor := magnitude_to_factor(T, magnitude)
+            current := rest / factor
+            rest     = rest % factor
+            
+            append_temp_view(view_integer(current))
+            append_temp_view(view_string(magnitude_to_symbol[magnitude]))
+        }
+        
+        if rest != 0 && show_limit_as_decimal {
+            precision := precision
+            if precision == nil {
+                max_precision := cast(u8) (magnitude - .Nano) * 3
+                precision = max_precision
+            }
+            factor := magnitude_to_factor(T, magnitude)
+            s := cast(f64) rest / cast(f64) factor
+            
+            append_temp_view(view_float(s, precision = precision))
+            append_temp_view(view_string(magnitude_to_symbol[magnitude]))
+        }
+    }
+    
+    result = end_temp_views()
+    return result
+}
+
+// @todo(viktor): take some inspiration from magnitude/time_scale
 view_memory_size :: proc(#any_int value: u64) -> (u64, string) {
     if value == 0       do return value,            ""
     if value < Kilobyte do return value,            " b"
@@ -60,24 +154,6 @@ view_memory_size :: proc(#any_int value: u64) -> (u64, string) {
     if value < Exabyte  do return value / Petabyte, "Pb"
     
     return value , "?"
-}
-
-// @todo(viktor): take some inspiration from view_duration scale/decimal stuff
-view_order_of_magnitude :: proc(value: $T, width: Maybe(u16) = 5, precision: Maybe(u8) = 2) -> (result: TempViews) {
-    v, magnitude := order_of_magnitude(value)
-    
-    when intrinsics.type_is_integer(T) {
-        precision := precision
-        if v == cast(f64) value do precision = 0
-        v = round(f64, v * 100) * 0.01
-    }
-
-    begin_temp_views()
-    append_temp_view(view_float(v, width = width, precision = precision))
-    append_temp_view(view_string(magnitude))
-    result = end_temp_views()
-    
-    return result
 }
 
 view_percentage :: proc { view_percentage_parts, view_percentage_ratio }

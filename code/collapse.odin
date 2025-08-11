@@ -32,7 +32,7 @@ State    :: struct {
 }
 
 Search_Mode   :: enum { Scanline, Metric, }
-Search_Metric :: enum { States, Entropy, }
+Search_Metric :: enum { States, Entropy }
 Search_Result :: enum { Continue, Done, Found_Invalid, }
 
 Entropy :: struct {
@@ -111,7 +111,6 @@ init_search :: proc (search: ^Search, c: ^Collapse, metric: Search_Metric, alloc
 }
 
 // @todo(viktor): what information do we acutally need, is cell/wave function the minimal set?
-// @todo(viktor): gumin add some noise to the entropy: 1e-6 * random.NextDouble();
 @(no_instrumentation)
 test_search_cell :: proc (search: ^Search, cell: ^Cell, wave: ^WaveFunction) -> (result: Search_Result) {
     result = .Continue

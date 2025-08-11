@@ -20,6 +20,8 @@ spall_exit :: proc "contextless" (proc_address, call_site_return_address: rawptr
 	spall._buffer_end(&spall_ctx, &spall_buffer)
 }
 
+// @todo(viktor): Minesweeper fields should be possible to generate if you also count diagonal edges in the extraction
+
 import rl "vendor:raylib"
 import imgui "../lib/odin-imgui/"
 import rlimgui "../lib/odin-imgui/examples/raylib"
@@ -100,12 +102,11 @@ Frame :: struct {
     tasks: bit_set[Task],
     
     // extract states
-    desired_N: i32,
+    desired_N: i32,  // @todo(viktor): cant change this in UI it snaps back
     pixels: []rl.Color,
     pixels_dimension: v2i,
     
     // resize grid
-    // @todo(viktor): clean this up
     desired_dimension: v2i,
     old_dimension: v2i,
     old_grid: [] Cell,
@@ -299,19 +300,22 @@ main :: proc () {
                 using this_frame
                 new_dimension := desired_dimension
                 
+                // @cleanup
                 // @todo(viktor): :Constrained When growing handle that it must connect to existing.
                 if !wrapping && old_grid != nil && new_dimension != old_dimension {
                     delta := abs_vec(new_dimension - old_dimension) / 2
                     if (new_dimension.x > old_dimension.x || new_dimension.y > old_dimension.y) {
                         for y in 0..<old_dimension.y {
                             for x in 0..<old_dimension.x {
-                                grid[(x + delta.x) + (y + delta.y) * new_dimension.x].value = old_grid[x + y * old_dimension.x].value
+                                d := delta + {x, y}
+                                grid[d.x + d.x * new_dimension.x].value = old_grid[x + y * old_dimension.x].value
                             }
                         }
                     } else {
                         for y in 0..<new_dimension.y {
                             for x in 0..<new_dimension.x {
-                                grid[x + y * new_dimension.x].value = old_grid[(x + delta.x) + (y + delta.y) * old_dimension.x].value
+                                d := delta + {x, y}
+                                grid[x + y * new_dimension.x].value = old_grid[d.x + d.y * old_dimension.x].value
                             }
                         }
                     }
@@ -327,7 +331,6 @@ main :: proc () {
                 switch update(&collapse, &entropy) {
                   case .CollapseUninialized: // nothing
                   case .AllCollapsed: 
-                    paused = true
                     
                   case .FoundContradiction:
                     this_frame.tasks += { .restart }
@@ -425,7 +428,6 @@ main :: proc () {
                 }
             }
         }
-        
         
         if highlight_drawing {
             for y in 0..<dimension.y {
@@ -560,8 +562,8 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
         .Metric   = "search by a metric",
     }
     metrics := [Search_Metric] string {
-        .States   = "fewest possible states",
-        .Entropy  = "lowest entropy",
+        .States  = "fewest possible states",
+        .Entropy = "lowest entropy",
     }
     for text, mode in modes {
         if imgui.radio_button(text, mode == search_mode) {
