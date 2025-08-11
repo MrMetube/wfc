@@ -18,11 +18,7 @@ Deltas := [Direction] v2i { .East = {1,0}, .West = {-1,0}, .North = {0,-1}, .Sou
 
 Screen_Size :: v2i{1920, 1080}
 
-// @todo(viktor): make time spent accumalative and dont count paused time
-first_time := true
-_total: time.Duration
-_total_start: time.Time
-
+// @todo(viktor): measure the total time in updates until is_done
 
 TargetFps       :: 144
 TargetFrameTime :: 1./TargetFps
@@ -30,8 +26,6 @@ TargetFrameTime :: 1./TargetFps
 ////////////////////////////////////////////////
 // App
 
-should_restart: b32
-t_restart: f32
 is_done: b32
 wrapping: b32
 
@@ -86,6 +80,20 @@ Direction :: enum {
 search_mode   := Search_Mode.Metric
 search_metric := Search_Metric.Entropy
 
+////////////////////////////////////////////////
+pixels: []rl.Color
+pixels_dimension: v2i
+
+Task :: enum {
+    resize_grid, 
+    extract_states, 
+    clear_drawing, 
+    restart, 
+    copy_old_grid,
+}
+Tasks :: bit_set[Task]
+do_tasks: Tasks
+
 main :: proc () {
     rl.SetTraceLogLevel(.WARNING)
     rl.InitWindow(Screen_Size.x, Screen_Size.y, "Wave Function Collapse")
@@ -120,7 +128,6 @@ main :: proc () {
                 
                 temp := begin_temporary_memory(&arena)
                 defer end_temporary_memory(temp)
-                _total_start = time.now()
                 cstr := copy_cstring(temp.arena, file_type)
                 
                 image := File {
@@ -161,7 +168,7 @@ main :: proc () {
     entropy := seed_random_series(123)
     collapse: Collapse
     setup_grid(&collapse, dimension, desired_dimension)
-
+    
     for !rl.WindowShouldClose() {
         free_all(context.temp_allocator)
         
@@ -177,16 +184,15 @@ main :: proc () {
         imgui.slider_int("Size X", &desired_dimension.x, 3, 300)
         imgui.slider_int("Size Y", &desired_dimension.y, 3, 150)
         if desired_dimension != dimension {
-            setup_grid(&collapse, dimension, desired_dimension)
+            do_tasks += { .resize_grid }
         }
         
         imgui.columns(4)
         for _, &image in images {
             imgui.push_id(&image)
             if imgui.image_button(auto_cast &image.texture.id, 30) {
-                pixels: []rl.Color
                 if image.image.format == .UNCOMPRESSED_R8G8B8 {
-                    pixels = make([]rl.Color, image.image.width * image.image.height)
+                    pixels = make([]rl.Color, image.image.width * image.image.height, context.temp_allocator)
                     // @leak
                     raw := slice_from_parts([3]u8, image.image.data, image.image.width * image.image.height)
                     for &pixel, index in pixels {
@@ -199,15 +205,8 @@ main :: proc () {
                     unreachable()
                 }
                 
-                N = desired_N
-                reset_collapse(&collapse)
-                extract_tiles(&collapse, pixels, image.image.width, image.image.height)
-                
-                restart(&collapse)
-                
-                first_time = true
-                should_restart = true
-                t_restart = 0
+                pixels_dimension = {image.image.width, image.image.height}
+                do_tasks += { .extract_states }
             }
             imgui.pop_id()
             imgui.next_column()
@@ -215,13 +214,8 @@ main :: proc () {
         imgui.columns(1)
         
         if len(collapse.states) != 0 {
-            if imgui.button(should_restart ? tprint("Restarting in %", view_seconds(t_restart, precision = 3)) : "Restart") {
-                if !should_restart {
-                    should_restart = true
-                    t_restart = 0.3
-                } else {
-                    t_restart = 0
-                }
+            if imgui.button("Restart") {
+                do_tasks += { .restart }
             }
         } else {
             imgui.text("Select an input image")
@@ -267,12 +261,11 @@ main :: proc () {
         imgui.text("Stats")
         tile_count := len(collapse.states)
         imgui.text_colored(tile_count > 200 ? Red : White, tprint("Tile count %", tile_count))
-        imgui.text(tprint("Total time %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)))
+        // imgui.text(tprint("Total time %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)))
         
-        imgui.text("Pick a color to Draw")
+        imgui.text("Drawing")
         if imgui.button("Clear drawing") {
-            clear_draw_board()
-            restart(&collapse)
+            do_tasks += { .clear_drawing }
         }
         
         imgui.columns(2)
@@ -347,34 +340,68 @@ main :: proc () {
         
         ////////////////////////////////////////////////
         // Update 
-        // @todo(viktor): from the bits are highlevel rethink this whole ui to update glue code and make a bunch of flags of what should happen and then in one place order these jobs by their dependencies
-        if !should_restart {
-            update(&collapse, &entropy)
-        } else {
-            if drawing_initializing {
-                drawing_initializing = false
-                // @todo(viktor): Tell the user it doesnt work
-                update_state = .Paused
-            } else {
-                t_restart -= rl.GetFrameTime()
-                if t_restart <= 0 {
-                    t_restart = 0
-                    should_restart = false
-                    
-                    if first_time {
-                        _total_start = time.now()
-                        first_time = false
-                    } else {
-                        restart(&collapse)
+        
+        // @todo(viktor): if drawing_initializing and do_restart do Tell the user that their drawing may be unsolvable
+        
+        old_dimension, new_dimension := dimension, dimension
+        old_grid := grid
+        if .resize_grid in do_tasks {
+            do_tasks -= { .resize_grid }
+            old_dimension = dimension
+            new_dimension = desired_dimension
+            setup_grid(&collapse, dimension, desired_dimension)
+            
+            do_tasks += { .restart, .copy_old_grid }
+        }
+        
+        if .extract_states in do_tasks {
+            do_tasks -= { .extract_states }
+            assert(pixels != nil)
+            defer pixels = nil
+            
+            N = desired_N
+            reset_collapse(&collapse)
+            extract_states(&collapse, pixels, pixels_dimension.x, pixels_dimension.y)
+                
+            do_tasks += { .restart, .clear_drawing }
+        }
+        
+        if .clear_drawing in do_tasks {
+            do_tasks -= { .clear_drawing }
+            clear_draw_board()
+            do_tasks += { .restart }
+        }
+        
+        if .restart in do_tasks {
+            do_tasks -= { .restart }
+            restart(&collapse)
+            for &it in average_colors do it = {}
+        }
+        
+        if .copy_old_grid in do_tasks {
+            do_tasks -= { .copy_old_grid }
+            defer delete(old_grid)
+            
+            // @todo(viktor): When growing handle that it must connect to existing.
+            if !wrapping && old_grid != nil && new_dimension != old_dimension {
+                delta := abs_vec(new_dimension - old_dimension) / 2
+                if (new_dimension.x > old_dimension.x || new_dimension.y > old_dimension.y) {
+                    for y in 0..<old_dimension.y {
+                        for x in 0..<old_dimension.x {
+                            grid[(x + delta.x) + (y + delta.y) * new_dimension.x].value = old_grid[x + y * old_dimension.x].value
+                        }
                     }
-                    for &it in average_colors do it = {}
+                } else {
+                    for y in 0..<new_dimension.y {
+                        for x in 0..<new_dimension.x {
+                            grid[x + y * new_dimension.x].value = old_grid[(x + delta.x) + (y + delta.y) * old_dimension.x].value
+                        }
+                    }
                 }
             }
         }
-            
-        if !is_done {
-            _total = time.since(_total_start)
-        }
+        
+        update(&collapse, &entropy)
         
         ////////////////////////////////////////////////
         // Render
@@ -497,34 +524,11 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i) {
     delete(average_colors)
     delete(draw_board)
     
-    old_grid := grid
-    defer delete(old_grid)
-    
     area := new_dimension.x * new_dimension.y
     make(&grid, area)
     make(&average_colors, area)
     make(&draw_board, area)
     for y in 0..<new_dimension.y do for x in 0..<new_dimension.x do grid[x + y * new_dimension.x].p = {x, y}
-    
-    restart(c)
-    
-    // @todo(viktor): When growing handle that it must connect to existing.
-    if !wrapping && old_grid != nil && new_dimension != old_dimension {
-        delta := abs_vec(new_dimension - old_dimension) / 2
-        if (new_dimension.x > old_dimension.x || new_dimension.y > old_dimension.y) {
-            for y in 0..<old_dimension.y {
-                for x in 0..<old_dimension.x {
-                    grid[(x + delta.x) + (y + delta.y) * new_dimension.x].value = old_grid[x + y * old_dimension.x].value
-                }
-            }
-        } else {
-            for y in 0..<new_dimension.y {
-                for x in 0..<new_dimension.x {
-                    grid[x + y * new_dimension.x].value = old_grid[(x + delta.x) + (y + delta.y) * old_dimension.x].value
-                }
-            }
-        }
-    }
 }
 
 clear_draw_board :: proc () {

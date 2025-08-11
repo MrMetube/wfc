@@ -120,7 +120,7 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
                     least: for work in work_units {
                         all_reached_end &&= work.reached_end
                         if work.found_invalid {
-                            should_restart = true
+                            do_tasks += { .restart }
                             break update
                         } else {
                             if len(work.search.cells) > 0 {
@@ -241,7 +241,7 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
                                 
                                 unordered_remove(&to_wave.supports, sup_index)
                                 if len(to_wave.supports) == 0 {
-                                    should_restart = true
+                                    do_tasks += { .restart }
                                     break update
                                 }
                             }
@@ -330,7 +330,7 @@ restart :: proc (c: ^Collapse) {
     }
 }
 
-extract_tiles :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
+extract_states :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
 	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     
     for &group in draw_groups {

@@ -115,7 +115,6 @@ test_search_cell :: proc (search: ^Search, cell: ^Cell, wave: ^WaveFunction) -> 
     result = .Continue
     
     if len(wave.supports) == 0 {
-        should_restart = true
         result = .Found_Invalid
     } else {
         value: f32
