@@ -18,7 +18,8 @@ grid: [] Cell
  
 to_be_collapsed: ^Cell
 doing_changes: b32
-changes: map[v2i]Change
+// @todo(viktor): its nice that its constant time lookup but the arbitrary order when iterating is worse
+changes: map[v2i] Change
 
 Cell :: struct {
     p: v2i,
@@ -214,9 +215,11 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
                 for delta, direction in Deltas {
                     to_p := change_p + delta
                     if !dimension_contains(dimension, to_p) {
-                        // @wrapping
-                        // continue 
-                        to_p = rectangle_modulus(rectangle_min_dimension(v2i{}, dimension), to_p)
+                        if wrapping {
+                            to_p = rectangle_modulus(rectangle_min_dimension(v2i{}, dimension), to_p)
+                        } else {
+                            continue 
+                        }
                     }
                     
                     to_cell := &grid[to_p.x + to_p.y * dimension.x]
@@ -331,7 +334,7 @@ extract_tiles :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
 	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     
     for &group in draw_groups {
-        delete(group._ids)
+        delete(group.ids)
     }
     clear(&draw_groups)
     selected_group = nil
@@ -440,10 +443,10 @@ extract_tiles :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
             if group == nil {
                 append(&draw_groups, Draw_Group { color = color })
                 group = &draw_groups[len(draw_groups)-1]
-                make(&group._ids, len(c.states))
+                make(&group.ids, len(c.states))
             }
             
-            group._ids[state.id] = true
+            group.ids[state.id] = true
         }
     }
 }

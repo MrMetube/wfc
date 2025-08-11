@@ -33,6 +33,7 @@ TargetFrameTime :: 1./TargetFps
 should_restart: b32
 t_restart: f32
 is_done: b32
+wrapping: b32
 
 work_queue: WorkQueue
 
@@ -75,7 +76,7 @@ draw_board:     [] ^Draw_Group
 draw_groups:    [dynamic] Draw_Group
 
 dimension: v2i = {150, 100}
-
+desired_dimension := dimension
 ////////////////////////////////////////////////
 
 Direction :: enum {
@@ -86,13 +87,6 @@ search_mode   := Search_Mode.Metric
 search_metric := Search_Metric.Entropy
 
 main :: proc () {
-    ratio := vec_cast(f32, Screen_Size) / vec_cast(f32, dimension+10)
-    if ratio.x < ratio.y {
-        screen_size_factor = ratio.x
-    } else {
-        screen_size_factor = ratio.y 
-    }
-    
     rl.SetTraceLogLevel(.WARNING)
     rl.InitWindow(Screen_Size.x, Screen_Size.y, "Wave Function Collapse")
     rl.SetTargetFPS(TargetFps)
@@ -166,13 +160,8 @@ main :: proc () {
     
     entropy := seed_random_series(123)
     collapse: Collapse
-    
-    area := dimension.x * dimension.y
-    make(&grid, area)
-    make(&average_colors, area)
-    make(&draw_board, area)
-    for y in 0..<dimension.y do for x in 0..<dimension.x do grid[x + y * dimension.x].p = {x, y}
-    
+    setup_grid(&collapse, dimension, desired_dimension)
+
     for !rl.WindowShouldClose() {
         free_all(context.temp_allocator)
         
@@ -185,6 +174,12 @@ main :: proc () {
         
         imgui.text("Choose Input Image")
         imgui.slider_int("Tile Size", &desired_N, 1, 10)
+        imgui.slider_int("Size X", &desired_dimension.x, 3, 300)
+        imgui.slider_int("Size Y", &desired_dimension.y, 3, 150)
+        if desired_dimension != dimension {
+            setup_grid(&collapse, dimension, desired_dimension)
+        }
+        
         imgui.columns(4)
         for _, &image in images {
             imgui.push_id(&image)
@@ -337,8 +332,7 @@ main :: proc () {
                                 for &it, index in wave.supports {
                                     it.id = cast(State_Id) index
                                     for &amount, direction in it.amount {
-                                        support_now := maximum_support[it.id][direction]
-                                        amount = support_now
+                                        amount = maximum_support[it.id][direction]
                                     }
                                 }
                                 
@@ -353,7 +347,7 @@ main :: proc () {
         
         ////////////////////////////////////////////////
         // Update 
-        
+        // @todo(viktor): from the bits are highlevel rethink this whole ui to update glue code and make a bunch of flags of what should happen and then in one place order these jobs by their dependencies
         if !should_restart {
             update(&collapse, &entropy)
         } else {
@@ -373,6 +367,7 @@ main :: proc () {
                     } else {
                         restart(&collapse)
                     }
+                    for &it in average_colors do it = {}
                 }
             }
         }
@@ -487,6 +482,48 @@ main :: proc () {
         imgui.render()
         rlimgui.ImGui_ImplRaylib_Render(imgui.get_draw_data())
         rl.EndDrawing()
+    }
+}
+
+setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i) {
+    dimension = new_dimension
+    ratio := vec_cast(f32, Screen_Size) / vec_cast(f32, new_dimension+10)
+    if ratio.x < ratio.y {
+        screen_size_factor = ratio.x
+    } else {
+        screen_size_factor = ratio.y 
+    }
+    
+    delete(average_colors)
+    delete(draw_board)
+    
+    old_grid := grid
+    defer delete(old_grid)
+    
+    area := new_dimension.x * new_dimension.y
+    make(&grid, area)
+    make(&average_colors, area)
+    make(&draw_board, area)
+    for y in 0..<new_dimension.y do for x in 0..<new_dimension.x do grid[x + y * new_dimension.x].p = {x, y}
+    
+    restart(c)
+    
+    // @todo(viktor): When growing handle that it must connect to existing.
+    if !wrapping && old_grid != nil && new_dimension != old_dimension {
+        delta := abs_vec(new_dimension - old_dimension) / 2
+        if (new_dimension.x > old_dimension.x || new_dimension.y > old_dimension.y) {
+            for y in 0..<old_dimension.y {
+                for x in 0..<old_dimension.x {
+                    grid[(x + delta.x) + (y + delta.y) * new_dimension.x].value = old_grid[x + y * old_dimension.x].value
+                }
+            }
+        } else {
+            for y in 0..<new_dimension.y {
+                for x in 0..<new_dimension.x {
+                    grid[x + y * new_dimension.x].value = old_grid[(x + delta.x) + (y + delta.y) * old_dimension.x].value
+                }
+            }
+        }
     }
 }
 
