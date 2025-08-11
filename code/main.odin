@@ -18,7 +18,7 @@ Deltas := [Direction] v2i { .East = {1,0}, .West = {-1,0}, .North = {0,-1}, .Sou
 
 Screen_Size :: v2i{1920, 1080}
 
-// @todo(viktor): measure the total time in updates until is_done
+// // @todo(viktor): measure the total time in updates until is_done
 
 TargetFps       :: 144
 TargetFrameTime :: 1./TargetFps
@@ -26,15 +26,13 @@ TargetFrameTime :: 1./TargetFps
 ////////////////////////////////////////////////
 // App
 
-is_done: b32
+total_duration: time.Duration
+
+paused: b32
+
 wrapping: b32
 
 work_queue: WorkQueue
-
-update_state: Update_State
-Update_State :: enum {
-    Paused, Step, Unpaused,
-}
 
 screen_size_factor: f32
 
@@ -45,7 +43,6 @@ Average_Color :: struct {
 }
 render_wavefunction_as_average: b32 = true
 
-desired_N: i32 = N
 
 textures_length: int
 textures_and_images: [dynamic] struct {
@@ -70,7 +67,13 @@ draw_board:     [] ^Draw_Group
 draw_groups:    [dynamic] Draw_Group
 
 dimension: v2i = {150, 100}
-desired_dimension := dimension
+
+File :: struct {
+    data:    [] u8,
+    image:   rl.Image,
+    texture: rl.Texture2D,
+}
+
 ////////////////////////////////////////////////
 
 Direction :: enum {
@@ -81,8 +84,22 @@ search_mode   := Search_Mode.Metric
 search_metric := Search_Metric.Entropy
 
 ////////////////////////////////////////////////
-pixels: []rl.Color
-pixels_dimension: v2i
+
+this_frame: Frame
+Frame :: struct {
+    tasks: bit_set[Task],
+    
+    // extract states
+    desired_N: i32,
+    pixels: []rl.Color,
+    pixels_dimension: v2i,
+    
+    // resize grid
+    // @todo(viktor): clean this up
+    desired_dimension: v2i,
+    old_dimension: v2i,
+    old_grid: [] Cell,
+}
 
 Task :: enum {
     resize_grid, 
@@ -90,17 +107,7 @@ Task :: enum {
     clear_drawing, 
     restart, 
     copy_old_grid,
-}
-Tasks :: bit_set[Task]
-do_tasks: Tasks
-
-File :: struct {
-    name: string,
-    data: []u8,
-    image: rl.Image,
-    texture: rl.Texture2D,
-    type: string,
-    read_time: time.Time,
+    update,
 }
 
 main :: proc () {
@@ -130,12 +137,7 @@ main :: proc () {
                 defer end_temporary_memory(temp)
                 cstr := copy_cstring(temp.arena, file_type)
                 
-                image := File {
-                    name = copy_string(&arena, info.name),
-                    data = data,
-                    type = file_type,
-                    read_time = time.now(),
-                }
+                image := File { data = data }
                 image.image = rl.LoadImageFromMemory(cstr, raw_data(image.data), auto_cast len(image.data))
                 image.texture = rl.LoadTextureFromImage(image.image)
                 images[info.name] = image
@@ -151,15 +153,15 @@ main :: proc () {
     ////////////////////////////////////////////////
     
     spall_ctx = spall.context_create("trace_test.spall", 10 * time.Millisecond)
-	defer spall.context_destroy(&spall_ctx)
+    defer spall.context_destroy(&spall_ctx)
 
-	buffer_backing := make([]u8, spall.BUFFER_DEFAULT_SIZE)
-	defer delete(buffer_backing)
+    buffer_backing := make([]u8, spall.BUFFER_DEFAULT_SIZE)
+    defer delete(buffer_backing)
 
-	spall_buffer = spall.buffer_create(buffer_backing, 0)
-	defer spall.buffer_destroy(&spall_ctx, &spall_buffer)
+    spall_buffer = spall.buffer_create(buffer_backing, 0)
+    defer spall.buffer_destroy(&spall_ctx, &spall_buffer)
 
-	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
+    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     
     ////////////////////////////////////////////////
     ////////////////////////////////////////////////
@@ -167,7 +169,7 @@ main :: proc () {
     
     entropy := seed_random_series(123)
     collapse: Collapse
-    setup_grid(&collapse, dimension, desired_dimension)
+    setup_grid(&collapse, dimension, dimension)
     
     for !rl.WindowShouldClose() {
         free_all(context.temp_allocator)
@@ -178,6 +180,12 @@ main :: proc () {
         
         ////////////////////////////////////////////////
         // UI
+        
+        this_frame.desired_dimension = dimension
+        this_frame.desired_N = N
+        this_frame.pixels = nil
+        this_frame.pixels_dimension = {}
+        this_frame.old_grid = nil
         
         ui(&collapse, images)
         sp := rl.GetMousePosition()
@@ -231,68 +239,96 @@ main :: proc () {
         
         ////////////////////////////////////////////////
         // Update 
+        update_start: time.Time
         
-        // @todo(viktor): if drawing_initializing and do_restart: Tell the user that their drawing may be unsolvable
-        old_dimension, new_dimension := dimension, dimension
-        old_grid := grid
-        if .resize_grid in do_tasks {
-            do_tasks -= { .resize_grid }
-            old_dimension = dimension
-            new_dimension = desired_dimension
-            setup_grid(&collapse, dimension, desired_dimension)
-            
-            do_tasks += { .restart, .copy_old_grid }
-        }
-        
-        if .extract_states in do_tasks {
-            do_tasks -= { .extract_states }
-            assert(pixels != nil)
-            defer pixels = nil
-            
-            N = desired_N
-            reset_collapse(&collapse)
-            extract_states(&collapse, pixels, pixels_dimension.x, pixels_dimension.y)
+        for this_frame.tasks != {} {
+            // @todo(viktor): if drawing_initializing and do_restart: Tell the user that their drawing may be unsolvable
+            if .resize_grid in this_frame.tasks {
+                this_frame.tasks -= { .resize_grid }
                 
-            do_tasks += { .restart, .clear_drawing }
-        }
-        
-        if .clear_drawing in do_tasks {
-            do_tasks -= { .clear_drawing }
-            clear_draw_board()
-            do_tasks += { .restart }
-        }
-        
-        if .restart in do_tasks {
-            do_tasks -= { .restart }
-            restart(&collapse)
-            for &it in average_colors do it = {}
-        }
-        
-        if .copy_old_grid in do_tasks {
-            do_tasks -= { .copy_old_grid }
-            defer delete(old_grid)
+                this_frame.old_grid = grid
+                this_frame.old_dimension = dimension
+                setup_grid(&collapse, dimension, this_frame.desired_dimension)
+                
+                this_frame.tasks += { .restart, .copy_old_grid }
+            }
             
-            // @todo(viktor): When growing handle that it must connect to existing.
-            if !wrapping && old_grid != nil && new_dimension != old_dimension {
-                delta := abs_vec(new_dimension - old_dimension) / 2
-                if (new_dimension.x > old_dimension.x || new_dimension.y > old_dimension.y) {
-                    for y in 0..<old_dimension.y {
-                        for x in 0..<old_dimension.x {
-                            grid[(x + delta.x) + (y + delta.y) * new_dimension.x].value = old_grid[x + y * old_dimension.x].value
+            if .extract_states in this_frame.tasks {
+                this_frame.tasks -= { .extract_states }
+                
+                assert(this_frame.pixels != nil)
+                
+                N = this_frame.desired_N
+                reset_collapse(&collapse)
+                extract_states(&collapse, this_frame.pixels, this_frame.pixels_dimension.x, this_frame.pixels_dimension.y)
+                    
+                this_frame.tasks += { .restart, .clear_drawing }
+            }
+            
+            if .clear_drawing in this_frame.tasks {
+                this_frame.tasks -= { .clear_drawing }
+                
+                clear_draw_board()
+                this_frame.tasks += { .restart }
+            }
+            
+            if .restart in this_frame.tasks {
+                this_frame.tasks -= { .restart }
+                
+                restart(&collapse)
+                total_duration = 0
+                for &it in average_colors do it = {}
+            }
+            
+            if .copy_old_grid in this_frame.tasks {
+                this_frame.tasks -= { .copy_old_grid }
+                
+                assert(this_frame.old_grid != nil)
+                defer delete(this_frame.old_grid)
+                using this_frame
+                new_dimension := desired_dimension
+                
+                // @todo(viktor): When growing handle that it must connect to existing.
+                if !wrapping && old_grid != nil && new_dimension != old_dimension {
+                    delta := abs_vec(new_dimension - old_dimension) / 2
+                    if (new_dimension.x > old_dimension.x || new_dimension.y > old_dimension.y) {
+                        for y in 0..<old_dimension.y {
+                            for x in 0..<old_dimension.x {
+                                grid[(x + delta.x) + (y + delta.y) * new_dimension.x].value = old_grid[x + y * old_dimension.x].value
+                            }
+                        }
+                    } else {
+                        for y in 0..<new_dimension.y {
+                            for x in 0..<new_dimension.x {
+                                grid[x + y * new_dimension.x].value = old_grid[(x + delta.x) + (y + delta.y) * old_dimension.x].value
+                            }
                         }
                     }
-                } else {
-                    for y in 0..<new_dimension.y {
-                        for x in 0..<new_dimension.x {
-                            grid[x + y * new_dimension.x].value = old_grid[(x + delta.x) + (y + delta.y) * old_dimension.x].value
-                        }
+                }
+            }
+            
+            if .update in this_frame.tasks {
+                this_frame.tasks -= { .update }
+                
+                if update_start == {} do update_start = time.now()
+                
+                this_update_start := time.now()
+                switch update(&collapse, &entropy) {
+                  case .AllCollapsed, .CollapseUninialized: // nothing
+                  case .FoundContradiction:
+                    this_frame.tasks += { .restart }
+                    
+                  case .Continue:
+                    total_duration += time.since(this_update_start)
+                    
+                    if time.duration_seconds(time.since(update_start)) < TargetFrameTime * 0.95 {
+                        this_frame.tasks += { .update }
                     }
                 }
             }
         }
         
-        update(&collapse, &entropy)
-        
+        assert(this_frame.tasks == {})
         ////////////////////////////////////////////////
         // Render
         
@@ -323,7 +359,6 @@ main :: proc () {
             }
         }
         
-        is_done = true
         for y in 0..<dimension.y {
             for x in 0..<dimension.x {
                 index := x + y * dimension.x
@@ -333,7 +368,6 @@ main :: proc () {
                 rect := rl.Rectangle {p.x, p.y, screen_size_factor, screen_size_factor}
                 switch value in cell.value {
                   case WaveFunction: 
-                    is_done = false
                     if len(value.supports) == 0 {
                         color := rl.Color { 255, 0, 255, 255 }
                         rl.DrawRectangleRec(rect, color)
@@ -401,7 +435,8 @@ main :: proc () {
 }
 
 setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i) {
-    dimension = new_dimension
+    dimension = new_dimension // @todo(viktor): this is a really stupid idea
+    
     ratio := vec_cast(f32, Screen_Size) / vec_cast(f32, new_dimension+10)
     if ratio.x < ratio.y {
         screen_size_factor = ratio.x
@@ -421,11 +456,11 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i) {
 
 ui :: proc (c: ^Collapse, images: map[string] File, ) {
     imgui.text("Choose Input Image")
-    imgui.slider_int("Tile Size", &desired_N, 1, 10)
-    imgui.slider_int("Size X", &desired_dimension.x, 3, 300)
-    imgui.slider_int("Size Y", &desired_dimension.y, 3, 150)
-    if desired_dimension != dimension {
-        do_tasks += { .resize_grid }
+    imgui.slider_int("Tile Size", &this_frame.desired_N, 1, 10)
+    imgui.slider_int("Size X", &this_frame.desired_dimension.x, 3, 300)
+    imgui.slider_int("Size Y", &this_frame.desired_dimension.y, 3, 150)
+    if this_frame.desired_dimension != dimension {
+        this_frame.tasks += { .resize_grid }
     }
     
     imgui.columns(4)
@@ -433,21 +468,21 @@ ui :: proc (c: ^Collapse, images: map[string] File, ) {
         imgui.push_id(&image)
         if imgui.image_button(auto_cast &image.texture.id, 30) {
             if image.image.format == .UNCOMPRESSED_R8G8B8 {
-                pixels = make([]rl.Color, image.image.width * image.image.height, context.temp_allocator)
+                this_frame.pixels = make([]rl.Color, image.image.width * image.image.height, context.temp_allocator)
                 // @leak
                 raw := slice_from_parts([3]u8, image.image.data, image.image.width * image.image.height)
-                for &pixel, index in pixels {
+                for &pixel, index in this_frame.pixels {
                     pixel.rgb = raw[index]
                     pixel.a   = 255
                 }
             } else if image.image.format == .UNCOMPRESSED_R8G8B8A8 {
-                pixels = slice_from_parts(rl.Color, image.image.data, image.image.width * image.image.height)
+                this_frame.pixels = slice_from_parts(rl.Color, image.image.data, image.image.width * image.image.height)
             } else {
                 unreachable()
             }
             
-            pixels_dimension = {image.image.width, image.image.height}
-            do_tasks += { .extract_states }
+            this_frame.pixels_dimension = {image.image.width, image.image.height}
+            this_frame.tasks += { .extract_states }
         }
         imgui.pop_id()
         imgui.next_column()
@@ -456,22 +491,20 @@ ui :: proc (c: ^Collapse, images: map[string] File, ) {
     
     if len(c.states) != 0 {
         if imgui.button("Restart") {
-            do_tasks += { .restart }
+            this_frame.tasks += { .restart }
         }
     } else {
         imgui.text("Select an input image")
     }
-        
-    switch update_state {
-      case .Step: 
-        update_state = .Paused
-        fallthrough
-      case .Paused:
-        if imgui.button("Unpause") do update_state = .Unpaused
-        if imgui.button("Step")    do update_state = .Step
     
-      case .Unpaused:
-        if imgui.button("Pause") do update_state = .Paused
+    if paused {
+        if imgui.button("Unpause") do paused = false
+        if imgui.button("Step")    {
+            this_frame.tasks += { .update }
+        }
+    } else {
+        if imgui.button("Pause") do paused = true
+        this_frame.tasks += { .update }
     }
     
     imgui.checkbox("Average Color", auto_cast &render_wavefunction_as_average)
@@ -502,11 +535,11 @@ ui :: proc (c: ^Collapse, images: map[string] File, ) {
     imgui.text("Stats")
     tile_count := len(c.states)
     imgui.text_colored(tile_count > 200 ? Red : White, tprint("Tile count %", tile_count))
-    // imgui.text(tprint("Total time %",  view_time_duration(_total, show_limit_as_decimal = true, precision = 3)))
+    imgui.text(tprint("Total time %",  view_time_duration(total_duration, show_limit_as_decimal = true, precision = 3)))
     
     imgui.text("Drawing")
     if imgui.button("Clear drawing") {
-        do_tasks += { .clear_drawing }
+        this_frame.tasks += { .clear_drawing }
     }
     
     imgui.columns(2)
@@ -536,7 +569,7 @@ clear_draw_board :: proc () {
 }
 
 restrict_cell_to_drawn :: proc (c: ^Collapse, p: v2i, group: ^Draw_Group) {
-	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
+    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     selected := group.ids
     
     cell := &grid[p.x + p.y * dimension.x]

@@ -52,212 +52,215 @@ Change :: struct {
     removed_support: [Direction] [/* State_Id */] Directional_Support,
 }
 
-update :: proc (c: ^Collapse, entropy: ^RandomSeries) {
-	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
-    update_start := time.now()
+Update_Result :: enum {
+    CollapseUninialized,
+    Continue,
+    FoundContradiction,
+    AllCollapsed,
+}
+update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result) {
+    if c.states == nil do return .CollapseUninialized
     
-    update: for {
-        if c.states == nil do break update
-        
-        if !doing_changes {
-            if to_be_collapsed == nil {
-                // Find next cell to be collapsed 
-                spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Find next cell to be collapsed")
+    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
+    
+    result = .Continue
+    if !doing_changes {
+        if to_be_collapsed == nil {
+            // Find next cell to be collapsed 
+            spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Find next cell to be collapsed")
+            
+            cells: [] ^Cell
+            all_reached_end := true
+            any_found_invalid := false
+            switch search_mode {
+              case .Scanline:
+                scan: for &cell in grid do if wave, ok := cell.value.(WaveFunction); ok {
+                    cells = { &cell }
+                    all_reached_end = false
+                    break scan
+                }
                 
-                cells: [] ^Cell
-                all_reached_end := true
-                switch search_mode {
-                  case .Scanline:
-                    for &cell in grid do if wave, ok := cell.value.(WaveFunction); ok {
-                        cells = { &cell }
-                        all_reached_end = false
-                        break
-                    }
+              case .Metric:
+                Data :: struct {
+                    search:  Search,
                     
-                  case .Metric:
-                    Data :: struct {
-                        search:  Search,
-                        
-                        grid_section:  [] Cell,
-                        found_invalid: b32,
-                        reached_end:   b32,
-                    }
+                    grid_section:  [] Cell,
+                    found_invalid: b32,
+                    reached_end:   b32,
+                }
+                
+                rows := dimension.y / 4
+                work_units := make([] Data, rows, context.temp_allocator)
+                for &work, row in work_units {
+                    size := dimension.x * 4
+                    work.grid_section = grid[cast(i32) row * size:][:size]
                     
-                    rows := dimension.y / 4
-                    work_units := make([] Data, rows, context.temp_allocator)
-                    for &work, row in work_units {
-                        size := dimension.x * 4
-                        work.grid_section = grid[cast(i32) row * size:][:size]
-                        
-                        init_search(&work.search, c, search_metric, context.temp_allocator)
-                        
-                        enqueue_work(&work_queue, &work, proc (work: ^Data) {
-                            using work
-                            loop: for &cell in grid_section {
-                                if wave, ok := &cell.value.(WaveFunction); ok {
-                                    switch test_search_cell(&search, &cell, wave) {
-                                    case .Continue: // nothing
-                                    case .Done:     break loop
-                                    
-                                    case .Found_Invalid: 
-                                        found_invalid = true
-                                        break loop
-                                    }
+                    init_search(&work.search, c, search_metric, context.temp_allocator)
+                    
+                    enqueue_work(&work_queue, &work, proc (work: ^Data) {
+                        using work
+                        loop: for &cell in grid_section {
+                            if wave, ok := &cell.value.(WaveFunction); ok {
+                                switch test_search_cell(&search, &cell, wave) {
+                                case .Continue: // nothing
+                                case .Done:     break loop
+                                
+                                case .Found_Invalid: 
+                                    found_invalid = true
+                                    break loop
                                 }
+                            }
+                        }
+                        
+                        reached_end = true
+                    })
+                }
+                complete_all_work(&work_queue)
+                
+                spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Join searches")
+                
+                minimal: Search
+                init_search(&minimal, c, search_metric, context.temp_allocator)
+                
+                least: for work in work_units {
+                    all_reached_end &&= work.reached_end
+                    if work.found_invalid {
+                        any_found_invalid ||= true
+                        break least
+                    } else {
+                        if len(work.search.cells) > 0 {
+                            if search_mode == .Scanline {
+                                minimal = work.search
+                                break least
                             }
                             
-                            reached_end = true
-                        })
-                    }
-                    complete_all_work(&work_queue)
-                    
-                    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Join searches")
-                    
-                    minimal: Search
-                    init_search(&minimal, c, search_metric, context.temp_allocator)
-                    
-                    least: for work in work_units {
-                        all_reached_end &&= work.reached_end
-                        if work.found_invalid {
-                            do_tasks += { .restart }
-                            break update
-                        } else {
-                            if len(work.search.cells) > 0 {
-                                if search_mode == .Scanline {
-                                    minimal = work.search
-                                    break least
-                                }
-                                
-                                assert(search_mode != .Scanline)
-                                if minimal.lowest > work.search.lowest {
-                                    minimal = work.search
-                                } else if minimal.lowest == work.search.lowest {
-                                    append(&minimal.cells, ..work.search.cells[:])
-                                }
+                            assert(search_mode != .Scanline)
+                            if minimal.lowest > work.search.lowest {
+                                minimal = work.search
+                            } else if minimal.lowest == work.search.lowest {
+                                append(&minimal.cells, ..work.search.cells[:])
                             }
                         }
                     }
-                    
+                }
+                
+                if any_found_invalid {
+                    result = .FoundContradiction
+                    break_here := 123; break_here = break_here
+                } else {
                     cells = minimal.cells[:]
                 }
-                
-                if len(cells) > 0 {
-                    to_be_collapsed = random_value(entropy, cells)
-                } else {
-                    if all_reached_end {
-                        break update
-                    }
-                }
+            }
+            
+            if len(cells) > 0 {
+                to_be_collapsed = random_value(entropy, cells)
             } else {
-                // Collapse chosen cell
-                spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Collapse chosen cell")
-
-                wave := to_be_collapsed.value.(WaveFunction)
-                pick := Invalid_Id
-                if len(wave.supports) == 1 {
-                    pick = wave.supports[0].id
-                } else {
-                    if update_state == .Paused {
-                        to_be_collapsed = nil
-                        break update
-                    }
-                    
-                    // Random
-                    total_frequency: i32
-                    for support in wave.supports {
-                        total_frequency += c.states[support.id].frequency
-                    }
-                    
-                    target := random_between(entropy, i32, 0, total_frequency)
-                    picking: for support in wave.supports {
-                        target -= c.states[support.id].frequency
-                        if target <= 0 {
-                            pick = support.id
-                            break picking
-                        }
-                    }
-                    assert(pick != Invalid_Id)
-                }
-                
-                if pick != Invalid_Id {
-                    for support in wave.supports {
-                        id := support.id
-                        if pick != id {
-                            remove_state(c, to_be_collapsed.p, id)
-                        }
-                    }
-                    
-                    delete(wave.supports)
-                    to_be_collapsed.value = pick
-                    to_be_collapsed = nil
-                    doing_changes = true
+                if all_reached_end {
+                    result = .AllCollapsed
                 }
             }
         } else {
-            // Propagate changes
-            spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Propagate changes")
+            // Collapse chosen cell
+            spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Collapse chosen cell")
             
-            if len(changes) == 0 {
-                drawing_initializing = false
-                doing_changes = false
+            wave := to_be_collapsed.value.(WaveFunction)
+            pick := Invalid_Id
+            if len(wave.supports) == 1 {
+                pick = wave.supports[0].id
             } else {
-                change_p: v2i
-                change: Change
-                for k, v in changes {
-                    change_p = k
-                    change = v
-                    break
+                // Random
+                total_frequency: i32
+                for support in wave.supports {
+                    total_frequency += c.states[support.id].frequency
                 }
-                delete_key(&changes, change_p)
-                assert(len(change.removed_support) > 0)
                 
-                for delta, direction in Deltas {
-                    to_p := change_p + delta
-                    if !dimension_contains(dimension, to_p) {
-                        if wrapping {
-                            to_p = rectangle_modulus(rectangle_min_dimension(v2i{}, dimension), to_p)
-                        } else {
-                            continue 
-                        }
+                target := random_between(entropy, i32, 0, total_frequency)
+                picking: for support in wave.supports {
+                    target -= c.states[support.id].frequency
+                    if target <= 0 {
+                        pick = support.id
+                        break picking
                     }
-                    
-                    to_cell := &grid[to_p.x + to_p.y * dimension.x]
-                    to_wave, ok := &to_cell.value.(WaveFunction)
-                    if !ok do continue 
-                    
-                    {
-                        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "removed support loop")
-                        #reverse for &to_support, sup_index in to_wave.supports {
-                            removed := change.removed_support[direction][to_support.id]
-                            assert((removed.id == to_support.id) || (removed.amount == 0))
+                }
+                assert(pick != Invalid_Id)
+            }
+            
+            if pick != Invalid_Id {
+                for support in wave.supports {
+                    id := support.id
+                    if pick != id {
+                        remove_state(c, to_be_collapsed.p, id)
+                    }
+                }
+                
+                delete(wave.supports)
+                to_be_collapsed.value = pick
+                to_be_collapsed = nil
+                doing_changes = true
+            }
+        }
+    } else {
+        // Propagate changes
+        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Propagate changes")
+        
+        if len(changes) == 0 {
+            drawing_initializing = false
+            doing_changes = false
+        } else {
+            change_p: v2i
+            change: Change
+            for k, v in changes {
+                change_p = k
+                change = v
+                break
+            }
+            delete_key(&changes, change_p)
+            assert(len(change.removed_support) > 0)
+            
+            propagate: for delta, direction in Deltas {
+                to_p := change_p + delta
+                if !dimension_contains(dimension, to_p) {
+                    if wrapping {
+                        to_p = rectangle_modulus(rectangle_min_dimension(v2i{}, dimension), to_p)
+                    } else {
+                        continue 
+                    }
+                }
+                
+                to_cell := &grid[to_p.x + to_p.y * dimension.x]
+                to_wave, ok := &to_cell.value.(WaveFunction)
+                if !ok do continue 
+                
+                {
+                    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "removed support loop")
+                    #reverse for &to_support, sup_index in to_wave.supports {
+                        removed := change.removed_support[direction][to_support.id]
+                        assert((removed.id == to_support.id) || (removed.amount == 0))
+                        
+                        amount := &to_support.amount[direction]
+                        assert(amount^ != 0)
+                        
+                        amount^ -= removed.amount
+                        if amount^ <= 0 {
+                            remove_state(c, to_p, to_support.id)
                             
-                            amount := &to_support.amount[direction]
-                            assert(amount^ != 0)
-                            
-                            amount^ -= removed.amount
-                            if amount^ <= 0 {
-                                remove_state(c, to_p, to_support.id)
-                                
-                                unordered_remove(&to_wave.supports, sup_index)
-                                if len(to_wave.supports) == 0 {
-                                    do_tasks += { .restart }
-                                    break update
-                                }
+                            unordered_remove(&to_wave.supports, sup_index)
+                            if len(to_wave.supports) == 0 {
+                                result = .FoundContradiction
+                                break propagate
                             }
                         }
                     }
                 }
             }
         }
-        
-        if time.duration_seconds(time.since(update_start)) > TargetFrameTime * 0.9 {
-            break update
-        }
     }
+    
+    return result
 }
 
 remove_state :: proc (c: ^Collapse, p: v2i, removed_state: State_Id) {
-	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
+    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     
     change, ok := &changes[p]
     if !ok {
@@ -283,7 +286,7 @@ remove_state :: proc (c: ^Collapse, p: v2i, removed_state: State_Id) {
 }
 
 restart :: proc (c: ^Collapse) {
-	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
+    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     
     clear(&changes)
     to_be_collapsed = nil
@@ -330,7 +333,7 @@ restart :: proc (c: ^Collapse) {
 }
 
 extract_states :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
-	spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
+    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     
     for a in c.supports do for d in a do delete(d)
     delete(c.supports)
