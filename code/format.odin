@@ -91,9 +91,6 @@ View :: struct {
     pad_right_side: b8,
     // @todo(viktor): string format, escaped, (as hex)
     
-    // @todo(viktor): thousands divider (and which scale to use, see indian scale), 
-    // ^ is this a userspace function? YES!
-    
     // @todo(viktor): copy over flags from context and let a format element override the context for its data
     
     // Numbers

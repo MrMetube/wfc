@@ -198,6 +198,28 @@ main :: proc () {
         this_frame.pixels_dimension = {}
         this_frame.old_grid = nil
         
+        if collapse.states != nil {
+            if textures_length != len(collapse.states) {
+                for it in textures_and_images do rl.UnloadTexture(it.texture)
+                
+                textures_length = len(collapse.states)
+                resize(&textures_and_images, textures_length)
+                
+                for &state, index in collapse.states {
+                    image := rl.Image {
+                        data = raw_data(state.values),
+                        width  = N,
+                        height = N,
+                        mipmaps = 1,
+                        format = .UNCOMPRESSED_R8G8B8A8,
+                    }
+                    
+                    textures_and_images[index].image   = image
+                    textures_and_images[index].texture = rl.LoadTextureFromImage(image)
+                }
+            }
+        }
+        
         ui(&collapse, images)
         sp := rl.GetMousePosition()
         wp := screen_to_world(sp)
@@ -353,42 +375,28 @@ main :: proc () {
         
         rl.BeginMode2D(camera)
         
-        if collapse.states != nil {
-            if textures_length != len(collapse.states) {
-                for it in textures_and_images do rl.UnloadTexture(it.texture)
-                
-                textures_length = len(collapse.states)
-                resize(&textures_and_images, textures_length)
-                
-                for &state, index in collapse.states {
-                    image := rl.Image {
-                        data = raw_data(state.values),
-                        width  = N,
-                        height = N,
-                        mipmaps = 1,
-                        format = .UNCOMPRESSED_R8G8B8A8,
-                    }
-                    
-                    textures_and_images[index].image   = image
-                    textures_and_images[index].texture = rl.LoadTextureFromImage(image)
-                }
-            }
-        }
+        rl.DrawRectangleRec(
+            to_rl_rectangle(
+                rectangle_min_dimension(world_to_screen({0,0}), 
+                vec_cast(f32, dimension) * cell_size_on_screen)
+            ), {0,255,255,32}
+        )
         
-        
-        {
-            p := world_to_screen({0,0})
-            rect := rl.Rectangle {p.x, p.y, cell_size_on_screen * cast(f32) dimension.x, cell_size_on_screen * cast(f32) dimension.y}
-            rl.DrawRectangleRec(rect, {0,255,255,32})
-        }
+        /* @todo(viktor): 
+        1 - remove Direction and just work with the respective vector
+        2 - display the neighbour likelyhood on a circle of each color with each other color
+        3 - interpolate the likelyhood over the whole circle
+        4 - make a graph/lattice that is still a regular grid
+        5 - make the lattice irregular
+        6 - display the lattice as a voronoi diagram
+        */
         
         for y in 0..<dimension.y {
             for x in 0..<dimension.x {
                 index := x + y * dimension.x
                 cell := grid[index]
-                p := world_to_screen({x, y})
-                
-                rect := rl.Rectangle {p.x, p.y, cell_size_on_screen, cell_size_on_screen}
+                p    := world_to_screen({x, y})
+                rect := to_rl_rectangle(rectangle_min_dimension(p, cell_size_on_screen))
                 switch value in cell.value {
                   case WaveFunction: 
                     if len(value.supports) == 0 {
