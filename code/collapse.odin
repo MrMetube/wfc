@@ -8,8 +8,8 @@ Value :: rl.Color
 
 Collapse :: struct {
     states: [dynamic] State,
-    supports: [/* from State_Id */] [Direction] [dynamic/* ascending */] Directional_Support,
-
+    supports: [/* from State_Id */] [dynamic] Support,
+    
     // Extraction
     is_defining_state:  b32,
     temp_state_values:  [dynamic] Value,

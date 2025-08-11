@@ -1,7 +1,5 @@
 package main
 
-import rl "vendor:raylib"
-
  /*
  * if we ignore even N values then the difference between overlapping and tiled mode is:
  * overlapping: tiles match on a side if N-1 rows/columns match
@@ -16,9 +14,9 @@ N: i32 = 3
 grid: [] Cell
  
 to_be_collapsed: ^Cell
-doing_changes: b32
-// @todo(viktor): its nice that its constant time lookup but the arbitrary order when iterating is worse
-changes: map[v2i] Change
+
+// Cached values for restart
+maximum_support: [] [Direction] i32
 
 Cell :: struct {
     p: v2i,
@@ -33,22 +31,20 @@ Cell :: struct {
 }
 
 WaveFunction :: struct {
-    supports: [dynamic] Supported_State,
+    supports: [dynamic] Support,
 }
 
-// Cached values for restart
-maximum_support: [][Direction] i32
+doing_changes: b32
+// @todo(viktor): its nice that its constant time lookup but the arbitrary order when iterating is worse
+changes: map[v2i] Change
 
-Directional_Support :: struct {
-    id:     State_Id,
-    amount: i32,
-}
-Supported_State :: struct {
-    id:     State_Id,
-    amount: [Direction] /* supports[id][Direction] + summed */i32,
-}
 Change :: struct {
-    removed_support: [Direction] [/* State_Id */] Directional_Support,
+    removed_support: [/* State_Id */] Support,
+}
+
+Support :: struct {
+    id:     State_Id,
+    amount: [Direction] i32,
 }
 
 Update_Result :: enum {
@@ -232,13 +228,13 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
                 {
                     spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "removed support loop")
                     #reverse for &to_support, sup_index in to_wave.supports {
-                        removed := change.removed_support[direction][to_support.id]
-                        assert((removed.id == to_support.id) || (removed.amount == 0))
+                        removed := &change.removed_support[to_support.id]
+                        assert((removed.id == to_support.id) || (removed.amount[direction] == 0))
                         
                         amount := &to_support.amount[direction]
                         assert(amount^ != 0)
                         
-                        amount^ -= removed.amount
+                        amount^ -= removed.amount[direction]
                         if amount^ <= 0 {
                             remove_state(c, to_p, to_support.id)
                             
@@ -264,19 +260,16 @@ remove_state :: proc (c: ^Collapse, p: v2i, removed_state: State_Id) {
         change = &changes[p]
     }
     
-    {
-        // @todo(viktor): We could just have a flat buffer of all these removals and only accumulate them in the update loop itself once the change is being processed
-        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "remove_state: accum removed support")
+    // @todo(viktor): We could just have a flat buffer of all these removals and only accumulate them in the update loop itself once the change is being processed
+    for removed in c.supports[removed_state] {
+        if change.removed_support == nil {
+            spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "remove_state: make removed support")
+            make(&change.removed_support, len(c.states))
+        }
+        
         for direction in Direction {
-            for removed in c.supports[removed_state][direction] {
-                if change.removed_support[direction] == nil {
-                    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "remove_state: make removed support")
-                    change.removed_support[direction] = make([] Directional_Support, len(c.states))
-                }
-                
-                change.removed_support[direction][removed.id].id = removed.id
-                change.removed_support[direction][removed.id].amount += removed.amount
-            }
+            change.removed_support[removed.id].id = removed.id
+            change.removed_support[removed.id].amount[direction] += removed.amount[direction]
         }
     }
 }
@@ -298,7 +291,7 @@ restart :: proc (c: ^Collapse) {
                     wave = &cell.value.(WaveFunction)
                 }
                 
-                wave.supports = make([dynamic] Supported_State, len(c.states))
+                make(&wave.supports, len(c.states))
                 for &it, index in wave.supports {
                     it.id = cast(State_Id) index
                     for &amount, direction in it.amount {
@@ -326,8 +319,8 @@ restart :: proc (c: ^Collapse) {
     }
 }
 
-extract_states :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
-    for a in c.supports do for d in a do delete(d)
+extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
+    for a in c.supports do delete(a)
     delete(c.supports)
     
     for &group in draw_groups {
@@ -358,7 +351,7 @@ extract_states :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
         println("Extraction: State extraction done         ")
     }
     
-    c.supports = make([][Direction][dynamic] Directional_Support, len(c.states))
+    make(&c.supports, len(c.states))
     
     {
         spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Extraction: Supports generation")
@@ -388,15 +381,18 @@ extract_states :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
                 
                     if does_match {
                         found_support: b32
-                        for &support in c.supports[a.id][d] {
+                        for &support in c.supports[a.id] {
                             if support.id == b.id {
                                 found_support = true
-                                support.amount += 1
+                                support.amount[d] += 1
                             }
                         }
                         // @todo(viktor): Think if this is even reasonably
                         if !found_support {
-                            append(&c.supports[a.id][d], Directional_Support {b.id, 1})
+                            value: Support
+                            value.id        = b.id
+                            value.amount[d] = 1
+                            append(&c.supports[a.id], value)
                         }
                     }
                 }
@@ -408,15 +404,15 @@ extract_states :: proc (c: ^Collapse, pixels: []rl.Color, width, height: i32) {
     }
     
     delete(maximum_support)
-    maximum_support = make([][Direction] i32, len(c.states))
+    make(&maximum_support, len(c.states))
     {
         spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Extraction: calculate maximum support")
             
         for from, index in c.states {
             for direction in Direction {
-                for support in c.supports[from.id][direction] {
+                for support in c.supports[from.id] {
                     amount := &maximum_support[support.id][direction]
-                    amount^ += support.amount
+                    amount^ += support.amount[direction]
                 }
             }
             print("Extraction: calculate maximum support % %% \r", view_percentage(index, len(c.states)))

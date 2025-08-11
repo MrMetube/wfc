@@ -254,7 +254,7 @@ main :: proc () {
                                     wave = &cell.value.(WaveFunction)
                                 }
                                 
-                                wave.supports = make([dynamic] Supported_State, len(collapse.states))
+                                make(&wave.supports, len(collapse.states))
                                 for &it, index in wave.supports {
                                     it.id = cast(State_Id) index
                                     for &amount, direction in it.amount {
@@ -383,7 +383,7 @@ main :: proc () {
         )
         
         /* @todo(viktor): 
-        1 - remove Direction and just work with the respective vector
+        1 - remove Direction from the grid / wavefunction and just work with the respective vector
         2 - display the neighbour likelyhood on a circle of each color with each other color
         3 - interpolate the likelyhood over the whole circle
         4 - make a graph/lattice that is still a regular grid
@@ -518,7 +518,7 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
             imgui.push_id(&image)
             if imgui.image_button(auto_cast &image.texture.id, 30) {
                 if image.image.format == .UNCOMPRESSED_R8G8B8 {
-                    this_frame.pixels = make([]rl.Color, image.image.width * image.image.height, context.temp_allocator)
+                    make(&this_frame.pixels, image.image.width * image.image.height, context.temp_allocator)
                     // @leak
                     raw := slice_from_parts([3]u8, image.image.data, image.image.width * image.image.height)
                     for &pixel, index in this_frame.pixels {

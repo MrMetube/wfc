@@ -181,6 +181,7 @@ go_rebuild_yourself :: proc() -> Error {
             os.rename(old_path, build_exe_path) or_return
         }
         
+        fmt.println("\nDone.\n")
         os.exit(0)
     }
     

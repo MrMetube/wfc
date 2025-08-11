@@ -1,5 +1,4 @@
 #+vet !unused-procedures
-#+no-instrumentation
 package main
 
 import "base:runtime"
@@ -125,7 +124,7 @@ worker_thread :: proc (parameter: pmm) {
     info := cast(^CreateThreadInfo) parameter
     queue := info.queue
     context.user_index = cast(int) info.index
-    
+        
     for {
         if do_next_work_queue_entry(queue) { 
             INFINITE :: transmute(win.DWORD) cast(i32) -1
