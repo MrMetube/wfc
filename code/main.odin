@@ -253,6 +253,7 @@ main :: proc () {
         // Update 
         update_start: time.Time
         
+        spall_begin("Update")
         for this_frame.tasks != {} {
             // @todo(viktor): if drawing_initializing and do_restart: Tell the user that their drawing may be unsolvable
             if .resize_grid in this_frame.tasks {
@@ -344,10 +345,13 @@ main :: proc () {
                 }
             }
         }
+        spall_end()
+        
         
         ////////////////////////////////////////////////
         // Render
         
+        spall_begin("Render")
         rl.BeginDrawing()
         rl.ClearBackground({0x54, 0x57, 0x66, 0xFF})
         
@@ -407,12 +411,14 @@ main :: proc () {
             }
         
         }
+        
+        spall_begin("Render cells")
         for y in 0..<dimension.y {
             for x in 0..<dimension.x {
                 index   := x + y * dimension.x
+                average := &average_colors[index]
                 p       := world_to_screen({x, y})
                 rect    := rectangle_min_dimension(p, cell_size_on_screen)
-                average := &average_colors[index]
                 if average.states_count_when_computed == 1 {
                     rl.DrawRectangleRec(to_rl_rectangle(rect), average.color)
                 } else {
@@ -422,7 +428,9 @@ main :: proc () {
                 }
             }
         }
-
+        spall_end()
+        
+        spall_begin("Render extra")
         if highlight_drawing {
             for y in 0..<dimension.y {
                 for x in 0..<dimension.x {
@@ -444,8 +452,8 @@ main :: proc () {
             }
         }
         
-        if to_be_collapsed != nil {
-            p := world_to_screen(to_be_collapsed.p)
+        for cell in to_be_collapsed {
+            p := world_to_screen(cell.p)
             color := rl.PURPLE
             rl.DrawRectangleRec({p.x, p.y, cell_size_on_screen, cell_size_on_screen}, rl.ColorAlpha(color, 0.8))
         }
@@ -458,12 +466,18 @@ main :: proc () {
             rl.DrawRectangleRec(rect, color)
             rl.DrawCircleLinesV(sp,   brush_size * cell_size_on_screen, rl.YELLOW)
         }
-        
+        spall_end()
         rl.EndMode2D()
+        
+        spall_end()
+        
+        spall_begin("Execute Render")
         
         imgui.render()
         rlimgui.ImGui_ImplRaylib_Render(imgui.get_draw_data())
         rl.EndDrawing()
+        
+        spall_end()
     }
 }
 
@@ -484,7 +498,33 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i) {
     make(&grid, area)
     make(&average_colors, area)
     make(&draw_board, area)
-    for y in 0..<new_dimension.y do for x in 0..<new_dimension.x do grid[x + y * new_dimension.x].p = {x, y}
+    
+    temp_neighbours:= make([dynamic] Neighbour, context.temp_allocator)
+    for y in 0..<new_dimension.y do for x in 0..<new_dimension.x {
+        cell := &grid[x + y * new_dimension.x]
+        cell.p = {x, y}
+        
+        for delta, direction in Deltas {
+            to := cell.p + delta
+            if !dimension_contains(dimension, to) && !wrapping do continue // :Wrapping we reached an edge
+            
+            if false { // this disconnects cells in the middle, i.e. the pattern is cut horizontally
+                if y == dimension.y/2     && x > 15 && x < 135 && direction == .South do continue
+                if y == dimension.y/2 + 1 && x > 15 && x < 135 && direction == .North do continue
+            }
+            
+            to = rectangle_modulus(rectangle_min_dimension(v2i{}, dimension), to)
+            neighbour := Neighbour {
+                cell = &grid[to.x + to.y * dimension.x],
+                direction = direction,
+            }
+            append(&temp_neighbours, neighbour)
+        }
+        
+        make(&cell.neighbours, len(temp_neighbours))
+        copy(cell.neighbours, temp_neighbours[:])
+        clear(&temp_neighbours)
+    }
 }
 
 ui :: proc (c: ^Collapse, images: map[string] File) {

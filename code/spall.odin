@@ -19,7 +19,7 @@ init_spall :: proc (location := #caller_location) {
 init_spall_thread :: proc (location := #caller_location) {
     make(&buffer_backing, 10 * Megabyte)
     spall_buffer = spall.buffer_create(buffer_backing, auto_cast context.user_index)
-    spall_begin_scope(location.procedure)
+    spall_begin(location.procedure)
 }
 
 delete_spall :: proc () {
@@ -30,7 +30,7 @@ delete_spall :: proc () {
 delete_spall_thread :: proc () {
     defer delete(buffer_backing)
     defer spall.buffer_destroy(&spall_ctx, &spall_buffer)
-    defer spall_end_scope()
+    defer spall_end()
 }
 
 
@@ -44,20 +44,20 @@ spall_exit :: proc "contextless" (proc_address, call_site_return_address: rawptr
 	spall._buffer_end(&spall_ctx, &spall_buffer)
 }
 
-@(deferred_none = spall_end_scope)
+@(deferred_none = spall_end)
 spall_proc :: proc (name: string = "", location := #caller_location) {
-    spall_begin_scope(name == "" ? location.procedure : name, location)
+    spall_begin(name == "" ? location.procedure : name, location)
 }
 
-@(deferred_none = spall_end_scope)
+@(deferred_none = spall_end)
 spall_scope :: proc (name: string, location := #caller_location) {
-    spall_begin_scope(name, location)
+    spall_begin(name, location)
 }
 
-spall_begin_scope :: proc (name: string, location := #caller_location) {
+spall_begin :: proc (name: string, location := #caller_location) {
 	spall._buffer_begin(&spall_ctx, &spall_buffer, name, "", location)
 }
 
-spall_end_scope :: proc () {
+spall_end :: proc () {
 	spall._buffer_end(&spall_ctx, &spall_buffer)
 }

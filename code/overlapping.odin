@@ -15,13 +15,18 @@ N: i32 = 3
 
 grid: [] Cell
  
-to_be_collapsed: ^Cell
+to_be_collapsed: [dynamic] ^Cell
 
 // Cached values for restart
 maximum_support: [] [Direction] i32
 
+Neighbour :: struct {
+    direction: Direction,
+    cell:      ^Cell,
+}
 Cell :: struct {
     p: v2i,
+    neighbours: [] Neighbour,
     
     value: union {
         State_Id,
@@ -61,7 +66,7 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
     
     result = .Continue
     if !doing_changes {
-        if to_be_collapsed == nil {
+        if len(to_be_collapsed) == 0 {
             // Find next cell to be collapsed 
             spall_scope("Find next cell to be collapsed")
             
@@ -105,7 +110,12 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
             }
             
             if len(cells) > 0 {
-                to_be_collapsed = random_value(entropy, cells)
+                if len(cells[0].value.(WaveFunction).supports) == 1 {
+                    spall_scope("Set All chosen cells to be collapse")
+                    append(&to_be_collapsed, ..cells)
+                } else {
+                    append(&to_be_collapsed, random_value(entropy, cells))
+                }
             } else {
                 if reached_end {
                     result = .AllCollapsed
@@ -115,41 +125,45 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
             // Collapse chosen cell
             spall_scope("Collapse chosen cell")
             
-            wave := to_be_collapsed.value.(WaveFunction)
-            pick := Invalid_State
-            if len(wave.supports) == 1 {
-                pick = wave.supports[0].id
-            } else {
-                // Random
-                total_frequency: i32
-                for support in wave.supports {
-                    total_frequency += c.states[support.id].frequency
+            for cell in to_be_collapsed {
+                wave := cell.value.(WaveFunction)
+                pick := Invalid_State
+                if len(wave.supports) == 1 {
+                    pick = wave.supports[0].id
+                } else {
+                    // Random
+                    total_frequency: i32
+                    for support in wave.supports {
+                        total_frequency += c.states[support.id].frequency
+                    }
+                    
+                    target := random_between(entropy, i32, 0, total_frequency)
+                    picking: for support in wave.supports {
+                        target -= c.states[support.id].frequency
+                        if target <= 0 {
+                            pick = support.id
+                            break picking
+                        }
+                    }
+                    assert(pick != Invalid_State)
                 }
                 
-                target := random_between(entropy, i32, 0, total_frequency)
-                picking: for support in wave.supports {
-                    target -= c.states[support.id].frequency
-                    if target <= 0 {
-                        pick = support.id
-                        break picking
-                    }
-                }
                 assert(pick != Invalid_State)
+                {
+                    for support in wave.supports {
+                        id := support.id
+                        if pick != id {
+                            remove_state(c, cell.p, id)
+                        }
+                    }
+                    
+                    delete(wave.supports)
+                    cell.value = pick
+                }
             }
             
-            if pick != Invalid_State {
-                for support in wave.supports {
-                    id := support.id
-                    if pick != id {
-                        remove_state(c, to_be_collapsed.p, id)
-                    }
-                }
-                
-                delete(wave.supports)
-                to_be_collapsed.value = pick
-                to_be_collapsed = nil
-                doing_changes = true
-            }
+            clear(&to_be_collapsed)
+            doing_changes = true
         }
     } else {
         // Propagate changes
@@ -169,38 +183,29 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
             delete_key(&changes, change_p)
             assert(len(change.removed_support) > 0)
             
-            propagate: for delta, direction in Deltas {
-                to_p := change_p + delta
-                if !dimension_contains(dimension, to_p) {
-                    if wrapping {
-                        to_p = rectangle_modulus(rectangle_min_dimension(v2i{}, dimension), to_p)
-                    } else {
-                        continue 
-                    }
-                }
+            from_cell := grid[change_p.x + change_p.y * dimension.x]
+            propagate: for neighbour, direction in from_cell.neighbours {
+                assert(neighbour.cell != nil)
                 
-                to_cell := &grid[to_p.x + to_p.y * dimension.x]
-                to_wave, ok := &to_cell.value.(WaveFunction)
-                if !ok do continue 
+                to_wave, ok := &neighbour.cell.value.(WaveFunction)
+                if !ok do continue
                 
-                {
-                    spall_scope("removed support loop")
-                    #reverse for &to_support, sup_index in to_wave.supports {
-                        removed := &change.removed_support[to_support.id]
-                        assert((removed.id == to_support.id) || (removed.amount[direction] == 0))
+                spall_scope("removed support loop")
+                #reverse for &to_support, sup_index in to_wave.supports {
+                    removed := &change.removed_support[to_support.id]
+                    assert((removed.id == to_support.id) || (removed.amount[neighbour.direction] == 0))
+                    
+                    amount := &to_support.amount[neighbour.direction]
+                    assert(amount^ != 0)
+                    
+                    amount^ -= removed.amount[neighbour.direction]
+                    if amount^ <= 0 {
+                        remove_state(c, neighbour.cell.p, to_support.id)
                         
-                        amount := &to_support.amount[direction]
-                        assert(amount^ != 0)
-                        
-                        amount^ -= removed.amount[direction]
-                        if amount^ <= 0 {
-                            remove_state(c, to_p, to_support.id)
-                            
-                            unordered_remove(&to_wave.supports, sup_index)
-                            if len(to_wave.supports) == 0 {
-                                result = .FoundContradiction
-                                break propagate
-                            }
+                        unordered_remove(&to_wave.supports, sup_index)
+                        if len(to_wave.supports) == 0 {
+                            result = .FoundContradiction
+                            break propagate
                         }
                     }
                 }

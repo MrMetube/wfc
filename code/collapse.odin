@@ -116,7 +116,7 @@ end_state   :: proc (c: ^Collapse) {
     }
     
     // @speed this linear search is the dominant part of this function. How can we speed it up?
-    spall_begin_scope("search")
+    spall_begin("search")
     search: for other in c.states {
         for value, direction in other.hashes {
             if value != state.hashes[direction] {
@@ -127,7 +127,7 @@ end_state   :: proc (c: ^Collapse) {
         state.id = other.id
         break search
     }
-    spall_end_scope()
+    spall_end()
     
     if state.id == Invalid_State {
         state.id = auto_cast len(c.states)
