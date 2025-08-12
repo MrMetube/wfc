@@ -9,10 +9,10 @@ Value :: rl.Color
 Collapse :: struct {
     states: [dynamic] State,
     supports: [/* from State_Id */] [dynamic] Support,
-    
+    values: [dynamic] Value,
     // Extraction
     is_defining_state:  b32,
-    temp_state_values:  [dynamic] Value,
+    temp_state_values:  [dynamic] Value_Id,
 }
 
 Search :: struct {
@@ -23,12 +23,15 @@ Search :: struct {
     cells:  [dynamic] ^Cell,
 }
 
+Value_Id :: distinct u8
 State_Id :: distinct u32
 State    :: struct {
     id: State_Id,
     // @todo(viktor): values could be extracted into a parallel array and later on move it out to make the collapse more agnostic to the data
-    values: [] Value,
+    values: [] Value_Id,
     frequency: i32,
+    // @note(viktor): used in extraction, direction means of which subregion the hash is
+    hashes: [Direction] u64,
 }
 
 Search_Mode   :: enum { Scanline, Metric, }
@@ -44,14 +47,17 @@ Entropy :: struct {
 
 reset_collapse :: proc (c: ^Collapse) {
     // @todo(viktor): there should be an easier way
-    // println("%", view_variable(size_of(Collapse)))
-    #assert(size_of(Collapse) <= 104, "members have changed")
+    // println("%", view_variable(size_of(Collapse))); assert(false)
+    #assert(size_of(Collapse) <= 144, "members have changed")
     delete(c.states)
     delete(c.temp_state_values)
     c ^= { supports = c.supports }
 }
 
 ////////////////////////////////////////////////
+
+Invalid_State :: max(State_Id)
+Invalid_Value :: max(Value_Id)
 
 begin_state :: proc (c: ^Collapse) {
     assert(!c.is_defining_state)
@@ -62,7 +68,22 @@ begin_state :: proc (c: ^Collapse) {
 
 append_state_value :: proc (c: ^Collapse, value: Value) {
     assert(c.is_defining_state)
-    append(&c.temp_state_values, value)
+    
+    id := Invalid_Value
+    for it, index in c.values {
+        if it == value {
+            id = cast(Value_Id) index
+            break
+        }
+    }
+    
+    if id == Invalid_Value {
+        id = cast(Value_Id) len(c.values)
+        append(&c.values, value)
+    }
+    assert(id != Invalid_Value)
+    
+    append(&c.temp_state_values, id)
 }
 
 end_state   :: proc (c: ^Collapse) {
@@ -70,35 +91,59 @@ end_state   :: proc (c: ^Collapse) {
     assert(len(c.temp_state_values) != 0)
     c.is_defining_state = false
     
-    id := Invalid_Id
-    search: for state in c.states {
-        if len(c.temp_state_values) != len(state.values) do continue search
+    state := State { id = Invalid_State }
+    {
+        subsections := [Direction] Rectangle2i {
+            .East  = { { 1, 0 }, {   N,   N } },
+            .West  = { { 0, 0 }, { N-1,   N } },
+            .South = { { 0, 1 }, {   N,   N } },
+            .North = { { 0, 0 }, {   N, N-1 } },
+        }
         
-        for value, index in state.values {
-            if value != c.temp_state_values[index] {
+        for r, direction in subsections {
+            // @note(viktor): iterative fnv64a hash
+            seed :: u64(0xcbf29ce484222325)
+            hash := seed
+            for dy in r.min.y ..< r.max.y {
+                for dx in r.min.x ..< r.max.x {
+                    value := c.temp_state_values[dx + dy * N]
+                    hash = (hash ~ u64(value)) * 0x100000001b3
+                }
+            }
+            
+            state.hashes[direction] = hash
+        }
+    }
+    
+    // @speed this linear search is the dominant part of this function. How can we speed it up?
+    spall_begin_scope("search")
+    search: for other in c.states {
+        for value, direction in other.hashes {
+            if value != state.hashes[direction] {
                 continue search
             }
         }
         
-        id = state.id
+        state.id = other.id
         break search
     }
+    spall_end_scope()
     
-    if id == Invalid_Id {
-        id = auto_cast len(c.states)
+    if state.id == Invalid_State {
+        state.id = auto_cast len(c.states)
+        state.frequency = 1
+        make(&state.values, len(c.temp_state_values))
+        copy(state.values, c.temp_state_values[:])
         
-        values := make([] Value, len(c.temp_state_values))
-        copy(values, c.temp_state_values[:])
-        append(&c.states, State { id = id, values = values, frequency = 1 })
+        append(&c.states, state)
     } else {
-        c.states[id].frequency += 1
+        c.states[state.id].frequency += 1
     }
-    assert(id != Invalid_Id)
+    assert(state.id != Invalid_State)
     
     clear(&c.temp_state_values)
 }
 
-Invalid_Id :: max(State_Id)
 
 ////////////////////////////////////////////////
 

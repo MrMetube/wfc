@@ -8,6 +8,7 @@ import win "core:sys/windows"
 WorkQueueCallback :: #type proc(data: pmm)
 
 WorkQueue :: struct {
+    name: string,
     worker_count: u32,
     
     semaphore_handle: win.HANDLE,
@@ -18,7 +19,7 @@ WorkQueue :: struct {
     next_entry_to_write, 
     next_entry_to_read:  u32,
     
-    entries: [4096]WorkQueueEntry,
+    entries: [4096] WorkQueueEntry,
 }
 
 WorkQueueEntry :: struct {
@@ -29,17 +30,20 @@ WorkQueueEntry :: struct {
 CreateThreadInfo :: struct {
     queue: ^WorkQueue,
     index: u32,
+    name_index: u32,
 }
 
 @(private="file") created_thread_count: u32 = 1
 @(private="file") infos: [1024]CreateThreadInfo
 
-init_work_queue :: proc(queue: ^WorkQueue, count: u32) {
+init_work_queue :: proc(queue: ^WorkQueue, name: string, count: u32) {
     queue.semaphore_handle = win.CreateSemaphoreW(nil, 0, auto_cast count, nil)
+    queue.name = name
     
-    for &info in infos[:count] {
+    for &info, index in infos[created_thread_count:][:count] {
         info.queue = queue
         info.index = created_thread_count
+        info.name_index = 1 + auto_cast index
         created_thread_count += 1
         
         // @note(viktor): When I use the windows call I can at most create 4 threads at once,
@@ -83,7 +87,6 @@ enqueue_work_any :: proc(queue: ^WorkQueue, data: pmm, callback: WorkQueueCallba
 }
 
 complete_all_work :: proc(queue: ^WorkQueue) {
-    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Find next cell to be collapsed")
     if queue == nil do return
     
     for queue.completion_count != queue.completion_goal {
@@ -124,7 +127,13 @@ worker_thread :: proc (parameter: pmm) {
     info := cast(^CreateThreadInfo) parameter
     queue := info.queue
     context.user_index = cast(int) info.index
-        
+    
+    when #defined(spall_ctx) {
+        init_spall_thread()
+    }
+    
+    win.SetThreadDescription(win.GetCurrentThread(), win.utf8_to_wstring(sprint("%: %", queue.name, info.name_index)))
+    
     for {
         if do_next_work_queue_entry(queue) { 
             INFINITE :: transmute(win.DWORD) cast(i32) -1

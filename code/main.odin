@@ -4,29 +4,18 @@ import "core:os/os2"
 import "core:strings"
 import "core:time"
 
-import "core:prof/spall"
-spall :: spall
-
-spall_ctx: spall.Context
-@(thread_local) spall_buffer: spall.Buffer
-
-@(instrumentation_enter)
-spall_enter :: proc "contextless" (proc_address, call_site_return_address: rawptr, loc := #caller_location) {
-	spall._buffer_begin(&spall_ctx, &spall_buffer, "", "", loc)
-}
-
-@(instrumentation_exit)
-spall_exit :: proc "contextless" (proc_address, call_site_return_address: rawptr, loc := #caller_location) {
-	spall._buffer_end(&spall_ctx, &spall_buffer)
-}
-
 // @todo(viktor): Minesweeper fields should be possible to generate if you also count diagonal edges in the extraction
 
 import rl "vendor:raylib"
 import imgui "../lib/odin-imgui/"
 import rlimgui "../lib/odin-imgui/examples/raylib"
 
-Deltas := [Direction] v2i { .East = {1,0}, .West = {-1,0}, .North = {0,-1}, .South = {0,1}}
+Deltas := [Direction] v2i { 
+    .East  = { 1, 0}, 
+    .West  = {-1, 0}, 
+    .North = { 0,-1}, 
+    .South = { 0, 1},
+}
 
 Screen_Size :: v2i{1920, 1080}
 
@@ -42,11 +31,9 @@ paused: b32
 
 wrapping: b32
 
-work_queue: WorkQueue
-
 cell_size_on_screen: f32
 
-average_colors: [] Average_Color
+average_colors: #soa [] Average_Color
 Average_Color :: struct {
     states_count_when_computed: u32,
     color: rl.Color,
@@ -121,17 +108,23 @@ Task :: enum {
     update,
 }
 
+@(no_instrumentation)
 main :: proc () {
     rl.SetTraceLogLevel(.WARNING)
     rl.InitWindow(Screen_Size.x, Screen_Size.y, "Wave Function Collapse")
     rl.SetTargetFPS(TargetFps)
+    
+    init_spall()
     
     camera := rl.Camera2D { zoom = 1 }
     
     arena: Arena
     init_arena(&arena, make([]u8, 128*Megabyte))
     
-    init_work_queue(&work_queue, 0)
+    w: WorkQueue
+    h: WorkQueue
+    init_work_queue(&h, "High queue", 2)
+    init_work_queue(&w, "Low queue", 2)
     
     images: map[string]File
     image_dir := "./images"
@@ -149,7 +142,7 @@ main :: proc () {
                 cstr := copy_cstring(temp.arena, file_type)
                 
                 image := File { data = data }
-                image.image = rl.LoadImageFromMemory(cstr, raw_data(image.data), auto_cast len(image.data))
+                image.image   = rl.LoadImageFromMemory(cstr, raw_data(image.data), auto_cast len(image.data))
                 image.texture = rl.LoadTextureFromImage(image.image)
                 images[info.name] = image
             }
@@ -158,31 +151,14 @@ main :: proc () {
     
     imgui.set_current_context(imgui.create_context(nil))
     rlimgui.ImGui_ImplRaylib_Init()
-    
-    ////////////////////////////////////////////////
-    ////////////////////////////////////////////////
-    ////////////////////////////////////////////////
-    
-    spall_ctx = spall.context_create("trace_test.spall", 10 * time.Millisecond)
-    defer spall.context_destroy(&spall_ctx)
-    
-    buffer_backing := make([]u8, spall.BUFFER_DEFAULT_SIZE)
-    defer delete(buffer_backing)
-    
-    spall_buffer = spall.buffer_create(buffer_backing, 0)
-    defer spall.buffer_destroy(&spall_ctx, &spall_buffer)
-    
-    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
-    
-    ////////////////////////////////////////////////
-    ////////////////////////////////////////////////
-    ////////////////////////////////////////////////
-    
+
     entropy := seed_random_series(123)
     collapse: Collapse
     setup_grid(&collapse, dimension, dimension)
+    this_frame.desired_N = N
     
     for !rl.WindowShouldClose() {
+        spall_scope("Frame")
         free_all(context.temp_allocator)
         
         rlimgui.ImGui_ImplRaylib_NewFrame()
@@ -193,32 +169,10 @@ main :: proc () {
         // UI
         
         this_frame.desired_dimension = dimension
-        this_frame.desired_N = N
+        // this_frame.desired_N = N
         this_frame.pixels = nil
         this_frame.pixels_dimension = {}
         this_frame.old_grid = nil
-        
-        if collapse.states != nil {
-            if textures_length != len(collapse.states) {
-                for it in textures_and_images do rl.UnloadTexture(it.texture)
-                
-                textures_length = len(collapse.states)
-                resize(&textures_and_images, textures_length)
-                
-                for &state, index in collapse.states {
-                    image := rl.Image {
-                        data = raw_data(state.values),
-                        width  = N,
-                        height = N,
-                        mipmaps = 1,
-                        format = .UNCOMPRESSED_R8G8B8A8,
-                    }
-                    
-                    textures_and_images[index].image   = image
-                    textures_and_images[index].texture = rl.LoadTextureFromImage(image)
-                }
-            }
-        }
         
         ui(&collapse, images)
         sp := rl.GetMousePosition()
@@ -232,6 +186,8 @@ main :: proc () {
         
         if dimension_contains(dimension, wp) {
             if rl.IsMouseButtonDown(.LEFT) {
+                this_frame.tasks -= { .update }
+                
                 diameter := max(1, ceil(i32, brush_size*2))
                 area := rectangle_center_dimension(wp, diameter)
                 for y in area.min.y..<area.max.y {
@@ -270,6 +226,28 @@ main :: proc () {
             }
             
         }
+        
+        // if collapse.states != nil {
+        //     if textures_length != len(collapse.states) {
+        //         for it in textures_and_images do rl.UnloadTexture(it.texture)
+                
+        //         textures_length = len(collapse.states)
+        //         resize(&textures_and_images, textures_length)
+                
+        //         for &state, index in collapse.states {
+        //             image := rl.Image {
+        //                 data = raw_data(state.values),
+        //                 width  = N,
+        //                 height = N,
+        //                 mipmaps = 1,
+        //                 format = .UNCOMPRESSED_R8G8B8A8,
+        //             }
+                    
+        //             textures_and_images[index].image   = image
+        //             textures_and_images[index].texture = rl.LoadTextureFromImage(image)
+        //         }
+        //     }
+        // }
         
         ////////////////////////////////////////////////
         // Update 
@@ -378,65 +356,73 @@ main :: proc () {
         rl.DrawRectangleRec(
             to_rl_rectangle(
                 rectangle_min_dimension(world_to_screen({0,0}), 
-                vec_cast(f32, dimension) * cell_size_on_screen)
-            ), {0,255,255,32}
+                vec_cast(f32, dimension) * cell_size_on_screen),
+            ), {0,255,255,32},
         )
         
         /* @todo(viktor): 
-        1 - remove Direction from the grid / wavefunction and just work with the respective vector
-        2 - display the neighbour likelyhood on a circle of each color with each other color
-        3 - interpolate the likelyhood over the whole circle
-        4 - make a graph/lattice that is still a regular grid
-        5 - make the lattice irregular
-        6 - display the lattice as a voronoi diagram
+        1 - abstract support in a direction to allow that lookup to be as complex as needed
+        2 - remove Direction from the grid / wavefunction and just work with the respective vector
+        3 - display the neighbour likelyhood on a circle of each color with each other color
+        4 - interpolate the likelyhood over the whole circle
+        5 - make a graph/lattice that is still a regular grid
+        6 - make the lattice irregular
+        7 - display the lattice as a voronoi diagram
         */
         
+        for cell, index in grid {
+            average := &average_colors[index]
+            
+            switch value in cell.value {
+              case WaveFunction: 
+                if len(value.supports) == 0 {
+                    average.color = { 255, 0, 255, 255 }
+                    unreachable()
+                }
+                
+                if render_wavefunction_as_average {
+                    // @todo(viktor): also allow for most likely color
+                    if average.states_count_when_computed != auto_cast len(value.supports) {
+                        average.states_count_when_computed = auto_cast len(value.supports)
+                        
+                        color: v4
+                        count: f32
+                        for support in value.supports {
+                            state    := collapse.states[support.id]
+                            color_id := state.values[N/4+N/4*N] // middle
+                            color += rl_color_to_v4(collapse.values[color_id]) * cast(f32) state.frequency
+                            count += cast(f32) state.frequency
+                        }
+                        
+                        color = safe_ratio_0(color, count)
+                        average.color = cast(rl.Color) v4_to_rgba(color * {1,1,1,0.3})
+                    }
+                }
+                
+              case State_Id:
+                state    := collapse.states[value]
+                color_id := state.values[N/4+N/4*N] // middle
+                average.color = collapse.values[color_id]
+                average.states_count_when_computed = 1
+            }
+        
+        }
         for y in 0..<dimension.y {
             for x in 0..<dimension.x {
-                index := x + y * dimension.x
-                cell := grid[index]
-                p    := world_to_screen({x, y})
-                rect := to_rl_rectangle(rectangle_min_dimension(p, cell_size_on_screen))
-                switch value in cell.value {
-                  case WaveFunction: 
-                    if len(value.supports) == 0 {
-                        color := rl.Color { 255, 0, 255, 255 }
-                        rl.DrawRectangleRec(rect, color)
-                    } else {
-                        if render_wavefunction_as_average {
-                            // @todo(viktor): also allow for most likely color
-                            average := &average_colors[index]
-                            if average.states_count_when_computed != auto_cast len(value.supports) {
-                                average.states_count_when_computed = auto_cast len(value.supports)
-                                
-                                color: [4]f32
-                                count: f32
-                                for support in value.supports {
-                                    state := collapse.states[support.id]
-                                    value := cast([4]u8) state.values[N/4+N/4*N] // middle
-                                    color += rgba_to_v4(value) * cast(f32) state.frequency
-                                    count += cast(f32) state.frequency
-                                }
-                                
-                                if count > 0 {
-                                    color /= count
-                                }
-                                
-                                average.color = cast(rl.Color) v4_to_rgba(color)
-                            }
-                            rl.DrawCircleV(p + cell_size_on_screen*0.5, cell_size_on_screen*0.5, average.color)
-                            // rl.DrawRectangleRec(rect, average.color)
-                        }
+                index   := x + y * dimension.x
+                p       := world_to_screen({x, y})
+                rect    := rectangle_min_dimension(p, cell_size_on_screen)
+                average := &average_colors[index]
+                if average.states_count_when_computed == 1 {
+                    rl.DrawRectangleRec(to_rl_rectangle(rect), average.color)
+                } else {
+                    if render_wavefunction_as_average {
+                        rl.DrawCircleV(get_center(rect), get_dimension(rect).x / 2, average.color)
                     }
-                    
-                  case State_Id:
-                    values := collapse.states[value].values
-                    color := values[N/4+N/4*N] // middle
-                    rl.DrawRectangleRec(rect, color)
                 }
             }
         }
-        
+
         if highlight_drawing {
             for y in 0..<dimension.y {
                 for x in 0..<dimension.x {
@@ -444,7 +430,8 @@ main :: proc () {
                     drawn := draw_board[index]
                     if drawn != nil {
                         p := world_to_screen({x, y})
-                        rl.DrawRectangleRec({p.x, p.y, cell_size_on_screen, cell_size_on_screen}, rl.ColorAlpha(drawn.color, 0.7))
+                        rect := rectangle_min_dimension(p, cell_size_on_screen)
+                        rl.DrawRectangleRec(to_rl_rectangle(rect), rl.ColorAlpha(drawn.color, 0.7))
                     }
                 }
             }

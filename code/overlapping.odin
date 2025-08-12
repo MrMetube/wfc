@@ -1,5 +1,7 @@
 package main
 
+import "core:time"
+
  /*
  * if we ignore even N values then the difference between overlapping and tiled mode is:
  * overlapping: tiles match on a side if N-1 rows/columns match
@@ -61,84 +63,40 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
     if !doing_changes {
         if to_be_collapsed == nil {
             // Find next cell to be collapsed 
-            spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Find next cell to be collapsed")
+            spall_scope("Find next cell to be collapsed")
             
             cells: [] ^Cell
-            all_reached_end := true
-            any_found_invalid := false
+            reached_end := true
+            found_invalid := false
             switch search_mode {
               case .Scanline:
                 scan: for &cell in grid do if _, ok := cell.value.(WaveFunction); ok {
                     cells = { &cell }
-                    all_reached_end = false
+                    reached_end = false
                     break scan
                 }
                 
               case .Metric:
-                Data :: struct {
-                    search:  Search,
-                    
-                    grid_section:  [] Cell,
-                    found_invalid: b32,
-                    reached_end:   b32,
-                }
-                
-                rows := dimension.y / 4
-                work_units := make([] Data, rows, context.temp_allocator)
-                for &work, row in work_units {
-                    size := dimension.x * 4
-                    work.grid_section = grid[cast(i32) row * size:][:size]
-                    
-                    init_search(&work.search, c, search_metric, context.temp_allocator)
-                    
-                    enqueue_work(&work_queue, &work, proc (work: ^Data) {
-                        using work
-                        loop: for &cell in grid_section {
-                            if wave, ok := &cell.value.(WaveFunction); ok {
-                                switch test_search_cell(&search, &cell, wave) {
-                                  case .Continue: // nothing
-                                  case .Done:     break loop
-                                
-                                  case .Found_Invalid: 
-                                    found_invalid = true
-                                    break loop
-                                }
-                            }
-                        }
-                        
-                        reached_end = true
-                    })
-                }
-                complete_all_work(&work_queue)
-                
-                spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Join searches")
-                
                 minimal: Search
                 init_search(&minimal, c, search_metric, context.temp_allocator)
                 
-                least: for work in work_units {
-                    all_reached_end &&= work.reached_end
-                    if work.found_invalid {
-                        any_found_invalid ||= true
-                        break least
-                    } else {
-                        if len(work.search.cells) > 0 {
-                            if search_mode == .Scanline {
-                                minimal = work.search
-                                break least
-                            }
+                loop: for &cell, index in grid {
+                    if wave, ok := &cell.value.(WaveFunction); ok {
+                        switch test_search_cell(&minimal, &cell, wave) {
+                          case .Continue: // nothing
+                          case .Done:     break loop
                             
-                            assert(search_mode != .Scanline)
-                            if minimal.lowest > work.search.lowest {
-                                minimal = work.search
-                            } else if minimal.lowest == work.search.lowest {
-                                append(&minimal.cells, ..work.search.cells[:])
-                            }
+                          case .Found_Invalid: 
+                            found_invalid = true
+                            break loop
                         }
                     }
+                    
+                    reached_end = index == len(grid)-1
                 }
                 
-                if any_found_invalid {
+                
+                if found_invalid {
                     result = .FoundContradiction
                     break_here := 123; break_here = break_here
                 } else {
@@ -149,16 +107,16 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
             if len(cells) > 0 {
                 to_be_collapsed = random_value(entropy, cells)
             } else {
-                if all_reached_end {
+                if reached_end {
                     result = .AllCollapsed
                 }
             }
         } else {
             // Collapse chosen cell
-            spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Collapse chosen cell")
+            spall_scope("Collapse chosen cell")
             
             wave := to_be_collapsed.value.(WaveFunction)
-            pick := Invalid_Id
+            pick := Invalid_State
             if len(wave.supports) == 1 {
                 pick = wave.supports[0].id
             } else {
@@ -176,10 +134,10 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
                         break picking
                     }
                 }
-                assert(pick != Invalid_Id)
+                assert(pick != Invalid_State)
             }
             
-            if pick != Invalid_Id {
+            if pick != Invalid_State {
                 for support in wave.supports {
                     id := support.id
                     if pick != id {
@@ -195,7 +153,7 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
         }
     } else {
         // Propagate changes
-        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Propagate changes")
+        spall_scope("Propagate changes")
         
         if len(changes) == 0 {
             drawing_initializing = false
@@ -226,7 +184,7 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
                 if !ok do continue 
                 
                 {
-                    spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "removed support loop")
+                    spall_scope("removed support loop")
                     #reverse for &to_support, sup_index in to_wave.supports {
                         removed := &change.removed_support[to_support.id]
                         assert((removed.id == to_support.id) || (removed.amount[direction] == 0))
@@ -263,7 +221,7 @@ remove_state :: proc (c: ^Collapse, p: v2i, removed_state: State_Id) {
     // @todo(viktor): We could just have a flat buffer of all these removals and only accumulate them in the update loop itself once the change is being processed
     for removed in c.supports[removed_state] {
         if change.removed_support == nil {
-            spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "remove_state: make removed support")
+            spall_scope("remove_state: make removed support")
             make(&change.removed_support, len(c.states))
         }
         
@@ -279,12 +237,13 @@ restart :: proc (c: ^Collapse) {
     to_be_collapsed = nil
     
     {
-        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Restart: initialize support")
+        spall_scope("Restart: initialize support")
         for y in 0..<dimension.y {
             for x in 0..<dimension.x {
                 cell := &grid[x + y * dimension.x]
                 wave, ok := &cell.value.(WaveFunction)
                 if ok {
+                    // resize(&wave.supports, len(c.states))
                     delete(wave.supports)
                 } else {
                     cell.value = WaveFunction  {}
@@ -305,7 +264,7 @@ restart :: proc (c: ^Collapse) {
     }
     
     {
-        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Restart: enforce drawing")
+        spall_scope("Restart: enforce drawing")
         
         for y in 0..<dimension.y {
             for x in 0..<dimension.x {
@@ -317,6 +276,8 @@ restart :: proc (c: ^Collapse) {
             }
         }
     }
+    
+    println("Restart: Done")
 }
 
 extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
@@ -332,7 +293,8 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
     
     // @incomplete: Allow for rotations and mirroring here
     {
-        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "State Extraction")
+        start := time.now()
+        spall_scope("State Extraction")
         for by in 0..<height {
             for bx in 0..<width {
                 begin_state(c)
@@ -348,65 +310,66 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
             
             print("Extraction: State extraction % %%\r", view_percentage(by, height))
         }
-        println("Extraction: State extraction done         ")
+        println("Extraction: State extraction done: %        ", view_time_duration(time.since(start), show_limit_as_decimal = true, precision = 3))
     }
+    // 1.3s  | 6.7s
+    // 1.2s  | 6.1s
+    // 1.2s  | 3.9s
+    // 1.2s  | 3.0s
+    // 450ms | 3.0s
     
     make(&c.supports, len(c.states))
     
     {
-        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Extraction: Supports generation")
+        start := time.now()
+        spall_scope("Extraction: Supports generation")
+        
         for a, a_index in c.states {
             assert(a.id == auto_cast a_index)
-            for delta, d in Deltas {
-                region := rectangle_min_dimension(cast(i32) 0, 0, N, N)
-                dim := get_dimension(region)
+            for d in Direction {
+                a_hash := a.hashes[d]
                 for b in c.states {
-                    does_match: b8 = true
-                    // @speed we could hash these regions and only compare hashes in the n²-loop
-                    loop: for y: i32; y < dim.y; y += 1 {
-                        for x: i32; x < dim.x; x += 1 {
-                            ap := v2i{x, y}
-                            bp := v2i{x, y} - delta
-                            
-                            if contains(region, bp) {
-                                a_value := a.values[ap.x + ap.y * dim.x]
-                                b_value := b.values[bp.x + bp.y * dim.x]
-                                if a_value != b_value {
-                                    does_match = false
-                                    break loop
-                                }
-                            }
-                        }
-                    }
-                
-                    if does_match {
-                        found_support: b32
-                        for &support in c.supports[a.id] {
+                    b_hash := b.hashes[cast(Direction) ((cast(u32) d+2)%4)]
+                    
+                    if a_hash == b_hash {
+                        spall_scope("Extraction: binary search supports")
+                        found_support := false
+                        
+                        // binary search
+                        l, r := 0, len(c.supports[a.id])-1
+                        for l <= r {
+                            m := (l + r) / 2
+                            support := &c.supports[a.id][m]
                             if support.id == b.id {
                                 found_support = true
                                 support.amount[d] += 1
+                                break
+                            } else if support.id > b.id {
+                                r = m - 1
+                            } else {
+                                l = m + 1
                             }
                         }
-                        // @todo(viktor): Think if this is even reasonably
+                    
                         if !found_support {
-                            value: Support
-                            value.id        = b.id
+                            value := Support { id = b.id }
                             value.amount[d] = 1
                             append(&c.supports[a.id], value)
                         }
                     }
                 }
             }
-            
             print("Extraction: Supports generation % %%\r", view_percentage(a_index, len(c.states)))
+            
         }
-        println("Extraction: Supports generation done        ")
+        
+        println("Extraction: Supports generation done: %       ", view_time_duration(time.since(start), show_limit_as_decimal = true, precision = 3))
     }
     
     delete(maximum_support)
     make(&maximum_support, len(c.states))
     {
-        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Extraction: calculate maximum support")
+        spall_scope("Extraction: calculate maximum support")
             
         for from, index in c.states {
             for direction in Direction {
@@ -421,9 +384,10 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
     }
     
     {
-        spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, "Extraction: Draw Groups grouping")
+        spall_scope("Extraction: Draw Groups grouping")
         for state in c.states {
-            color := state.values[1 + 1 * N] // middle
+            color_id := state.values[1 + 1 * N] // middle
+            color := c.values[color_id]
             group: ^Draw_Group
             for &it in draw_groups {
                 if it.color == color {
@@ -440,4 +404,6 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
             group.ids[state.id] = true
         }
     }
+    
+    println("Extraction: Done")
 }

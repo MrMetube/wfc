@@ -1,0 +1,63 @@
+#+vet !unused-procedures
+#+no-instrumentation
+package main
+
+import "core:prof/spall"
+import "core:time"
+
+spall_ctx: spall.Context
+@(thread_local) spall_buffer: spall.Buffer
+@(private="file", thread_local) buffer_backing: [] u8
+
+@(deferred_none = delete_spall)
+init_spall :: proc (location := #caller_location) {
+    spall_ctx = spall.context_create("trace_test.spall", 10 * time.Millisecond)
+    make(&buffer_backing, 10 * Megabyte)
+    spall_buffer = spall.buffer_create(buffer_backing, auto_cast context.user_index)
+}
+@(deferred_none = delete_spall_thread)
+init_spall_thread :: proc (location := #caller_location) {
+    make(&buffer_backing, 10 * Megabyte)
+    spall_buffer = spall.buffer_create(buffer_backing, auto_cast context.user_index)
+    spall_begin_scope(location.procedure)
+}
+
+delete_spall :: proc () {
+    defer spall.context_destroy(&spall_ctx)
+    defer delete(buffer_backing)
+    defer spall.buffer_destroy(&spall_ctx, &spall_buffer)
+}
+delete_spall_thread :: proc () {
+    defer delete(buffer_backing)
+    defer spall.buffer_destroy(&spall_ctx, &spall_buffer)
+    defer spall_end_scope()
+}
+
+
+@(instrumentation_enter)
+spall_enter :: proc "contextless" (proc_address, call_site_return_address: rawptr, loc := #caller_location) {
+	spall._buffer_begin(&spall_ctx, &spall_buffer, "", "", loc)
+}
+
+@(instrumentation_exit)
+spall_exit :: proc "contextless" (proc_address, call_site_return_address: rawptr, loc := #caller_location) {
+	spall._buffer_end(&spall_ctx, &spall_buffer)
+}
+
+@(deferred_none = spall_end_scope)
+spall_proc :: proc (name: string = "", location := #caller_location) {
+    spall_begin_scope(name == "" ? location.procedure : name, location)
+}
+
+@(deferred_none = spall_end_scope)
+spall_scope :: proc (name: string, location := #caller_location) {
+    spall_begin_scope(name, location)
+}
+
+spall_begin_scope :: proc (name: string, location := #caller_location) {
+	spall._buffer_begin(&spall_ctx, &spall_buffer, name, "", location)
+}
+
+spall_end_scope :: proc () {
+	spall._buffer_end(&spall_ctx, &spall_buffer)
+}

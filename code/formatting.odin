@@ -241,10 +241,11 @@ view_memory_size :: proc(#any_int value: u64) -> (u64, string) {
     return value , "?"
 }
 
+// @todo(viktor): make precision and width parameters
 view_percentage :: proc { view_percentage_parts, view_percentage_ratio }
 view_percentage_parts :: proc(a, b: $N)  -> (result: View) { return view_percentage(cast(f64) a / cast(f64) b) }
 view_percentage_ratio :: proc(value: $F) -> (result: View) {
-    result = view_float(value * 100, precision = 0, width = 2)
+    result = view_float(value * 100, precision = 2, width = 2)
     return result
 }
 
