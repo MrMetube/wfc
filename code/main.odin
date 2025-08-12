@@ -11,9 +11,9 @@ import imgui "../lib/odin-imgui/"
 import rlimgui "../lib/odin-imgui/examples/raylib"
 
 Deltas := [Direction] v2i { 
-    .East  = { 1, 0}, 
-    .West  = {-1, 0}, 
-    .North = { 0,-1}, 
+    .East  = { 1, 0},
+    .North = { 0,-1},
+    .West  = {-1, 0},
     .South = { 0, 1},
 }
 
@@ -51,7 +51,7 @@ textures_and_images: [dynamic] struct {
 
 Draw_Group :: struct {
     color: rl.Color,
-    ids:   []b32,
+    ids:   [/* State_Id */] b32,
 }
 
 brush_size_speed: f32 = 60
@@ -59,7 +59,11 @@ brush_size: f32 = 2
 d_brush_size: f32 = 0
 dd_brush_size: f32 = 0
 
-// @todo(viktor): Rethink this api now that I kinda know what I want to be able to do
+viewing_group:   ^Draw_Group
+
+grid_background_color := DarkGreen
+
+// @todo(viktor): Rethink this api now that I kinda know what I want to be able to do. Can it be done with tasks?
 drawing_initializing: b32
 selected_group: ^Draw_Group
 draw_board:     [] ^Draw_Group
@@ -116,15 +120,8 @@ main :: proc () {
     
     init_spall()
     
-    camera := rl.Camera2D { zoom = 1 }
-    
     arena: Arena
     init_arena(&arena, make([]u8, 128*Megabyte))
-    
-    w: WorkQueue
-    h: WorkQueue
-    init_work_queue(&h, "High queue", 2)
-    init_work_queue(&w, "Low queue", 2)
     
     images: map[string]File
     image_dir := "./images"
@@ -178,53 +175,54 @@ main :: proc () {
         sp := rl.GetMousePosition()
         wp := screen_to_world(sp)
         
-        dd_brush_size = -rl.GetMouseWheelMove() * min(300, brush_size_speed * brush_size)
-        d_brush_size += dd_brush_size * rl.GetFrameTime()
-        d_brush_size += -d_brush_size * rl.GetFrameTime() * 10
-        brush_size += d_brush_size * rl.GetFrameTime()
-        brush_size = clamp(brush_size, 0.3, 10)
+        if viewing_group == nil {
+            dd_brush_size = -rl.GetMouseWheelMove() * min(300, brush_size_speed * brush_size)
+            d_brush_size += dd_brush_size * rl.GetFrameTime()
+            d_brush_size += -d_brush_size * rl.GetFrameTime() * 10
+            brush_size += d_brush_size * rl.GetFrameTime()
+            brush_size = clamp(brush_size, 0.3, 10)
         
-        if dimension_contains(dimension, wp) {
-            if rl.IsMouseButtonDown(.LEFT) {
-                this_frame.tasks -= { .update }
-                
-                diameter := max(1, ceil(i32, brush_size*2))
-                area := rectangle_center_dimension(wp, diameter)
-                for y in area.min.y..<area.max.y {
-                    for x in area.min.x..<area.max.x {
-                        p := v2i{x, y}
-                        if dimension_contains(dimension, p) && length_squared(p - wp) <= square(diameter/2) {
-                            index := x + y * dimension.x
-                            draw_board[index] = selected_group
-                            if selected_group != nil {
-                                restrict_cell_to_drawn(&collapse, p, selected_group)
-                            } else {
-                                //  @copypasta from restart
-                                // @todo(viktor): :Constrained the current implementation does not consider existing constraints
-                                cell := &grid[index]
-                                wave, ok := &cell.value.(WaveFunction)
-                                if ok {
-                                    delete(wave.supports)
+            if dimension_contains(dimension, wp) {
+                if rl.IsMouseButtonDown(.LEFT) {
+                    this_frame.tasks -= { .update }
+                    
+                    diameter := max(1, ceil(i32, brush_size*2))
+                    area := rectangle_center_dimension(wp, diameter)
+                    for y in area.min.y..<area.max.y {
+                        for x in area.min.x..<area.max.x {
+                            p := v2i{x, y}
+                            if dimension_contains(dimension, p) && length_squared(p - wp) <= square(diameter/2) {
+                                index := x + y * dimension.x
+                                draw_board[index] = selected_group
+                                if selected_group != nil {
+                                    restrict_cell_to_drawn(&collapse, p, selected_group)
                                 } else {
-                                    cell.value = WaveFunction  {}
-                                    wave = &cell.value.(WaveFunction)
-                                }
-                                
-                                make(&wave.supports, len(collapse.states))
-                                for &it, index in wave.supports {
-                                    it.id = cast(State_Id) index
-                                    for &amount, direction in it.amount {
-                                        amount = maximum_support[it.id][direction]
+                                    //  @copypasta from restart
+                                    // @todo(viktor): :Constrained the current implementation does not consider existing constraints
+                                    cell := &grid[index]
+                                    wave, ok := &cell.value.(WaveFunction)
+                                    if ok {
+                                        delete(wave.supports)
+                                    } else {
+                                        cell.value = WaveFunction  {}
+                                        wave = &cell.value.(WaveFunction)
                                     }
+                                    
+                                    make(&wave.supports, len(collapse.states))
+                                    for &it, index in wave.supports {
+                                        it.id = cast(State_Id) index
+                                        for &amount, direction in it.amount {
+                                            amount = maximum_support[it.id][direction]
+                                        }
+                                    }
+                                    
+                                    delete_key(&changes, p)
                                 }
-                                
-                                delete_key(&changes, p)
                             }
                         }
                     }
                 }
             }
-            
         }
         
         // if collapse.states != nil {
@@ -355,15 +353,6 @@ main :: proc () {
         rl.BeginDrawing()
         rl.ClearBackground({0x54, 0x57, 0x66, 0xFF})
         
-        rl.BeginMode2D(camera)
-        
-        rl.DrawRectangleRec(
-            to_rl_rectangle(
-                rectangle_min_dimension(world_to_screen({0,0}), 
-                vec_cast(f32, dimension) * cell_size_on_screen),
-            ), {0,255,255,32},
-        )
-        
         /* @todo(viktor): 
         1 - abstract support in a direction to allow that lookup to be as complex as needed
         2 - remove Direction from the grid / wavefunction and just work with the respective vector
@@ -374,6 +363,8 @@ main :: proc () {
         7 - display the lattice as a voronoi diagram
         */
         
+        rl.DrawRectangleRec(world_to_screen(rectangle_min_dimension(v2i{}, dimension)), v4_to_rl_color(grid_background_color))
+        
         for cell, index in grid {
             average := &average_colors[index]
             
@@ -381,7 +372,6 @@ main :: proc () {
               case WaveFunction: 
                 if len(value.supports) == 0 {
                     average.color = { 255, 0, 255, 255 }
-                    unreachable()
                 }
                 
                 if render_wavefunction_as_average {
@@ -412,62 +402,145 @@ main :: proc () {
         
         }
         
-        spall_begin("Render cells")
-        for y in 0..<dimension.y {
-            for x in 0..<dimension.x {
-                index   := x + y * dimension.x
-                average := &average_colors[index]
-                p       := world_to_screen({x, y})
-                rect    := rectangle_min_dimension(p, cell_size_on_screen)
-                if average.states_count_when_computed == 1 {
-                    rl.DrawRectangleRec(to_rl_rectangle(rect), average.color)
-                } else {
-                    if render_wavefunction_as_average {
-                        rl.DrawCircleV(get_center(rect), get_dimension(rect).x / 2, average.color)
-                    }
-                }
-            }
-        }
-        spall_end()
-        
-        spall_begin("Render extra")
-        if highlight_drawing {
+        if viewing_group == nil {
+            spall_begin("Render cells")
             for y in 0..<dimension.y {
                 for x in 0..<dimension.x {
-                    index := x + y * dimension.x
-                    drawn := draw_board[index]
-                    if drawn != nil {
-                        p := world_to_screen({x, y})
-                        rect := rectangle_min_dimension(p, cell_size_on_screen)
-                        rl.DrawRectangleRec(to_rl_rectangle(rect), rl.ColorAlpha(drawn.color, 0.7))
+                    index   := x + y * dimension.x
+                    average := &average_colors[index]
+                    rec     := rectangle_min_dimension(v2i{x, y}, 1)
+                    rect    := world_to_screen(rec)
+                    if average.states_count_when_computed == 1 {
+                        rl.DrawRectangleRec(rect, average.color)
+                    } else {
+                        if render_wavefunction_as_average {
+                            radius := cell_size_on_screen * 0.5
+                            rl.DrawCircleV(v2{rect.x, rect.y} + radius, radius, average.color)
+                        }
                     }
                 }
             }
-        }
-        
-        if highlight_changes {
-            for p, _ in changes {
-                p := world_to_screen(p)
-                rl.DrawRectangleRec({p.x, p.y, cell_size_on_screen, cell_size_on_screen}, rl.ColorAlpha(rl.YELLOW, 0.4))
-            }
-        }
-        
-        for cell in to_be_collapsed {
-            p := world_to_screen(cell.p)
-            color := rl.PURPLE
-            rl.DrawRectangleRec({p.x, p.y, cell_size_on_screen, cell_size_on_screen}, rl.ColorAlpha(color, 0.8))
-        }
-        
-        if dimension_contains(dimension, wp) {
-            wsp := world_to_screen(wp)
-            rect := rl.Rectangle {wsp.x, wsp.y, cell_size_on_screen, cell_size_on_screen}
+            spall_end()
             
-            color := selected_group == nil ? rl.RAYWHITE : selected_group.color
-            rl.DrawRectangleRec(rect, color)
-            rl.DrawCircleLinesV(sp,   brush_size * cell_size_on_screen, rl.YELLOW)
+            spall_begin("Render extra")
+            if highlight_drawing {
+                for y in 0..<dimension.y {
+                    for x in 0..<dimension.x {
+                        index := x + y * dimension.x
+                        drawn := draw_board[index]
+                        if drawn != nil {
+                            p := world_to_screen(v2i{x, y})
+                            rect := rectangle_min_dimension(p, cell_size_on_screen)
+                            rl.DrawRectangleRec(to_rl_rectangle(rect), rl.ColorAlpha(drawn.color, 0.7))
+                        }
+                    }
+                }
+            }
+            
+            if highlight_changes {
+                for p, _ in changes {
+                    p := world_to_screen(p)
+                    rl.DrawRectangleRec({p.x, p.y, cell_size_on_screen, cell_size_on_screen}, rl.ColorAlpha(rl.YELLOW, 0.4))
+                }
+            }
+            
+            for cell in to_be_collapsed {
+                p := world_to_screen(cell.p)
+                color := rl.PURPLE
+                rl.DrawRectangleRec({p.x, p.y, cell_size_on_screen, cell_size_on_screen}, rl.ColorAlpha(color, 0.8))
+            }
+            
+            if dimension_contains(dimension, wp) {
+                wsp := world_to_screen(wp)
+                rect := rl.Rectangle {wsp.x, wsp.y, cell_size_on_screen, cell_size_on_screen}
+                
+                color := selected_group == nil ? rl.RAYWHITE : selected_group.color
+                rl.DrawRectangleRec(rect, color)
+                rl.DrawCircleLinesV(sp,   brush_size * cell_size_on_screen, rl.YELLOW)
+            }
+        } else {
+            center := get_center(rectangle_min_dimension(v2i{}, dimension))
+            p := world_to_screen(center)
+            
+            center_size := cell_size_on_screen*3
+            for comparing_group, group_index in draw_groups {
+                direction_to_angles := proc(direction: Direction) -> (start: f32) {
+                    switch direction {
+                      case .East:  return 4./4. * 360. // { 1, 0}
+                      case .North: return 3./4. * 360. // { 0,-1}
+                      case .West:  return 2./4. * 360. // {-1, 0}
+                      case .South: return 1./4. * 360. // { 0, 1}
+                    }
+                    
+                    unreachable()
+                }
+                
+                counts:   [Direction] f32
+                supports: [Direction] f32
+                for direction, index in Direction {
+                    count: f32
+                    support: f32
+                    
+                    for vok, vid in viewing_group.ids do if vok {
+                        for cok, cid in comparing_group.ids do if cok {
+                            found := false
+                            s: Support
+                            for it in collapse.supports[vid] {
+                                if it.id == cast(State_Id) cid {
+                                    s = it
+                                    found = true
+                                    break
+                                }
+                            }
+                            if found {
+                                if s.amount[direction] != 0 {
+                                    support += 1
+                                }
+                                count += 1
+                            }
+                        }
+                    }
+                    
+                    counts[direction]   = count
+                    supports[direction] = support
+                }
+                
+                max_count: f32
+                for direction, index in Direction {
+                    support := supports[direction]
+                    max_count = max(max_count, supports[direction])
+                }
+                
+                for direction, index in Direction {
+                    count := max_count
+                    support := supports[direction]
+                    center := direction_to_angles(direction)
+                    width: f32 = 360. / 4
+                    border_width := width * .02
+                    start := center - width * .5
+                    stop  := center + width * .5
+                    left__border_start := start
+                    right_border_start := stop  - border_width * .5
+                    left__border_stop  := start + border_width * .5
+                    right_border_stop  := stop
+                    stop  -= border_width
+                    start += border_width
+                 
+                    alpha := safe_ratio_0(support, count)
+                    color := rl.ColorAlpha(comparing_group.color, alpha)
+                    ring_size := cell_size_on_screen * 3
+                    inner := (center_size +  ring_size) + cast(f32) group_index*(1+0.2) * ring_size
+                    outer := inner + ring_size
+                    middle := (outer + inner) * 0.5
+                    rl.DrawRing(p, inner, outer, start, stop, 0, color)
+                    rl.DrawRing(p, inner, outer, left__border_start, left__border_stop, 0, comparing_group.color)
+                    rl.DrawRing(p, inner, outer, right_border_start, right_border_stop, 0, comparing_group.color)
+                }
+            }
+            
+            rl.DrawCircleV(p, center_size, viewing_group.color)
         }
         spall_end()
-        rl.EndMode2D()
         
         spall_end()
         
@@ -508,7 +581,7 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i) {
             to := cell.p + delta
             if !dimension_contains(dimension, to) && !wrapping do continue // :Wrapping we reached an edge
             
-            if false { // this disconnects cells in the middle, i.e. the pattern is cut horizontally
+            if !false { // this disconnects cells in the middle, i.e. the pattern is cut horizontally
                 if y == dimension.y/2     && x > 15 && x < 135 && direction == .South do continue
                 if y == dimension.y/2 + 1 && x > 15 && x < 135 && direction == .North do continue
             }
@@ -568,6 +641,8 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
     imgui.end()
     
     imgui.text("Stats")
+    imgui.color_edit4("Background", &grid_background_color, flags = .NoInputs | .NoTooltip | .Float)
+    
     tile_count := len(c.states)
     imgui.text_colored(tile_count > 200 ? Red : White, tprint("Tile count %", tile_count))
     imgui.text(tprint("Total time %",  view_time_duration(total_duration, show_limit_as_decimal = true, precision = 3)))
@@ -620,13 +695,11 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
             this_frame.tasks += { .clear_drawing }
         }
         
-        imgui.columns(2)
         if imgui.radio_button("Erase", selected_group == nil) {
             selected_group = nil
         }
-        imgui.next_column()
-        imgui.next_column()
         
+        imgui.columns(2)
         for &group, index in draw_groups {
             selected := &group == selected_group
             if imgui.radio_button(tprint("%", index), selected) {
@@ -634,11 +707,40 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
             }
             imgui.next_column()
             
-            flags: imgui.Color_Edit_Flags = .NoPicker | .NoOptions | .NoSmallPreview | .NoInputs | .NoTooltip | .NoSidePreview | .NoDragDrop
-            imgui.color_button("", rgba_to_v4(cast([4]u8) group.color), flags = flags)
+            imgui.color_button("", rl_color_to_v4(group.color), flags = color_edit_flags_just_display)
             imgui.next_column()
         }
         imgui.columns()
+    imgui.end()
+    
+    imgui.begin("Viewing")
+        imgui.columns(2)
+        imgui.text("Viewing")
+        imgui.next_column()
+        imgui.text("Neighbour")
+        imgui.next_column()
+        
+        for &group, index in draw_groups {
+            {
+                selected := &group == viewing_group
+                if imgui.radio_button(tprint("v%", index), selected) {
+                    viewing_group = &group
+                }
+                imgui.next_column()
+                
+                imgui.color_button("", rl_color_to_v4(group.color), flags = color_edit_flags_just_display)
+                
+                imgui.next_column()
+            }
+        }
+        imgui.columns()
+        
+        if viewing_group != nil {
+            if  imgui.button("Stop viewing") {
+                viewing_group   = nil
+            }
+        }
+        
     imgui.end()
 }
 
@@ -660,17 +762,39 @@ restrict_cell_to_drawn :: proc (c: ^Collapse, p: v2i, group: ^Draw_Group) {
     }
 }
 
+world_to_screen :: proc { world_to_screen_rec, world_to_screen_vec }
 @(no_instrumentation)
-world_to_screen :: proc (p: v2i) -> (result: v2) {
-    result = vec_cast(f32, p) * cell_size_on_screen
+world_to_screen_rec :: proc (world: Rectangle2i) -> (screen: rl.Rectangle) {
+    wmin := world_to_screen(world.min)
+    wmax := world_to_screen(world.max)
+    screen.x = wmin.x
+    screen.y = wmax.y
+    dim := abs_vec(wmax - wmin)
+    screen.width  = dim.x
+    screen.height = dim.y
+    return screen
+}
+@(no_instrumentation)
+world_to_screen_vec :: proc (world: v2i) -> (screen: v2) {
+    screen_size := vec_cast(f32, Screen_Size)
+    screen_min := v2{0, screen_size.y}
     
-    result += (vec_cast(f32, Screen_Size) - (cell_size_on_screen * vec_cast(f32, dimension))) * 0.5
+    grid_size := cell_size_on_screen * vec_cast(f32, dimension)
+    grid_min := screen_min + {1,-1} * 0.5 * (screen_size - grid_size)
     
-    return result
+    screen = grid_min + {1,-1} * (vec_cast(f32, world) * cell_size_on_screen)
+    
+    return screen
 }
 
 screen_to_world :: proc (screen: v2) -> (world: v2i) {
-    world = vec_cast(i32, (screen - (vec_cast(f32, Screen_Size) - (cell_size_on_screen * vec_cast(f32, dimension))) * 0.5) / cell_size_on_screen)
+    screen_size := vec_cast(f32, Screen_Size)
+    screen_min := v2{0, screen_size.y}
+    
+    grid_size := cell_size_on_screen * vec_cast(f32, dimension)
+    grid_min := screen_min + {1,-1} * 0.5 * (screen_size - grid_size)
+    
+    world = vec_cast(i32, (screen - grid_min) / cell_size_on_screen * {1, -1})
     
     return world
 }

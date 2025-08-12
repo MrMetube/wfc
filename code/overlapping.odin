@@ -248,7 +248,6 @@ restart :: proc (c: ^Collapse) {
                 cell := &grid[x + y * dimension.x]
                 wave, ok := &cell.value.(WaveFunction)
                 if ok {
-                    // resize(&wave.supports, len(c.states))
                     delete(wave.supports)
                 } else {
                     cell.value = WaveFunction  {}
@@ -293,7 +292,8 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
         delete(group.ids)
     }
     clear(&draw_groups)
-    selected_group = nil
+    selected_group  = nil
+    viewing_group   = nil
     clear_draw_board()
     
     // @incomplete: Allow for rotations and mirroring here

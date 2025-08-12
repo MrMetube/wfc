@@ -8,7 +8,7 @@ import "core:strings"
 import "core:time"
 import win "core:sys/windows"
 
-optimizations := false ? ` -o:speed ` : ` -o:none `
+optimizations := !false ? ` -o:speed ` : ` -o:none `
 Pedantic      :: false
 
 flags    :: ` -error-pos-style:unix -vet-cast -vet-shadowing -ignore-vs-search -use-single-module -microarch:native -target:windows_amd64`
@@ -181,7 +181,7 @@ go_rebuild_yourself :: proc() -> Error {
             os.rename(old_path, build_exe_path) or_return
         }
         
-        fmt.println("\nDone.\n")
+        fmt.println("\nRebuild done.\n")
         os.exit(0)
     }
     
