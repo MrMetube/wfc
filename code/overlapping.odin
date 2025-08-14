@@ -18,7 +18,7 @@ grid: [] Cell
 to_be_collapsed: [dynamic] ^Cell
 
 // Cached values for restart
-maximum_support: [] [Direction] i32
+_maximum_support: [Direction] [] i32
 
 Neighbour :: struct {
     direction: Direction,
@@ -62,6 +62,7 @@ Update_Result :: enum {
 }
 
 update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result) {
+    spall_proc()
     if c.states == nil do return .CollapseUninialized
     
     result = .Continue
@@ -184,11 +185,11 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
             assert(len(change.removed_support) > 0)
             
             from_cell := grid[change_p.x + change_p.y * dimension.x]
-            propagate: for neighbour, direction in from_cell.neighbours {
+            propagate_remove: for neighbour in from_cell.neighbours {
                 assert(neighbour.cell != nil)
                 
                 to_wave, ok := &neighbour.cell.value.(WaveFunction)
-                if !ok do continue
+                if !ok do continue propagate_remove
                 
                 spall_scope("removed support loop")
                 #reverse for &to_support, sup_index in to_wave.supports {
@@ -205,7 +206,7 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
                         unordered_remove(&to_wave.supports, sup_index)
                         if len(to_wave.supports) == 0 {
                             result = .FoundContradiction
-                            break propagate
+                            break propagate_remove
                         }
                     }
                 }
@@ -217,6 +218,8 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
 }
 
 remove_state :: proc (c: ^Collapse, p: v2i, removed_state: State_Id) {
+    spall_proc()
+    
     change, ok := &changes[p]
     if !ok {
         changes[p] = {}
@@ -238,6 +241,7 @@ remove_state :: proc (c: ^Collapse, p: v2i, removed_state: State_Id) {
 }
 
 restart :: proc (c: ^Collapse) {
+    spall_proc()
     clear(&changes)
     to_be_collapsed = nil
     
@@ -255,10 +259,11 @@ restart :: proc (c: ^Collapse) {
                 }
                 
                 make(&wave.supports, len(c.states))
+                
                 for &it, index in wave.supports {
                     it.id = cast(State_Id) index
                     for &amount, direction in it.amount {
-                        amount = maximum_support[it.id][direction]
+                        amount = get_maximum_support(direction, it.id)
                     }
                 }
             }
@@ -269,7 +274,7 @@ restart :: proc (c: ^Collapse) {
     
     {
         spall_scope("Restart: enforce drawing")
-        
+        // @todo(viktor): why dont we just use this as the initial value above?
         for y in 0..<dimension.y {
             for x in 0..<dimension.x {
                 group := draw_board[x + y * dimension.x]
@@ -285,6 +290,7 @@ restart :: proc (c: ^Collapse) {
 }
 
 extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
+    spall_proc()
     for a in c.supports do delete(a)
     delete(c.supports)
     
@@ -371,21 +377,23 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
         println("Extraction: Supports generation done: %       ", view_time_duration(time.since(start), show_limit_as_decimal = true, precision = 3))
     }
     
-    delete(maximum_support)
-    make(&maximum_support, len(c.states))
+    for &it in _maximum_support {
+        delete(it)
+        make(&it, len(c.states))
+    }
+    
     {
+        start := time.now()
         spall_scope("Extraction: calculate maximum support")
-            
         for from, index in c.states {
-            for direction in Direction {
-                for support in c.supports[from.id] {
-                    amount := &maximum_support[support.id][direction]
-                    amount^ += support.amount[direction]
+            for to in c.supports[from.id] {
+                for direction in Direction {
+                    _maximum_support[direction][to.id] += to.amount[direction]
                 }
             }
             print("Extraction: calculate maximum support % %% \r", view_percentage(index, len(c.states)))
         }
-        println("Extraction: calculate maximum support done          ")
+        println("Extraction: calculate maximum support done %         ", view_time_duration(time.since(start), show_limit_as_decimal = true, precision = 3))
     }
     
     {
@@ -411,4 +419,9 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
     }
     
     println("Extraction: Done")
+}
+
+get_maximum_support :: proc (direction: Direction, to_id: State_Id) -> (result: i32) {
+    result = _maximum_support[direction][to_id]
+    return result
 }

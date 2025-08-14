@@ -9,6 +9,7 @@ This is a copy the original is in the handmade project
 import "base:intrinsics"
 import "base:runtime"
 import "core:os"
+import "core:fmt"
 
 // @volatile This breaks if in the midst of a print we start another print on the same thread
 ConsoleBufferSize :: #config(ConsoleBufferSize, 128 * Megabyte)
@@ -664,6 +665,7 @@ format_any :: proc(ctx: ^FormatContext, arg: any) {
             unimplemented("Unimplemented: rune")
             
           case runtime.Type_Info_Enum:
+            format_view(ctx, view_string(fmt.tprint(value)))
             // unimplemented("Unimplemented: enums")
           /* 
             . enumerated array   [key0 = elem0, key1 = elem1, key2 = elem2, ...]
@@ -671,6 +673,7 @@ format_any :: proc(ctx: ^FormatContext, arg: any) {
             . bit sets           {key0 = elem0, key1 = elem1, ...}
            */  
           case runtime.Type_Info_Enumerated_Array:
+            format_view(ctx, view_string(fmt.tprint(value)))
           case runtime.Type_Info_Bit_Set:
           case runtime.Type_Info_Bit_Field:
             

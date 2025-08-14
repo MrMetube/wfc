@@ -33,7 +33,7 @@ delete_spall_thread :: proc () {
     defer spall_end()
 }
 
-
+/*
 @(instrumentation_enter)
 spall_enter :: proc "contextless" (proc_address, call_site_return_address: rawptr, loc := #caller_location) {
 	spall._buffer_begin(&spall_ctx, &spall_buffer, "", "", loc)
@@ -43,6 +43,7 @@ spall_enter :: proc "contextless" (proc_address, call_site_return_address: rawpt
 spall_exit :: proc "contextless" (proc_address, call_site_return_address: rawptr, loc := #caller_location) {
 	spall._buffer_end(&spall_ctx, &spall_buffer)
 }
+*/
 
 @(deferred_none = spall_end)
 spall_proc :: proc (name: string = "", location := #caller_location) {

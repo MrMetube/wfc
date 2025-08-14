@@ -7,9 +7,10 @@ import rl "vendor:raylib"
 Value :: rl.Color
 
 Collapse :: struct {
-    states: [dynamic] State,
+    states:   [dynamic] State,
+    values:   [dynamic] Value,
     supports: [/* from - all State_Ids */] [dynamic /* to - not all State_Ids, but always in ascending order */] Support,
-    values: [dynamic] Value,
+    
     // Extraction
     is_defining_state:  b32,
     temp_state_values:  [dynamic] Value_Id,
@@ -93,6 +94,7 @@ end_state   :: proc (c: ^Collapse) {
     
     state := State { id = Invalid_State }
     {
+        // @todo(viktor): do the hashing iteratively instead of copy the values and then doing it. N is known at this point do we know.
         subsections := [Direction] Rectangle2i {
             .East  = { { 1, 0 }, {   N,   N } },
             .West  = { { 0, 0 }, { N-1,   N } },

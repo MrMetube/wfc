@@ -77,6 +77,13 @@ File :: struct {
     texture: rl.Texture2D,
 }
 
+view_slices: i32 = 500
+view_slice_start: f32
+view_mode := View_Mode.AcosCos
+View_Mode :: enum {
+    Cos, AcosCos, AcosAcosCos
+}
+
 ////////////////////////////////////////////////
 
 Direction :: enum {
@@ -197,26 +204,27 @@ main :: proc () {
                                 if selected_group != nil {
                                     restrict_cell_to_drawn(&collapse, p, selected_group)
                                 } else {
-                                    //  @copypasta from restart
-                                    // @todo(viktor): :Constrained the current implementation does not consider existing constraints
-                                    cell := &grid[index]
-                                    wave, ok := &cell.value.(WaveFunction)
-                                    if ok {
-                                        delete(wave.supports)
-                                    } else {
-                                        cell.value = WaveFunction  {}
-                                        wave = &cell.value.(WaveFunction)
-                                    }
+                                    println("unimplemented")
+                                    // //  @copypasta from restart
+                                    // // @todo(viktor): :Constrained the current implementation does not consider existing constraints
+                                    // cell := &grid[index]
+                                    // wave, ok := &cell.value.(WaveFunction)
+                                    // if ok {
+                                    //     delete(wave.supports)
+                                    // } else {
+                                    //     cell.value = WaveFunction  {}
+                                    //     wave = &cell.value.(WaveFunction)
+                                    // }
                                     
-                                    make(&wave.supports, len(collapse.states))
-                                    for &it, index in wave.supports {
-                                        it.id = cast(State_Id) index
-                                        for &amount, direction in it.amount {
-                                            amount = maximum_support[it.id][direction]
-                                        }
-                                    }
+                                    // make(&wave.supports, len(collapse.states))
+                                    // for &it, index in wave.supports {
+                                    //     it.id = cast(State_Id) index
+                                    //     for &amount, direction in it.amount {
+                                    //         amount = maximum_support[direction][it.id]
+                                    //     }
+                                    // }
                                     
-                                    delete_key(&changes, p)
+                                    // delete_key(&changes, p)
                                 }
                             }
                         }
@@ -224,28 +232,6 @@ main :: proc () {
                 }
             }
         }
-        
-        // if collapse.states != nil {
-        //     if textures_length != len(collapse.states) {
-        //         for it in textures_and_images do rl.UnloadTexture(it.texture)
-                
-        //         textures_length = len(collapse.states)
-        //         resize(&textures_and_images, textures_length)
-                
-        //         for &state, index in collapse.states {
-        //             image := rl.Image {
-        //                 data = raw_data(state.values),
-        //                 width  = N,
-        //                 height = N,
-        //                 mipmaps = 1,
-        //                 format = .UNCOMPRESSED_R8G8B8A8,
-        //             }
-                    
-        //             textures_and_images[index].image   = image
-        //             textures_and_images[index].texture = rl.LoadTextureFromImage(image)
-        //         }
-        //     }
-        // }
         
         ////////////////////////////////////////////////
         // Update 
@@ -459,25 +445,15 @@ main :: proc () {
                 rl.DrawCircleLinesV(sp,   brush_size * cell_size_on_screen, rl.YELLOW)
             }
         } else {
+            spall_scope("View Neighbours")
             center := get_center(rectangle_min_dimension(v2i{}, dimension))
             p := world_to_screen(center)
             
             center_size := cell_size_on_screen*3
             for comparing_group, group_index in draw_groups {
-                direction_to_angles := proc(direction: Direction) -> (start: f32) {
-                    switch direction {
-                      case .East:  return 4./4. * 360. // { 1, 0}
-                      case .North: return 3./4. * 360. // { 0,-1}
-                      case .West:  return 2./4. * 360. // {-1, 0}
-                      case .South: return 1./4. * 360. // { 0, 1}
-                    }
-                    
-                    unreachable()
-                }
-                
                 counts:   [Direction] f32
                 supports: [Direction] f32
-                for direction, index in Direction {
+                for direction in Direction {
                     count: f32
                     support: f32
                     
@@ -494,7 +470,7 @@ main :: proc () {
                             }
                             if found {
                                 if s.amount[direction] != 0 {
-                                    support += 1
+                                    support += cast(f32) s.amount[direction]
                                 }
                                 count += 1
                             }
@@ -505,36 +481,45 @@ main :: proc () {
                     supports[direction] = support
                 }
                 
-                max_count: f32
-                for direction, index in Direction {
-                    support := supports[direction]
-                    max_count = max(max_count, supports[direction])
-                }
                 
-                for direction, index in Direction {
-                    count := max_count
-                    support := supports[direction]
-                    center := direction_to_angles(direction)
-                    width: f32 = 360. / 4
-                    border_width := width * .02
+                ring_size := cell_size_on_screen * 3
+                ring_padding := 0.2 * ring_size
+                
+                turns: f32 = cast(f32) view_slices
+                for turn in 0..<turns {
+                    turn := turn
+                    turn += view_slice_start
+                    
+                    dir := arm(turn * Tau / turns)
+                    
+                    center := direction_to_angles(dir)
+                    width: f32 = 360. / turns
                     start := center - width * .5
                     stop  := center + width * .5
-                    left__border_start := start
-                    right_border_start := stop  - border_width * .5
-                    left__border_stop  := start + border_width * .5
-                    right_border_stop  := stop
-                    stop  -= border_width
-                    start += border_width
-                 
-                    alpha := safe_ratio_0(support, count)
-                    color := rl.ColorAlpha(comparing_group.color, alpha)
-                    ring_size := cell_size_on_screen * 3
-                    inner := (center_size +  ring_size) + cast(f32) group_index*(1+0.2) * ring_size
+                    
+                    inner := (center_size +  ring_size) + cast(f32) group_index * ring_size + ring_padding
                     outer := inner + ring_size
-                    middle := (outer + inner) * 0.5
+                    
+                    total_support: f32
+                    total_count: f32
+                    for support, direction in supports {
+                        dir1 := normalize(dir)
+                        dir2 := normalize(vec_cast(f32, Deltas[direction]))
+                        closeness: f32
+                        switch view_mode {
+                          case .Cos:         closeness = dot(dir1, dir2)
+                          case .AcosCos:     closeness = 1 - acos(dot(dir1, dir2))
+                          case .AcosAcosCos: closeness = acos(acos(dot(dir1, dir2)))
+                        }
+                        
+                        closeness = clamp(closeness, 0, 1)
+                        total_support += support * closeness
+                        total_count += counts[direction] * closeness
+                    }
+                    count := total_count
+                    alpha := safe_ratio_0(total_support, count)
+                    color := rl.ColorAlpha(comparing_group.color, alpha)
                     rl.DrawRing(p, inner, outer, start, stop, 0, color)
-                    rl.DrawRing(p, inner, outer, left__border_start, left__border_stop, 0, comparing_group.color)
-                    rl.DrawRing(p, inner, outer, right_border_start, right_border_stop, 0, comparing_group.color)
                 }
             }
             
@@ -715,11 +700,10 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
     
     imgui.begin("Viewing")
         imgui.columns(2)
-        imgui.text("Viewing")
+        imgui.text("Center")
         imgui.next_column()
         imgui.text("Neighbour")
         imgui.next_column()
-        
         for &group, index in draw_groups {
             {
                 selected := &group == viewing_group
@@ -736,9 +720,23 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
         imgui.columns()
         
         if viewing_group != nil {
-            if  imgui.button("Stop viewing") {
-                viewing_group   = nil
+            if imgui.button("Stop viewing") {
+                viewing_group = nil
             }
+            
+            imgui.slider_float("Start Angle", &view_slice_start, 0, Tau)
+            imgui.slider_int("Subdivision", &view_slices, 1, 500, flags = .Logarithmic)
+            
+            imgui.text("Directional Spread")
+            view_modes := [View_Mode] string {
+                .Cos         = "Gradual",
+                .AcosCos     = "Linear",
+                .AcosAcosCos = "Steep",
+            }
+            for text, mode in view_modes {
+                if imgui.button(text) do view_mode = mode
+            }
+            
         }
         
     imgui.end()
@@ -797,4 +795,9 @@ screen_to_world :: proc (screen: v2) -> (world: v2i) {
     world = vec_cast(i32, (screen - grid_min) / cell_size_on_screen * {1, -1})
     
     return world
+}
+
+direction_to_angles :: proc(direction: v2) -> (angle: f32) {
+    angle = atan2(direction.y, direction.x)  * (360 / Tau)
+    return angle
 }
