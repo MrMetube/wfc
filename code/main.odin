@@ -12,15 +12,24 @@ import rlimgui "../lib/odin-imgui/examples/raylib"
 
 Deltas := [Direction] v2i { 
     .East  = { 1, 0},
-    .North = { 0,-1},
+    .North = { 0, 1},
     .West  = {-1, 0},
-    .South = { 0, 1},
+    .South = { 0,-1},
+}
+
+Opposite := [Direction] Direction {
+    .East  = .West,
+    .North = .South,
+    .West  = .East,
+    .South = .North,
 }
 
 Screen_Size :: v2i{1920, 1080}
 
-TargetFps       :: 144
+TargetFps       :: 60
 TargetFrameTime :: 1./TargetFps
+
+deviation: f32 = 0.05
 
 ////////////////////////////////////////////////
 // App
@@ -77,11 +86,11 @@ File :: struct {
     texture: rl.Texture2D,
 }
 
-view_slices: i32 = 500
-view_slice_start: f32
+view_slices: i32 = 4
+view_slice_start: f32 // @todo(viktor): this can be used not only in viewing but also in the collapse itself. could be interesting.
 view_mode := View_Mode.AcosCos
 View_Mode :: enum {
-    Cos, AcosCos, AcosAcosCos
+    Cos, AcosCos, AcosAcosCos,
 }
 
 ////////////////////////////////////////////////
@@ -99,15 +108,16 @@ this_frame: Frame
 Frame :: struct {
     tasks: bit_set[Task],
     
+    desired_regularity: f32,
     // extract states
-    desired_N: i32,  // @todo(viktor): cant change this in UI it snaps back
-    pixels: []rl.Color,
+    desired_N:        i32,
+    pixels:           [] rl.Color,
     pixels_dimension: v2i,
     
     // resize grid
     desired_dimension: v2i,
-    old_dimension: v2i,
-    old_grid: [] Cell,
+    old_dimension:     v2i,
+    old_grid:          [] Cell,
 }
 
 Task :: enum {
@@ -119,7 +129,6 @@ Task :: enum {
     update,
 }
 
-@(no_instrumentation)
 main :: proc () {
     rl.SetTraceLogLevel(.WARNING)
     rl.InitWindow(Screen_Size.x, Screen_Size.y, "Wave Function Collapse")
@@ -158,7 +167,7 @@ main :: proc () {
 
     entropy := seed_random_series(123)
     collapse: Collapse
-    setup_grid(&collapse, dimension, dimension)
+    setup_grid(&collapse, dimension, dimension, &entropy)
     this_frame.desired_N = N
     
     for !rl.WindowShouldClose() {
@@ -173,7 +182,6 @@ main :: proc () {
         // UI
         
         this_frame.desired_dimension = dimension
-        // this_frame.desired_N = N
         this_frame.pixels = nil
         this_frame.pixels_dimension = {}
         this_frame.old_grid = nil
@@ -208,12 +216,12 @@ main :: proc () {
                                     // //  @copypasta from restart
                                     // // @todo(viktor): :Constrained the current implementation does not consider existing constraints
                                     // cell := &grid[index]
-                                    // wave, ok := &cell.value.(WaveFunction)
+                                    // wave, ok := &cell.value.(Wave)
                                     // if ok {
                                     //     delete(wave.supports)
                                     // } else {
-                                    //     cell.value = WaveFunction  {}
-                                    //     wave = &cell.value.(WaveFunction)
+                                    //     cell.value = Wave  {}
+                                    //     wave = &cell.value.(Wave)
                                     // }
                                     
                                     // make(&wave.supports, len(collapse.states))
@@ -245,9 +253,10 @@ main :: proc () {
                 
                 this_frame.old_grid = grid
                 this_frame.old_dimension = dimension
-                setup_grid(&collapse, dimension, this_frame.desired_dimension)
+                deviation = 1 - this_frame.desired_regularity
+                setup_grid(&collapse, dimension, this_frame.desired_dimension, &entropy)
                 
-                this_frame.tasks += { .restart, .copy_old_grid }
+                this_frame.tasks += { .restart/* , .copy_old_grid */ }
             }
             
             if .extract_states in this_frame.tasks {
@@ -256,7 +265,6 @@ main :: proc () {
                 assert(this_frame.pixels != nil)
                 
                 N = this_frame.desired_N
-                reset_collapse(&collapse)
                 extract_states(&collapse, this_frame.pixels, this_frame.pixels_dimension.x, this_frame.pixels_dimension.y)
                     
                 this_frame.tasks += { .restart, .clear_drawing }
@@ -282,12 +290,13 @@ main :: proc () {
                 
                 assert(this_frame.old_grid != nil)
                 defer delete(this_frame.old_grid)
+                // defer delete ps
                 using this_frame
-                new_dimension := desired_dimension
                 
                 // @cleanup
                 // @todo(viktor): :Constrained When growing handle that it must connect to existing.
-                if !wrapping && old_grid != nil && new_dimension != old_dimension {
+                when false do if !wrapping && old_grid != nil && new_dimension != old_dimension {
+                    new_dimension := desired_dimension
                     delta := abs_vec(new_dimension - old_dimension) / 2
                     if (new_dimension.x > old_dimension.x || new_dimension.y > old_dimension.y) {
                         for y in 0..<old_dimension.y {
@@ -305,6 +314,8 @@ main :: proc () {
                         }
                     }
                 }
+                
+                assert(false)
             }
             
             if .update in this_frame.tasks {
@@ -349,26 +360,30 @@ main :: proc () {
         7 - display the lattice as a voronoi diagram
         */
         
-        rl.DrawRectangleRec(world_to_screen(rectangle_min_dimension(v2i{}, dimension)), v4_to_rl_color(grid_background_color))
+        // rl.DrawRectangleRec(world_to_screen(rectangle_min_dimension(v2i{}, dimension)), v4_to_rl_color(grid_background_color))
         
         for cell, index in grid {
             average := &average_colors[index]
             
-            switch value in cell.value {
-              case WaveFunction: 
-                if len(value.supports) == 0 {
+            if cell.collapsed {
+                state    := collapse.states[cell.collapsed_state]
+                color_id := state.values[N/4+N/4*N] // middle
+                average.color = collapse.values[color_id]
+                average.states_count_when_computed = 1
+            } else {
+                if len(cell.states) == 0 {
                     average.color = { 255, 0, 255, 255 }
                 }
                 
                 if render_wavefunction_as_average {
                     // @todo(viktor): also allow for most likely color
-                    if average.states_count_when_computed != auto_cast len(value.supports) {
-                        average.states_count_when_computed = auto_cast len(value.supports)
+                    if average.states_count_when_computed != auto_cast len(cell.states) {
+                        average.states_count_when_computed = auto_cast len(cell.states)
                         
                         color: v4
                         count: f32
-                        for support in value.supports {
-                            state    := collapse.states[support.id]
+                        for id in cell.states {
+                            state    := collapse.states[id]
                             color_id := state.values[N/4+N/4*N] // middle
                             color += rl_color_to_v4(collapse.values[color_id]) * cast(f32) state.frequency
                             count += cast(f32) state.frequency
@@ -378,37 +393,29 @@ main :: proc () {
                         average.color = cast(rl.Color) v4_to_rgba(color * {1,1,1,0.3})
                     }
                 }
-                
-              case State_Id:
-                state    := collapse.states[value]
-                color_id := state.values[N/4+N/4*N] // middle
-                average.color = collapse.values[color_id]
-                average.states_count_when_computed = 1
             }
         
         }
         
         if viewing_group == nil {
             spall_begin("Render cells")
-            for y in 0..<dimension.y {
-                for x in 0..<dimension.x {
-                    index   := x + y * dimension.x
-                    average := &average_colors[index]
-                    rec     := rectangle_min_dimension(v2i{x, y}, 1)
-                    rect    := world_to_screen(rec)
-                    if average.states_count_when_computed == 1 {
-                        rl.DrawRectangleRec(rect, average.color)
-                    } else {
-                        if render_wavefunction_as_average {
-                            radius := cell_size_on_screen * 0.5
-                            rl.DrawCircleV(v2{rect.x, rect.y} + radius, radius, average.color)
-                        }
+            for cell, index in grid {
+                average := &average_colors[index]
+                rect := world_to_screen(rectangle_min_dimension(cell.p, 1))
+                radius := cell_size_on_screen
+                if average.states_count_when_computed == 1 {
+                    rl.DrawCircleV(v2{rect.x, rect.y} + radius, radius, average.color)
+                } else {
+                    if render_wavefunction_as_average {
+                        rl.DrawCircleV(v2{rect.x, rect.y} + radius, radius, average.color)
                     }
                 }
             }
             spall_end()
             
+            
             spall_begin("Render extra")
+            // @todo(viktor): actually use cell.p and draw circles or something
             if highlight_drawing {
                 for y in 0..<dimension.y {
                     for x in 0..<dimension.x {
@@ -424,16 +431,15 @@ main :: proc () {
             }
             
             if highlight_changes {
-                for p, _ in changes {
-                    p := world_to_screen(p)
-                    rl.DrawRectangleRec({p.x, p.y, cell_size_on_screen, cell_size_on_screen}, rl.ColorAlpha(rl.YELLOW, 0.4))
+                for cell_p in changes {
+                    rec := world_to_screen(rectangle_min_dimension(cell_p, 1))
+                    rl.DrawRectangleRec(rec, rl.ColorAlpha(rl.YELLOW, 0.4))
                 }
             }
             
             for cell in to_be_collapsed {
-                p := world_to_screen(cell.p)
-                color := rl.PURPLE
-                rl.DrawRectangleRec({p.x, p.y, cell_size_on_screen, cell_size_on_screen}, rl.ColorAlpha(color, 0.8))
+                rect := world_to_screen(rectangle_min_dimension(cell.p, 1))
+                rl.DrawRectangleRec(rect, rl.PURPLE)
             }
             
             if dimension_contains(dimension, wp) {
@@ -451,48 +457,38 @@ main :: proc () {
             
             center_size := cell_size_on_screen*3
             for comparing_group, group_index in draw_groups {
-                counts:   [Direction] f32
-                supports: [Direction] f32
-                for direction in Direction {
-                    count: f32
-                    support: f32
-                    
-                    for vok, vid in viewing_group.ids do if vok {
-                        for cok, cid in comparing_group.ids do if cok {
-                            found := false
-                            s: Support
-                            for it in collapse.supports[vid] {
-                                if it.id == cast(State_Id) cid {
-                                    s = it
-                                    found = true
-                                    break
-                                }
-                            }
-                            if found {
-                                if s.amount[direction] != 0 {
-                                    support += cast(f32) s.amount[direction]
-                                }
-                                count += 1
-                            }
-                        }
-                    }
-                    
-                    counts[direction]   = count
-                    supports[direction] = support
-                }
-                
-                
                 ring_size := cell_size_on_screen * 3
                 ring_padding := 0.2 * ring_size
                 
-                turns: f32 = cast(f32) view_slices
-                for turn in 0..<turns {
-                    turn := turn
+                max_support: f32
+                total_supports:= make([dynamic] f32, view_slices, context.temp_allocator)
+                
+                turns := cast(f32) view_slices
+                for slice in 0..<view_slices {
+                    turn := cast(f32) slice
                     turn += view_slice_start
                     
-                    dir := arm(turn * Tau / turns)
+                    sampling_direction := arm(turn * Tau / turns)
                     
-                    center := direction_to_angles(dir)
+                    for vok, vid in viewing_group.ids do if vok {
+                        for cok, cid in comparing_group.ids do if cok {
+                            total_supports[slice] += get_support_amount(&collapse, cast(State_Id) vid, cast(State_Id) cid, sampling_direction)
+                        }
+                    }
+                    max_support = max(max_support, total_supports[slice])
+                }
+                
+                for slice in 0..<view_slices {
+                    turn := cast(f32) slice
+                    turn += view_slice_start
+                    
+                    sampling_direction := arm(turn * Tau / turns)
+                    
+                    total_support := total_supports[slice]
+                    alpha := safe_ratio_0(total_support, max_support)
+                    color := rl.ColorAlpha(comparing_group.color, alpha)
+                    
+                    center := direction_to_angles(sampling_direction)
                     width: f32 = 360. / turns
                     start := center - width * .5
                     stop  := center + width * .5
@@ -500,25 +496,6 @@ main :: proc () {
                     inner := (center_size +  ring_size) + cast(f32) group_index * ring_size + ring_padding
                     outer := inner + ring_size
                     
-                    total_support: f32
-                    total_count: f32
-                    for support, direction in supports {
-                        dir1 := normalize(dir)
-                        dir2 := normalize(vec_cast(f32, Deltas[direction]))
-                        closeness: f32
-                        switch view_mode {
-                          case .Cos:         closeness = dot(dir1, dir2)
-                          case .AcosCos:     closeness = 1 - acos(dot(dir1, dir2))
-                          case .AcosAcosCos: closeness = acos(acos(dot(dir1, dir2)))
-                        }
-                        
-                        closeness = clamp(closeness, 0, 1)
-                        total_support += support * closeness
-                        total_count += counts[direction] * closeness
-                    }
-                    count := total_count
-                    alpha := safe_ratio_0(total_support, count)
-                    color := rl.ColorAlpha(comparing_group.color, alpha)
                     rl.DrawRing(p, inner, outer, start, stop, 0, color)
                 }
             }
@@ -539,7 +516,7 @@ main :: proc () {
     }
 }
 
-setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i) {
+setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^RandomSeries) {
     dimension = new_dimension // @todo(viktor): this is a really stupid idea
     
     ratio := vec_cast(f32, Screen_Size) / vec_cast(f32, new_dimension+10)
@@ -559,22 +536,23 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i) {
     
     temp_neighbours:= make([dynamic] Neighbour, context.temp_allocator)
     for y in 0..<new_dimension.y do for x in 0..<new_dimension.x {
-        cell := &grid[x + y * new_dimension.x]
-        cell.p = {x, y}
+        index := x + y * new_dimension.x
+        cell := &grid[index]
+        cell.p = vec_cast(f32, x, y) + random_bilateral(entropy, v2) * deviation
+        cell.collapsed = false
+        
+        delete(cell.states)
+        make(&cell.states, len(c.states))
+        for &it, index in cell.states do it = cast(State_Id) index
         
         for delta, direction in Deltas {
-            to := cell.p + delta
+            to := v2i {x, y} + delta
             if !dimension_contains(dimension, to) && !wrapping do continue // :Wrapping we reached an edge
-            
-            if !false { // this disconnects cells in the middle, i.e. the pattern is cut horizontally
-                if y == dimension.y/2     && x > 15 && x < 135 && direction == .South do continue
-                if y == dimension.y/2 + 1 && x > 15 && x < 135 && direction == .North do continue
-            }
             
             to = rectangle_modulus(rectangle_min_dimension(v2i{}, dimension), to)
             neighbour := Neighbour {
-                cell = &grid[to.x + to.y * dimension.x],
-                direction = direction,
+                to_neighbour_in_grid = direction,
+                cell                 = &grid[to.x + to.y * dimension.x],
             }
             append(&temp_neighbours, neighbour)
         }
@@ -583,186 +561,16 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i) {
         copy(cell.neighbours, temp_neighbours[:])
         clear(&temp_neighbours)
     }
-}
-
-ui :: proc (c: ^Collapse, images: map[string] File) {
-    imgui.begin("Extract")
-        imgui.text("Choose Input Image")
-        imgui.slider_int("Tile Size", &this_frame.desired_N, 1, 10)
-        imgui.slider_int("Size X", &this_frame.desired_dimension.x, 3, 300)
-        imgui.slider_int("Size Y", &this_frame.desired_dimension.y, 3, 150)
-        if this_frame.desired_dimension != dimension {
-            this_frame.tasks += { .resize_grid }
-        }
-        
-        if len(c.states) == 0 {
-            imgui.text("Select an input image")
-        }
-        imgui.columns(4)
-        for _, &image in images {
-            imgui.push_id(&image)
-            if imgui.image_button(auto_cast &image.texture.id, 30) {
-                if image.image.format == .UNCOMPRESSED_R8G8B8 {
-                    make(&this_frame.pixels, image.image.width * image.image.height, context.temp_allocator)
-                    // @leak
-                    raw := slice_from_parts([3]u8, image.image.data, image.image.width * image.image.height)
-                    for &pixel, index in this_frame.pixels {
-                        pixel.rgb = raw[index]
-                        pixel.a   = 255
-                    }
-                } else if image.image.format == .UNCOMPRESSED_R8G8B8A8 {
-                    this_frame.pixels = slice_from_parts(rl.Color, image.image.data, image.image.width * image.image.height)
-                } else {
-                    unreachable()
-                }
-                
-                this_frame.pixels_dimension = {image.image.width, image.image.height}
-                this_frame.tasks += { .extract_states }
-            }
-            imgui.pop_id()
-            imgui.next_column()
-        }
-        imgui.columns(1)
-    imgui.end()
     
-    imgui.text("Stats")
-    imgui.color_edit4("Background", &grid_background_color, flags = .NoInputs | .NoTooltip | .Float)
-    
-    tile_count := len(c.states)
-    imgui.text_colored(tile_count > 200 ? Red : White, tprint("Tile count %", tile_count))
-    imgui.text(tprint("Total time %",  view_time_duration(total_duration, show_limit_as_decimal = true, precision = 3)))
-    
-    if len(c.states) != 0 {
-        if imgui.button("Restart") {
-            this_frame.tasks += { .restart }
-        }
-    }
-    
-    if paused {
-        if imgui.button("Unpause") do paused = false
-        if imgui.button("Step")    {
-            this_frame.tasks += { .update }
-        }
-    } else {
-        if imgui.button("Pause") do paused = true
-        this_frame.tasks += { .update }
-    }
-    
-    imgui.checkbox("Average Color", &render_wavefunction_as_average)
-    imgui.checkbox("Highlight changing cells", &highlight_changes)
-    imgui.checkbox("Overlay drawing", &highlight_drawing)
-    
-    modes := [Search_Mode] string {
-        .Scanline = "top to bottom, left to right",
-        .Metric   = "search by a metric",
-    }
-    metrics := [Search_Metric] string {
-        .States  = "fewest possible states",
-        .Entropy = "lowest entropy",
-    }
-    for text, mode in modes {
-        if imgui.radio_button(text, mode == search_mode) {
-            search_mode = mode
-        }
-    }
-    if search_mode == .Metric {
-        imgui.tree_push("Metric")
-        for text, metric in metrics {
-            if imgui.radio_button(text, metric == search_metric) {
-                search_metric = metric
-            }
-        }
-        imgui.tree_pop()
-    }
-    
-    imgui.begin("Drawing")
-        if imgui.button("Clear drawing") {
-            this_frame.tasks += { .clear_drawing }
-        }
-        
-        if imgui.radio_button("Erase", selected_group == nil) {
-            selected_group = nil
-        }
-        
-        imgui.columns(2)
-        for &group, index in draw_groups {
-            selected := &group == selected_group
-            if imgui.radio_button(tprint("%", index), selected) {
-                selected_group = &group
-            }
-            imgui.next_column()
-            
-            imgui.color_button("", rl_color_to_v4(group.color), flags = color_edit_flags_just_display)
-            imgui.next_column()
-        }
-        imgui.columns()
-    imgui.end()
-    
-    imgui.begin("Viewing")
-        imgui.columns(2)
-        imgui.text("Center")
-        imgui.next_column()
-        imgui.text("Neighbour")
-        imgui.next_column()
-        for &group, index in draw_groups {
-            {
-                selected := &group == viewing_group
-                if imgui.radio_button(tprint("v%", index), selected) {
-                    viewing_group = &group
-                }
-                imgui.next_column()
-                
-                imgui.color_button("", rl_color_to_v4(group.color), flags = color_edit_flags_just_display)
-                
-                imgui.next_column()
-            }
-        }
-        imgui.columns()
-        
-        if viewing_group != nil {
-            if imgui.button("Stop viewing") {
-                viewing_group = nil
-            }
-            
-            imgui.slider_float("Start Angle", &view_slice_start, 0, Tau)
-            imgui.slider_int("Subdivision", &view_slices, 1, 500, flags = .Logarithmic)
-            
-            imgui.text("Directional Spread")
-            view_modes := [View_Mode] string {
-                .Cos         = "Gradual",
-                .AcosCos     = "Linear",
-                .AcosAcosCos = "Steep",
-            }
-            for text, mode in view_modes {
-                if imgui.button(text) do view_mode = mode
-            }
-            
-        }
-        
-    imgui.end()
-}
-
-clear_draw_board :: proc () {
-    for &it in draw_board do it = nil
-}
-
-restrict_cell_to_drawn :: proc (c: ^Collapse, p: v2i, group: ^Draw_Group) {
-    selected := group.ids
-    
-    cell := &grid[p.x + p.y * dimension.x]
-    if wave, ok := cell.value.(WaveFunction); ok {
-        for it in wave.supports {
-            is_selected:= selected[it.id]
-            if !is_selected {
-                remove_state(c, p, it.id)
-            }
+    for &cell in grid {
+        for &neighbour in cell.neighbours {
+            neighbour.to_neighbour = neighbour.cell.p - cell.p
         }
     }
 }
 
-world_to_screen :: proc { world_to_screen_rec, world_to_screen_vec }
-@(no_instrumentation)
-world_to_screen_rec :: proc (world: Rectangle2i) -> (screen: rl.Rectangle) {
+world_to_screen :: proc { world_to_screen_rec, world_to_screen_reci, world_to_screen_vec, world_to_screen_v2i }
+world_to_screen_reci :: proc (world: Rectangle2i) -> (screen: rl.Rectangle) {
     wmin := world_to_screen(world.min)
     wmax := world_to_screen(world.max)
     screen.x = wmin.x
@@ -772,15 +580,29 @@ world_to_screen_rec :: proc (world: Rectangle2i) -> (screen: rl.Rectangle) {
     screen.height = dim.y
     return screen
 }
-@(no_instrumentation)
-world_to_screen_vec :: proc (world: v2i) -> (screen: v2) {
+world_to_screen_rec :: proc (world: Rectangle2) -> (screen: rl.Rectangle) {
+    wmin := world_to_screen(world.min)
+    wmax := world_to_screen(world.max)
+    screen.x = wmin.x
+    screen.y = wmax.y
+    dim := abs_vec(wmax - wmin)
+    screen.width  = dim.x
+    screen.height = dim.y
+    return screen
+}
+
+world_to_screen_v2i :: proc (world: v2i) -> (screen: v2) {
+    screen = world_to_screen(vec_cast(f32, world))
+    return screen
+}
+world_to_screen_vec :: proc (world: v2) -> (screen: v2) {
     screen_size := vec_cast(f32, Screen_Size)
     screen_min := v2{0, screen_size.y}
     
     grid_size := cell_size_on_screen * vec_cast(f32, dimension)
     grid_min := screen_min + {1,-1} * 0.5 * (screen_size - grid_size)
     
-    screen = grid_min + {1,-1} * (vec_cast(f32, world) * cell_size_on_screen)
+    screen = grid_min + {1,-1} * (world * cell_size_on_screen)
     
     return screen
 }

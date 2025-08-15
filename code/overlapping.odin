@@ -14,44 +14,45 @@ import "core:time"
 N: i32 = 3
 
 grid: [] Cell
- 
+
 to_be_collapsed: [dynamic] ^Cell
 
-// Cached values for restart
-_maximum_support: [Direction] [] i32
-
-Neighbour :: struct {
-    direction: Direction,
-    cell:      ^Cell,
-}
 Cell :: struct {
-    p: v2i,
-    neighbours: [] Neighbour,
+    p: v2, 
     
-    value: union {
-        State_Id,
-        WaveFunction,
-    },
+    collapsed:       bool,
+    collapsed_state: State_Id,
+    states:          [dynamic] State_Id,
+    neighbours:      [] Neighbour,
     
     // @todo(viktor): find a better place for this
     entry: Entropy,
 }
 
-WaveFunction :: struct {
-    supports: [dynamic] Support,
+Neighbour :: struct {
+    cell:         ^Cell,
+    to_neighbour_in_grid: Direction,
+    to_neighbour: v2,
+    support:      [/* State_Id */] f32,
 }
 
 doing_changes: b32
 // @todo(viktor): its nice that its constant time lookup but the arbitrary order when iterating is worse
-changes: map[v2i] Change
+changes: map[v2] Change
 
 Change :: struct {
-    removed_support: [/* State_Id */] Support,
+    cell: ^Cell,
+    removed_supports: [/* State_Id */] Support,
 }
 
 Support :: struct {
     id:     State_Id,
-    amount: [Direction] i32,
+    amount: [Direction] f32,
+}
+
+Wave_Support :: struct {
+    id:     State_Id,
+    amount: i32,
 }
 
 Update_Result :: enum {
@@ -76,7 +77,7 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
             found_invalid := false
             switch search_mode {
               case .Scanline:
-                scan: for &cell in grid do if _, ok := cell.value.(WaveFunction); ok {
+                scan: for &cell in grid do if !cell.collapsed {
                     cells = { &cell }
                     reached_end = false
                     break scan
@@ -87,8 +88,8 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
                 init_search(&minimal, c, search_metric, context.temp_allocator)
                 
                 loop: for &cell, index in grid {
-                    if wave, ok := &cell.value.(WaveFunction); ok {
-                        switch test_search_cell(&minimal, &cell, wave) {
+                    if !cell.collapsed {
+                        switch test_search_cell(&minimal, &cell) {
                           case .Continue: // nothing
                           case .Done:     break loop
                             
@@ -104,14 +105,14 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
                 
                 if found_invalid {
                     result = .FoundContradiction
-                    break_here := 123; break_here = break_here
+                    unreachable()
                 } else {
                     cells = minimal.cells[:]
                 }
             }
             
             if len(cells) > 0 {
-                if len(cells[0].value.(WaveFunction).supports) == 1 {
+                if len(cells[0].states) == 1 {
                     spall_scope("Set All chosen cells to be collapse")
                     append(&to_be_collapsed, ..cells)
                 } else {
@@ -127,22 +128,21 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
             spall_scope("Collapse chosen cell")
             
             for cell in to_be_collapsed {
-                wave := cell.value.(WaveFunction)
                 pick := Invalid_State
-                if len(wave.supports) == 1 {
-                    pick = wave.supports[0].id
+                if len(cell.states) == 1 {
+                    pick = cell.states[0]
                 } else {
                     // Random
                     total_frequency: i32
-                    for support in wave.supports {
-                        total_frequency += c.states[support.id].frequency
+                    for id in cell.states {
+                        total_frequency += c.states[id].frequency
                     }
                     
                     target := random_between(entropy, i32, 0, total_frequency)
-                    picking: for support in wave.supports {
-                        target -= c.states[support.id].frequency
+                    picking: for id in cell.states {
+                        target -= c.states[id].frequency
                         if target <= 0 {
-                            pick = support.id
+                            pick = id
                             break picking
                         }
                     }
@@ -151,15 +151,15 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
                 
                 assert(pick != Invalid_State)
                 {
-                    for support in wave.supports {
-                        id := support.id
+                    for id in cell.states {
                         if pick != id {
-                            remove_state(c, cell.p, id)
+                            remove_state(c, cell, id)
                         }
                     }
                     
-                    delete(wave.supports)
-                    cell.value = pick
+                    delete(cell.states)
+                    cell.collapsed = true
+                    cell.collapsed_state = pick
                 }
             }
             
@@ -174,37 +174,57 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
             drawing_initializing = false
             doing_changes = false
         } else {
-            change_p: v2i
-            change: Change
+            changed: Change
             for k, v in changes {
-                change_p = k
-                change = v
+                changed = v
+                delete_key(&changes, k)
                 break
             }
-            delete_key(&changes, change_p)
-            assert(len(change.removed_support) > 0)
+            defer delete(changed.removed_supports)
+            assert(len(changed.removed_supports) > 0)
             
-            from_cell := grid[change_p.x + change_p.y * dimension.x]
-            propagate_remove: for neighbour in from_cell.neighbours {
+            propagate_remove: for neighbour in changed.cell.neighbours {
                 assert(neighbour.cell != nil)
+                if neighbour.cell.collapsed do continue propagate_remove
                 
-                to_wave, ok := &neighbour.cell.value.(WaveFunction)
-                if !ok do continue propagate_remove
-                
-                spall_scope("removed support loop")
-                #reverse for &to_support, sup_index in to_wave.supports {
-                    removed := &change.removed_support[to_support.id]
-                    assert((removed.id == to_support.id) || (removed.amount[neighbour.direction] == 0))
-                    
-                    amount := &to_support.amount[neighbour.direction]
-                    assert(amount^ != 0)
-                    
-                    amount^ -= removed.amount[neighbour.direction]
-                    if amount^ <= 0 {
-                        remove_state(c, neighbour.cell.p, to_support.id)
+                direction := neighbour.to_neighbour
+                #reverse for to, state_index in neighbour.cell.states {
+                    should_remove: bool
+                    when !false {
+                        spall_scope("removed support loop")
                         
-                        unordered_remove(&to_wave.supports, sup_index)
-                        if len(to_wave.supports) == 0 {
+                        removed := &changed.removed_supports[to]
+                        amount  := &neighbour.support[to]
+                        
+                        if amount^ > 0 {
+                            amount^ -= removed.amount[neighbour.to_neighbour_in_grid]
+                            if amount^ <= 0 {
+                                should_remove = true
+                            }
+                        }
+                    } else {
+                        spall_scope("recalc states loop")
+                        
+                        states: [] State_Id
+                        if changed.cell.collapsed {
+                            states = { changed.cell.collapsed_state }
+                        } else {
+                            states = changed.cell.states[:]
+                        }
+                        
+                        should_remove = true
+                        f: for from in states {
+                            amount := get_support_amount(c, from, to, direction)
+                            should_remove = amount <= 0
+                            if !should_remove do break f
+                        }
+                    }
+                    
+                    if should_remove {
+                        remove_state(c, neighbour.cell, to)
+                        
+                        unordered_remove(&neighbour.cell.states, state_index)
+                        if len(neighbour.cell.states) == 0 {
                             result = .FoundContradiction
                             break propagate_remove
                         }
@@ -217,25 +237,30 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
     return result
 }
 
-remove_state :: proc (c: ^Collapse, p: v2i, removed_state: State_Id) {
+remove_state :: proc (c: ^Collapse, cell: ^Cell, removed_state: State_Id) {
     spall_proc()
     
+    p := cell.p
     change, ok := &changes[p]
     if !ok {
-        changes[p] = {}
+        changes[p] = { cell = cell }
         change = &changes[p]
     }
     
-    // @todo(viktor): We could just have a flat buffer of all these removals and only accumulate them in the update loop itself once the change is being processed
-    for removed in c.supports[removed_state] {
-        if change.removed_support == nil {
-            spall_scope("remove_state: make removed support")
-            make(&change.removed_support, len(c.states))
-        }
+    if change.removed_supports == nil {
+        spall_scope("remove_state: make removed support")
+        make(&change.removed_supports, len(c.states))
+    }
+
+    for support in supports(c, removed_state) {
+        removed_support := &change.removed_supports[support.id]
+        removed_support.id = support.id
         
-        for direction in Direction {
-            change.removed_support[removed.id].id = removed.id
-            change.removed_support[removed.id].amount[direction] += removed.amount[direction]
+        for neighbour in cell.neighbours {
+            if neighbour.cell.collapsed do continue
+            direction := neighbour.to_neighbour
+            amount := get_support_amount_(support, -direction)
+            removed_support.amount[neighbour.to_neighbour_in_grid] += amount
         }
     }
 }
@@ -246,28 +271,38 @@ restart :: proc (c: ^Collapse) {
     to_be_collapsed = nil
     
     {
+        spall_scope("Restart: initialize states")
+        for &cell, cell_index in grid {
+            if !cell.collapsed {
+                delete(cell.states)
+            } else {
+                cell.collapsed = false
+            }
+            
+            make(&cell.states, len(c.states))
+            for &id, index in cell.states do id = cast(State_Id) index
+            
+            print("Restart: initialize states % %% \r", view_percentage(cell_index, len(grid)))
+        }
+        println("Restart: initialize states done           ")
+    }
+    
+    {
         spall_scope("Restart: initialize support")
-        for y in 0..<dimension.y {
-            for x in 0..<dimension.x {
-                cell := &grid[x + y * dimension.x]
-                wave, ok := &cell.value.(WaveFunction)
-                if ok {
-                    delete(wave.supports)
-                } else {
-                    cell.value = WaveFunction  {}
-                    wave = &cell.value.(WaveFunction)
-                }
-                
-                make(&wave.supports, len(c.states))
-                
-                for &it, index in wave.supports {
-                    it.id = cast(State_Id) index
-                    for &amount, direction in it.amount {
-                        amount = get_maximum_support(direction, it.id)
+        for &cell, cell_index in grid {
+            for &neighbour in cell.neighbours {
+                delete(neighbour.support)
+                make(&neighbour.support, len(c.states))
+            }
+            
+            for from in cell.states {
+                for &neighbour in cell.neighbours {
+                    for to in neighbour.cell.states {
+                        neighbour.support[from] += get_support_amount(c, from, to, neighbour.to_neighbour)
                     }
                 }
             }
-            print("Restart: initialize support % %% \r", view_percentage(y, dimension.y))
+            print("Restart: initialize support % %% \r", view_percentage(cell_index, len(grid)))
         }
         println("Restart: initialize support done           ")
     }
@@ -285,14 +320,14 @@ restart :: proc (c: ^Collapse) {
             }
         }
     }
-    
+        
     println("Restart: Done")
 }
 
 extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
     spall_proc()
-    for a in c.supports do delete(a)
-    delete(c.supports)
+    
+    reset_collapse(c)
     
     for &group in draw_groups {
         delete(group.ids)
@@ -313,7 +348,7 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
                     for dx in 0..<N {
                         x := (bx + dx) % width
                         y := (by + dy) % height
-                        append_state_value(c, pixels[x + y * width])
+                        append_state_value(c, pixels[x + (height-1-y) * width])
                     }
                 }
                 end_state(c)
@@ -330,7 +365,7 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
     // 450ms | 3.0s
     
     make(&c.supports, len(c.states))
-    
+    for &it in c.supports do make(&it, len(c.states))
     {
         start := time.now()
         spall_scope("Extraction: Supports generation")
@@ -340,33 +375,12 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
             for d in Direction {
                 a_hash := a.hashes[d]
                 for b in c.states {
-                    b_hash := b.hashes[cast(Direction) ((cast(u32) d+2)%4)]
+                    b_hash := b.hashes[Opposite[d]]
                     
                     if a_hash == b_hash {
-                        spall_scope("Extraction: binary search supports")
-                        found_support := false
-                        
-                        // binary search
-                        l, r := 0, len(c.supports[a.id])-1
-                        for l <= r {
-                            m := (l + r) / 2
-                            support := &c.supports[a.id][m]
-                            if support.id == b.id {
-                                found_support = true
-                                support.amount[d] += 1
-                                break
-                            } else if support.id > b.id {
-                                r = m - 1
-                            } else {
-                                l = m + 1
-                            }
-                        }
-                    
-                        if !found_support {
-                            value := Support { id = b.id }
-                            value.amount[d] = 1
-                            append(&c.supports[a.id], value)
-                        }
+                        support := &c.supports[a.id][b.id]
+                        support.id = b.id
+                        support.amount[d] += 1
                     }
                 }
             }
@@ -377,30 +391,12 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
         println("Extraction: Supports generation done: %       ", view_time_duration(time.since(start), show_limit_as_decimal = true, precision = 3))
     }
     
-    for &it in _maximum_support {
-        delete(it)
-        make(&it, len(c.states))
-    }
-    
-    {
-        start := time.now()
-        spall_scope("Extraction: calculate maximum support")
-        for from, index in c.states {
-            for to in c.supports[from.id] {
-                for direction in Direction {
-                    _maximum_support[direction][to.id] += to.amount[direction]
-                }
-            }
-            print("Extraction: calculate maximum support % %% \r", view_percentage(index, len(c.states)))
-        }
-        println("Extraction: calculate maximum support done %         ", view_time_duration(time.since(start), show_limit_as_decimal = true, precision = 3))
-    }
-    
     {
         spall_scope("Extraction: Draw Groups grouping")
         for state in c.states {
-            color_id := state.values[1 + 1 * N] // middle
+            color_id := state.values[N/2 + N/2 * N] // middle
             color := c.values[color_id]
+            
             group: ^Draw_Group
             for &it in draw_groups {
                 if it.color == color {
@@ -408,6 +404,7 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
                     break
                 }
             }
+            
             if group == nil {
                 append(&draw_groups, Draw_Group { color = color })
                 group = &draw_groups[len(draw_groups)-1]
@@ -419,9 +416,4 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
     }
     
     println("Extraction: Done")
-}
-
-get_maximum_support :: proc (direction: Direction, to_id: State_Id) -> (result: i32) {
-    result = _maximum_support[direction][to_id]
-    return result
 }
