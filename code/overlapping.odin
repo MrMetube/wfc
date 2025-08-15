@@ -252,14 +252,17 @@ remove_state :: proc (c: ^Collapse, cell: ^Cell, removed_state: State_Id) {
         make(&change.removed_supports, len(c.states))
     }
 
-    for support in supports(c, removed_state) {
-        removed_support := &change.removed_supports[support.id]
-        removed_support.id = support.id
+    for neighbour in cell.neighbours {
+        if neighbour.cell.collapsed do continue
         
-        for neighbour in cell.neighbours {
-            if neighbour.cell.collapsed do continue
-            direction := neighbour.to_neighbour
-            amount := get_support_amount_(support, -direction)
+        direction_from_neighbour := -neighbour.to_neighbour
+        closeness := get_closeness(direction_from_neighbour)
+        
+        for support in supports(c, removed_state) {
+            removed_support := &change.removed_supports[support.id]
+            removed_support.id = support.id
+            
+            amount := get_support_amount_(support, closeness)
             removed_support.amount[neighbour.to_neighbour_in_grid] += amount
         }
     }
@@ -295,10 +298,11 @@ restart :: proc (c: ^Collapse) {
                 make(&neighbour.support, len(c.states))
             }
             
-            for from in cell.states {
-                for &neighbour in cell.neighbours {
+            for &neighbour in cell.neighbours {
+                closeness := get_closeness(neighbour.to_neighbour)
+                for from in cell.states {
                     for to in neighbour.cell.states {
-                        neighbour.support[from] += get_support_amount(c, from, to, neighbour.to_neighbour)
+                        neighbour.support[from] += get_support_amount(c, from, to, closeness)
                     }
                 }
             }

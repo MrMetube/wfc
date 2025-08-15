@@ -169,6 +169,7 @@ main :: proc () {
     collapse: Collapse
     setup_grid(&collapse, dimension, dimension, &entropy)
     this_frame.desired_N = N
+    this_frame.desired_regularity = 1 - deviation
     
     for !rl.WindowShouldClose() {
         spall_scope("Frame")
@@ -470,9 +471,10 @@ main :: proc () {
                     
                     sampling_direction := arm(turn * Tau / turns)
                     
+                    closeness := get_closeness(sampling_direction)
                     for vok, vid in viewing_group.ids do if vok {
                         for cok, cid in comparing_group.ids do if cok {
-                            total_supports[slice] += get_support_amount(&collapse, cast(State_Id) vid, cast(State_Id) cid, sampling_direction)
+                            total_supports[slice] += get_support_amount(&collapse, cast(State_Id) vid, cast(State_Id) cid, closeness)
                         }
                     }
                     max_support = max(max_support, total_supports[slice])
