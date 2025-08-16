@@ -38,7 +38,7 @@ Task :: enum {
     rebuild,
     debugger,
     run,
-    // @todo(viktor): start render doc?
+    renderdoc,
 }
 Tasks :: bit_set [Task]
 
@@ -49,11 +49,12 @@ main :: proc() {
 
     for arg, index in os.args[1:] {
         switch arg {
-          case "rebuild":  tasks += { .rebuild }
-          case "run":      tasks += { .run }
-          case "debugger": tasks += { .debugger }
-          case "help":     tasks += { .help }
-          case:            tasks += { .help }
+          case "rebuild":   tasks += { .rebuild }
+          case "run":       tasks += { .run }
+          case "debugger":  tasks += { .debugger }
+          case "help":      tasks += { .help }
+          case "renderdoc": tasks += { .renderdoc }
+          case:             tasks += { .help }
         }
     }
     
@@ -62,9 +63,6 @@ main :: proc() {
         os.exit(0)
     }
     
-    // @todo(viktor): I am no longer using any of the vscode features for debugging and running so why am I not just making a tiny build app that has some global keyboard shortcuts for the stuff i need? I could delete so much javascript from this world <3. 
-    
-    // @todo(viktor): make force rebuild param explicits
     go_rebuild_yourself()
     
     make_directory_if_not_exists(data_dir)
@@ -110,6 +108,35 @@ main :: proc() {
     fmt.println("INFO: Build done.\n")
     
     procs: Procs
+    if .renderdoc in tasks {
+        fmt.println("INFO: Starting the Program with RenderDoc attached.")
+        renderdoc_cmd := `C:\Program Files\RenderDoc\renderdoccmd.exe`
+        renderdoc_gui := `C:\Program Files\RenderDoc\qrenderdoc.exe`
+        
+        os.change_directory("..")
+        append(&cmd, renderdoc_cmd, `capture`, `-d`, data_dir, `-c`, `.\capture`, build_dir + debug_exe_path)
+        run_command(&cmd)
+        
+        os.change_directory(data_dir)
+        captures := all_like("capture*")
+        // @todo(viktor): Wha t if we had multiple captures?
+        if len(captures) == 1 {
+            append(&cmd, renderdoc_gui, captures[0])
+            run_command(&cmd)
+            // @todo(viktor): Ask if old should be deleted?
+            fmt.printfln("INFO: Cleanup old captures")
+            for capture in captures {
+                os.remove(capture)
+            }
+        } else if len(captures) == 0 {
+            fmt.printfln("INFO: No captures made, not starting RenderDoc.")
+        } else {
+            fmt.printfln("INFO: More than one capture made, please select for yourself.")
+            append(&cmd, "cmd", "/c", "start", ".")
+            run_command(&cmd)
+        }
+    }
+    
     if .debugger in tasks {
         fmt.println("INFO: Starting the Rad Debugger.")
         // @study(viktor): raddbg -ipc usage
@@ -127,6 +154,10 @@ main :: proc() {
             run_command(&cmd, async = &procs)
         }
     }
+    
+    if len(cmd) != 0 {
+        fmt.println("INFO: cmd was not cleared: ", strings.join(cmd[:], " "))
+    }
 }
 
 usage :: proc () {
@@ -135,10 +166,11 @@ usage :: proc () {
 Options:
 `, os.args[0])
     infos := [Task] string {
-        .help     = "Print this usage information.",
-        .rebuild  = "Rebuild this build script and rerun it.",
-        .debugger = "Start/Restart the debugger.",
-        .run      = "Run the program."
+        .help      = "Print this usage information.",
+        .rebuild   = "Rebuild this build script and rerun it.",
+        .debugger  = "Start/Restart the debugger.",
+        .run       = "Run the program.",
+        .renderdoc = "Run the program with renderdoc attached and launch renderdoc with the capture after the program closes.",
     }
     for text, task in infos do fmt.printf("  %v  \t%v\n", task, text)
 }
@@ -290,9 +322,18 @@ go_rebuild_yourself :: proc() {
             }
         }
         
-        fmt.println("INFO: Rebuild done.\n")
-        append(&cmd, "cmd", "/c", build_exe_path)
-        run_command(&cmd)
+        fmt.println("INFO: Rebuild done.\n") 
+        for arg in os.args {
+            if arg != "rebuild" do append(&cmd, arg)
+        }
+        
+        if !run_command(&cmd) {
+            fmt.println("ERROR: failed rerun build: ", error)
+            error = os.rename(old_build_exe_path, build_exe_path)
+            if error != nil {
+                fmt.println("ERROR: failed to rename old build back: ", error)
+            }
+        }
         
         os.exit(0)
     }
@@ -303,22 +344,32 @@ remove_if_exists :: proc(path: string) {
 }
 
 delete_all_like :: proc(pattern: string) {
-    find_data := win.WIN32_FIND_DATAW{}
+    for file in all_like(pattern) {
+        os.remove(file)
+    }
+}
 
+all_like :: proc(pattern: string, allocator := context.temp_allocator) -> (result: [] string) {
+    files: [dynamic] string
+    files.allocator = allocator
+    
+    find_data := win.WIN32_FIND_DATAW{}
     handle := win.FindFirstFileW(win.utf8_to_wstring(pattern), &find_data)
-    if handle == win.INVALID_HANDLE_VALUE do return
+    if handle == win.INVALID_HANDLE_VALUE do return files[:]
     defer win.FindClose(handle)
     
     for {
         file_name, err := win.utf16_to_utf8(find_data.cFileName[:])
         assert(err == nil)
         file_path := fmt.tprintf(`.\%v`, file_name)
+        append(&files, file_path)
         
-        os.remove(file_path)
         if !win.FindNextFileW(handle, &find_data){
             break 
         }
     }
+    
+    return files[:]
 }
 
 is_running :: proc(exe_name: string) -> (running: b32, pid: u32) {
