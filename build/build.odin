@@ -1,5 +1,5 @@
-#+private
 package build
+
 import "base:intrinsics"
 import "core:fmt"
 import "core:os"
@@ -8,57 +8,143 @@ import "core:strings"
 import "core:time"
 import win "core:sys/windows"
 
-optimizations := !false ? ` -o:speed ` : ` -o:none `
+optimizations := !false ? `-o:speed` : `-o:none`
 Pedantic      :: false
 
-flags    :: ` -error-pos-style:unix -vet-cast -vet-shadowing -ignore-vs-search -use-single-module -microarch:native -target:windows_amd64`
-debug    :: ` -debug `
-windows  := !true ? ` -subsystem:windows ` : ` -subsystem:console `
-pedantic :: ` -warnings-as-errors -vet-unused-imports -vet-semicolon -vet-unused-variables -vet-style -vet-packages:main -vet-unused-procedures` 
-check    :: ` -custom-attribute:printlike `
-flags_for_imgui :: ` -extra-linker-flags:"/NODEFAULTLIB:LIBCMTD" `
+debug    :: `-debug`
+flags    := [] string {`-error-pos-style:unix`,`-vet-cast`,`-vet-shadowing`,`-ignore-vs-search`,`-use-single-module`,`-microarch:native`,`-target:windows_amd64`}
+windows  := !true ? `-subsystem:windows` : `-subsystem:console`
+pedantic := [] string {
+    `-warnings-as-errors`,`-vet-unused-imports`,`-vet-semicolon`,`-vet-unused-variables`,`-vet-style`,
+    `-vet-packages:main`,`-vet-unused-procedures`
+}
+check    :: `-custom-attribute:printlike`
+flags_for_imgui :: `-extra-linker-flags:/NODEFAULTLIB:LIBCMTD`
 
 build_src_path :: `.\build\`   
-build_exe_path :: `.\build\build.exe`
+build_exe_name :: `build.exe`
 
-build_dir :: `.\build\`
-data_dir  :: `.\data`
+build_dir   :: `.\build\`
+data_dir    :: `.\data`
+code_dir    :: `..\code` 
+raddbg      :: `raddbg.exe`
+raddbg_path :: `C:\tools\raddbg\`+ raddbg
 
-odin      :: ODIN_ROOT + `odin.exe`
-code_dir  :: `..\code` 
+debug_exe :: `debug.exe`
+debug_exe_path :: `.\`+debug_exe
+
+Task :: enum {
+    help,
+    rebuild,
+    debugger,
+    run,
+    // @todo(viktor): start render doc?
+}
+Tasks :: bit_set [Task]
+
+tasks: Tasks
 
 main :: proc() {
     context.allocator = context.temp_allocator
+
+    for arg, index in os.args[1:] {
+        switch arg {
+          case "rebuild":  tasks += { .rebuild }
+          case "run":      tasks += { .run }
+          case "debugger": tasks += { .debugger }
+          case "help":     tasks += { .help }
+          case:            tasks += { .help }
+        }
+    }
+    
+    if .help in tasks {
+        usage()
+        os.exit(0)
+    }
     
     // @todo(viktor): I am no longer using any of the vscode features for debugging and running so why am I not just making a tiny build app that has some global keyboard shortcuts for the stuff i need? I could delete so much javascript from this world <3. 
     
-    // @todo(viktor): make force rebuild param explicit
+    // @todo(viktor): make force rebuild param explicits
     go_rebuild_yourself()
     
     make_directory_if_not_exists(data_dir)
-    
     err := os.set_current_directory(build_dir)
     assert(err == nil)
     
     if !check_printlikes(code_dir) do os.exit(1)
+    cmd: Cmd
     
-    debug_exe :: `debug.exe`
-    // @todo(viktor): make .Kill and such also setable from the command line
-    if handle_running_exe_gracefully(debug_exe, .Kill) {
-        args: [dynamic]string
-        odin_build(&args, code_dir, `.\`+debug_exe)
-        append(&args, flags)
-        append(&args, debug)
-        append(&args, flags_for_imgui)
-        append(&args, check)
-        append(&args, windows)
-        append(&args, optimizations)
-        if Pedantic do append(&args, pedantic)
-        run_command_or_exit(odin, args[:])
+    if .debugger in tasks {
+        tasklist: string
+        append(&cmd, "tasklist", "/NH")
+        run_command(&cmd, stdout = &tasklist)
+        lines := strings.split_lines(tasklist)
+        raddbg_is_running := false
+        for line in lines {
+            if strings.contains(line, raddbg) {
+                raddbg_is_running = true
+                break
+            }
+        }
+        if raddbg_is_running {
+            append(&cmd, "taskkill", "/IM", raddbg, "/F")
+            mute: string
+            run_command(&cmd, stdout = &mute)
+        }
     }
     
-    fmt.println("\nDone.\n")
+    // @todo(viktor): make .Kill and such also setable from the command line
+    if handle_running_exe_gracefully(debug_exe, .Kill) {
+        odin_build(&cmd, code_dir, debug_exe_path)
+        append(&cmd, ..flags)
+        append(&cmd, debug)
+        append(&cmd, flags_for_imgui)
+        append(&cmd, check)
+        append(&cmd, windows)
+        append(&cmd, optimizations)
+        if Pedantic do append(&cmd, ..pedantic)
+        
+        run_command(&cmd)
+    }
+    
+    fmt.println("INFO: Build done.\n")
+    
+    procs: Procs
+    if .debugger in tasks {
+        fmt.println("INFO: Starting the Rad Debugger.")
+        // @study(viktor): raddbg -ipc usage
+        append(&cmd, raddbg_path)
+        if .run in tasks {
+            append(&cmd, "--auto_run")
+        }
+        run_command(&cmd, async = &procs)
+    } else {
+        if .run in tasks {
+            fmt.println("INFO: Starting the Program.")
+            os.change_directory("..")
+            os.change_directory(data_dir)
+            append(&cmd, debug_exe)
+            run_command(&cmd, async = &procs)
+        }
+    }
 }
+
+usage :: proc () {
+    fmt.printf(`Usage:
+  %v [<options>]
+Options:
+`, os.args[0])
+    infos := [Task] string {
+        .help     = "Print this usage information.",
+        .rebuild  = "Rebuild this build script and rerun it.",
+        .debugger = "Start/Restart the debugger.",
+        .run      = "Run the program."
+    }
+    for text, task in infos do fmt.printf("  %v  \t%v\n", task, text)
+}
+
+Procs :: [dynamic] os2.Process
+Cmd   :: [dynamic] string
 
 
 
@@ -117,20 +203,35 @@ handle_running_exe_gracefully :: proc(exe_name: string, handling: Handle_Running
     return true
 }
 
-odin_build :: proc(args: ^[dynamic]string, dir: string, out: string) {
-    append(args, `odin build `)
-    append(args, dir)
-    append(args, ` -out:`)
-    append(args, out)
-    append(args, ` `)
+odin_build :: proc(cmd: ^[dynamic]string, dir: string, out: string) {
+    append(cmd, "odin")
+    append(cmd, "build")
+    append(cmd, dir)
+    append(cmd, fmt.tprintf("-out:%v", out))
 }
+
+
+
+
+
+
+
+
+
 
 Error :: union { os2.Error, os.Error }
 
-go_rebuild_yourself :: proc() -> Error {
+go_rebuild_yourself :: proc() {
+    error: Error
     if strings.ends_with(os.get_current_directory(), "build") {
-        os.set_current_directory("..") or_return
+        error = os.set_current_directory("..")
+        if error.(os.Error) != nil {
+            fmt.println("ERROR: failed to change directory out of build directory: ", error)
+        }
     }
+    
+    old_build_exe_path := fmt.tprintf("%vold-%v", build_src_path, build_exe_name)
+    build_exe_path := fmt.tprintf("%v%v", build_src_path, build_exe_name)
     
     gitignore := fmt.tprint(build_dir, `\.gitignore`, sep="")
     if !os.exists(gitignore) {
@@ -138,54 +239,63 @@ go_rebuild_yourself :: proc() -> Error {
         os.write_entire_file(gitignore, transmute([]u8) contents)
     }
     
-    needs_rebuild := false
-    if len(os.args) > 1 {
-        // @todo(viktor): validate param
-        needs_rebuild = true
-    }
-    
     build_exe_info, err := os.stat(build_exe_path)
     if err != nil {
-        needs_rebuild = true
+        tasks += { .rebuild }
     }
     
-    if !needs_rebuild {
-        src_dir := os2.read_all_directory_by_path(build_src_path, context.allocator) or_return
+    if .rebuild not_in tasks {
+        src_dir, error := os2.read_all_directory_by_path(build_src_path, context.allocator)
+        if error != nil {
+            fmt.println("ERROR: failed when checking build directory for changes: ", error)
+        }
         for file in src_dir {
             if strings.ends_with(file.name, ".odin") {
                 if time.diff(file.modification_time, build_exe_info.modification_time) < 0 {
-                    needs_rebuild = true
+                    tasks += { .rebuild }
                     break
                 }
             }
         }
     }
     
-    // @todo(viktor): do we still need the old one?
-    old_path := fmt.tprintf("%s-old", build_exe_path)
-    remove_if_exists(old_path)
+    remove_if_exists(old_build_exe_path)
     
-    if needs_rebuild {
-        fmt.println("Rebuilding!")
+    if .rebuild in tasks {
+        fmt.println("INFO: Rebuilding")
+        
         
         pdb_path, _ := strings.replace_all(build_exe_path, ".exe", ".pdb")
+        rdi_path, _ := strings.replace_all(build_exe_path, ".exe", ".rdi")
         remove_if_exists(pdb_path)
-        os.rename(build_exe_path, old_path) or_return
-        
-        args: [dynamic]string
-        odin_build(&args, build_src_path, build_exe_path)
-        append(&args, debug)
-        append(&args, flags)
-        append(&args, pedantic)
-        if !run_command(odin, args[:]) {
-            os.rename(old_path, build_exe_path) or_return
+        remove_if_exists(rdi_path)
+        if os.exists(build_exe_path) {
+            error = os.rename(build_exe_path, old_build_exe_path)
+            if error.(os.Error) != nil {
+                fmt.printfln("ERROR: failed to rename current build '%v' to '%v': %v", build_exe_path, old_build_exe_path, error)
+            }
         }
         
-        fmt.println("\nRebuild done.\n")
+        cmd: [dynamic]string
+        odin_build(&cmd, build_src_path, build_exe_path)
+        append(&cmd, debug)
+        append(&cmd, ..flags)
+        append(&cmd, ..pedantic)
+        
+        if !run_command(&cmd, or_exit = false) {
+            fmt.println("ERROR: failed to to rebuild: ", error)
+            error = os.rename(old_build_exe_path, build_exe_path)
+            if error != nil {
+                fmt.println("ERROR: failed to rename old build back: ", error)
+            }
+        }
+        
+        fmt.println("INFO: Rebuild done.\n")
+        append(&cmd, "cmd", "/c", build_exe_path)
+        run_command(&cmd)
+        
         os.exit(0)
     }
-    
-    return nil
 }
 
 remove_if_exists :: proc(path: string) {
@@ -234,36 +344,49 @@ is_running :: proc(exe_name: string) -> (running: b32, pid: u32) {
     return false, 0
 }
 
-run_command_or_exit :: proc(program: string, args: []string) {
-    if !run_command(program, args) {
-        os.exit(1)
-    }
-}
-
-run_command :: proc(program: string, args: []string = {}) -> (success: b32) {
-    startup_info := win.STARTUPINFOW{ cb = size_of(win.STARTUPINFOW) }
-    process_info := win.PROCESS_INFORMATION{}
+run_command :: proc (cmd: ^Cmd, or_exit := true, keep := false, stdout: ^string = nil, stderr: ^string = nil, async: ^Procs = nil) -> (success: bool) {
+    fmt.printfln(`CMD: %v`, strings.join(cmd[:], ` `))
     
-    
-    working_directory := win.utf8_to_wstring(os.get_current_directory())
-    joined_args := strings.join(args, "")
-    
-    fmt.println("CMD:", joined_args, "#", program)
-    
-    if win.CreateProcessW(win.utf8_to_wstring(program), win.utf8_to_wstring(joined_args), nil, nil, win.TRUE, 0, nil, working_directory, &startup_info, &process_info) {
-        win.WaitForSingleObject(process_info.hProcess, win.INFINITE)
-        
-        exit_code: win.DWORD
-        win.GetExitCodeProcess(process_info.hProcess, &exit_code)
-        success = exit_code == 0
-        
-        win.CloseHandle(process_info.hProcess)
-        win.CloseHandle(process_info.hThread)
+    process_description := os2.Process_Desc { command = cmd[:] }
+    process: os2.Process
+    state: os2.Process_State
+	output: []byte
+	error: []byte
+    err2: os2.Error
+    if async == nil {
+        state, output, error, err2 = os2.process_exec(process_description, context.allocator)
     } else {
-        fmt.printfln("ERROR: Command failed to start with error '%s'", os.error_string(os.get_last_error()))
-        success = false
+        process, err2 = os2.process_start(process_description)
+        append(async, process)
     }
-    return
+    
+    if err2 != nil {
+        fmt.printfln("ERROR: Failed to run command : %v", err2)
+        return false
+    }
+    
+    if async == nil {
+        // @todo(viktor): do this in Process_Desc beforehand and not afterwards
+        if output != nil {
+            if stdout != nil do stdout ^= string(output)
+            else do fmt.println(string(output))
+        }
+        
+        if error != nil {
+            if stderr != nil do stderr ^= string(error)
+            else do fmt.println(string(error))
+        }
+        
+        if or_exit && !state.success do os.exit(state.exit_code)
+        
+        success = state.success
+    } else {
+        success = true
+    }
+    
+    if !keep do clear(cmd)
+    
+    return success
 }
 
 make_directory_if_not_exists :: proc(path: string) -> (result: b32) {
@@ -274,6 +397,6 @@ make_directory_if_not_exists :: proc(path: string) -> (result: b32) {
     return result
 }
 
-random_number :: proc() -> (result: u32) {
-    return cast(u32) intrinsics.read_cycle_counter() % 255
+random_number :: proc() -> (result: u8) {
+    return cast(u8) intrinsics.read_cycle_counter()
 }
