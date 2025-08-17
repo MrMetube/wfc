@@ -13,17 +13,18 @@ import "core:time"
 
 N: i32 = 3
 
-grid: [] Cell
+grid: [dynamic] Cell
 
 to_be_collapsed: [dynamic] ^Cell
 
 Cell :: struct {
     p: v2, 
+    triangles: [dynamic] Triangle, 
     
     collapsed:       bool,
     collapsed_state: State_Id,
     states:          [dynamic] State_Id,
-    neighbours:      [] Neighbour,
+    neighbours:      [dynamic] Neighbour,
     
     // @todo(viktor): find a better place for this
     entry: Entropy,
@@ -31,7 +32,6 @@ Cell :: struct {
 
 Neighbour :: struct {
     cell:         ^Cell,
-    to_neighbour_in_grid: Direction,
     to_neighbour: v2,
     support:      [/* State_Id */] f32,
 }
@@ -188,9 +188,10 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
                 if neighbour.cell.collapsed do continue propagate_remove
                 
                 direction := neighbour.to_neighbour
+                closeness := get_closeness(direction)
                 #reverse for to, state_index in neighbour.cell.states {
                     should_remove: bool
-                    when !false {
+                    when false {
                         spall_scope("removed support loop")
                         
                         removed := &changed.removed_supports[to]
@@ -214,7 +215,7 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
                         
                         should_remove = true
                         f: for from in states {
-                            amount := get_support_amount(c, from, to, direction)
+                            amount := get_support_amount(c, from, to, closeness)
                             should_remove = amount <= 0
                             if !should_remove do break f
                         }
@@ -252,7 +253,7 @@ remove_state :: proc (c: ^Collapse, cell: ^Cell, removed_state: State_Id) {
         make(&change.removed_supports, len(c.states))
     }
 
-    for neighbour in cell.neighbours {
+    if false do for neighbour in cell.neighbours {
         if neighbour.cell.collapsed do continue
         
         direction_from_neighbour := -neighbour.to_neighbour
@@ -263,7 +264,8 @@ remove_state :: proc (c: ^Collapse, cell: ^Cell, removed_state: State_Id) {
             removed_support.id = support.id
             
             amount := get_support_amount_(support, closeness)
-            removed_support.amount[neighbour.to_neighbour_in_grid] += amount
+            // removed_support.amount[neighbour.to_neighbour_in_grid] += amount
+            unimplemented()
         }
     }
 }
@@ -360,7 +362,8 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
             
             print("Extraction: State extraction % %%\r", view_percentage(by, height))
         }
-        println("Extraction: State extraction done: %        ", view_time_duration(time.since(start), show_limit_as_decimal = true, precision = 3))
+        println("Extraction: State extraction done: %        ", view_time_duration(time.since(start), precision = 3))
+        println("Test 1 nano with precision%        ", view_time_duration(1, precision = 3))
     }
     // 1.3s  | 6.7s
     // 1.2s  | 6.1s
@@ -392,7 +395,7 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
             
         }
         
-        println("Extraction: Supports generation done: %       ", view_time_duration(time.since(start), show_limit_as_decimal = true, precision = 3))
+        println("Extraction: Supports generation done: %       ", view_time_duration(time.since(start), precision = 3))
     }
     
     {

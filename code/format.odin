@@ -381,8 +381,8 @@ end_formatting :: proc (ctx: ^FormatContext) -> (result: string) {
 }
 
 @(printlike)
-format_cstring :: proc (buffer: []u8, format: string, args: ..any, flags := FormatContextFlags{ .AppendZero }) -> (result: cstring) {
-    s := format_string(buffer, format, ..args, flags = flags)
+format_cstring :: proc (buffer: []u8, format: string, args: ..any, flags := FormatContextFlags {}) -> (result: cstring) {
+    s := format_string(buffer, format, ..args, flags = flags + { .AppendZero })
     result = cast(cstring) raw_data(s)
     return result
 }
@@ -429,6 +429,7 @@ format_string :: proc (buffer: []u8, format: string, args: ..any, flags := Forma
     if .AppendNewlineToResult in flags {
         format_view(&ctx, view_character('\n'))
     }
+    
     if .AppendZero in flags {
         format_view(&ctx, view_character(0))
     }
@@ -608,10 +609,6 @@ format_any :: proc(ctx: ^FormatContext, arg: any) {
             unimplemented("Unimplemented: maps")
             
           case runtime.Type_Info_Complex:
-            format_complex(ctx, value)
-            format_complex :: proc (ctx: ^FormatContext, value: $C) {
-                
-            }
             format_optional_type(ctx, raw.id)
             switch complex in value {
               case complex32: 

@@ -2,6 +2,7 @@ package main
 
 import "core:os/os2"
 import "core:strings"
+import slices "core:slice"
 import "core:time"
 
 // @todo(viktor): Minesweeper fields should be possible to generate if you also count diagonal edges in the extraction
@@ -48,6 +49,7 @@ Average_Color :: struct {
     color: rl.Color,
 }
 
+show_triangulation := false
 render_wavefunction_as_average := true
 highlight_drawing := true
 highlight_changes := false
@@ -78,7 +80,7 @@ selected_group: ^Draw_Group
 draw_board:     [] ^Draw_Group
 draw_groups:    [dynamic] Draw_Group
 
-dimension: v2i = {150, 100}
+dimension: v2i = {20, 20}
 
 File :: struct {
     data:    [] u8,
@@ -165,9 +167,10 @@ main :: proc () {
     imgui.set_current_context(imgui.create_context(nil))
     rlimgui.ImGui_ImplRaylib_Init()
 
-    entropy := seed_random_series(123)
+    entropy := seed_random_series(7458)
     collapse: Collapse
-    setup_grid(&collapse, dimension, dimension, &entropy)
+    triangles: [] Triangle
+    setup_grid(&collapse, dimension, dimension, &entropy, &arena, &triangles)
     this_frame.desired_N = N
     this_frame.desired_regularity = 1 - deviation
     
@@ -252,10 +255,10 @@ main :: proc () {
             if .resize_grid in this_frame.tasks {
                 this_frame.tasks -= { .resize_grid }
                 
-                this_frame.old_grid = grid
+                this_frame.old_grid = grid[:]
                 this_frame.old_dimension = dimension
                 deviation = 1 - this_frame.desired_regularity
-                setup_grid(&collapse, dimension, this_frame.desired_dimension, &entropy)
+                setup_grid(&collapse, dimension, this_frame.desired_dimension, &entropy, &arena, &triangles)
                 
                 this_frame.tasks += { .restart/* , .copy_old_grid */ }
             }
@@ -352,13 +355,13 @@ main :: proc () {
         rl.ClearBackground({0x54, 0x57, 0x66, 0xFF})
         
         /* @todo(viktor): 
-        1 - abstract support in a direction to allow that lookup to be as complex as needed
-        2 - remove Direction from the grid / wavefunction and just work with the respective vector
-        3 - display the neighbour likelyhood on a circle of each color with each other color
-        4 - interpolate the likelyhood over the whole circle
+        X - abstract support in a direction to allow that lookup to be as complex as needed
+        X - remove Direction from the grid / wavefunction and just work with the respective vector
+        X - display the neighbour likelyhood on a circle of each color with each other color
+        X - interpolate the likelyhood over the whole circle
         5 - make a graph/lattice that is still a regular grid
         6 - make the lattice irregular
-        7 - display the lattice as a voronoi diagram
+        X - display the lattice as a voronoi diagram
         */
         
         // rl.DrawRectangleRec(world_to_screen(rectangle_min_dimension(v2i{}, dimension)), v4_to_rl_color(grid_background_color))
@@ -395,25 +398,51 @@ main :: proc () {
                     }
                 }
             }
-        
         }
+        
         
         if viewing_group == nil {
             spall_begin("Render cells")
             for cell, index in grid {
                 average := &average_colors[index]
-                rect := world_to_screen(rectangle_min_dimension(cell.p, 1))
-                radius := cell_size_on_screen
-                if average.states_count_when_computed == 1 {
-                    rl.DrawCircleV(v2{rect.x, rect.y} + radius, radius, average.color)
-                } else {
-                    if render_wavefunction_as_average {
-                        rl.DrawCircleV(v2{rect.x, rect.y} + radius, radius, average.color)
-                    }
+                
+                for tri in cell.triangles {
+                    rl.DrawTriangle(
+                        world_to_screen(tri[0]),
+                        world_to_screen(tri[1]),
+                        world_to_screen(tri[2]),
+                        average.color
+                    )
+                    
+                    rl.DrawLineV(
+                        world_to_screen(tri[1]), 
+                        world_to_screen(tri[2]),
+                        rl.BLACK
+                    )
                 }
+                
+                // rect := world_to_screen(rectangle_min_dimension(cell.p, 1))
+                // radius := cell_size_on_screen * 0.5
+                // if average.states_count_when_computed == 1 {
+                //     rl.DrawCircleV(v2{rect.x, rect.y} + radius, radius, average.color)
+                // } else {
+                //     if render_wavefunction_as_average {
+                //         rl.DrawCircleV(v2{rect.x, rect.y} + radius, radius, average.color)
+                //     }
+                // }
             }
             spall_end()
             
+            if show_triangulation {
+                for tri in triangles {
+                    rl.DrawTriangleLines(
+                        world_to_screen(tri[0]),
+                        world_to_screen(tri[1]),
+                        world_to_screen(tri[2]),
+                        v4_to_rl_color(Emerald)
+                    )
+                }
+            }
             
             spall_begin("Render extra")
             // @todo(viktor): actually use cell.p and draw circles or something
@@ -518,7 +547,62 @@ main :: proc () {
     }
 }
 
-setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^RandomSeries) {
+
+generate_points :: proc(points: ^Array(v2), count: u32) {
+    side := round(u32, square_root(cast(f32) count))
+    entropy := seed_random_series(123456789)
+    switch -1  {
+      case -1:
+        for x in 0 ..< side {
+            for y in 0 ..< side {
+                p := vec_cast(f32, x, y) / cast(f32) side
+                p += random_bilateral(&entropy, v2) * (0.05 / cast(f32) side)
+                p = clamp(p, 0, 1)
+                // p = rectangle_modulus(rectangle_min_dimension(v2{}, 1), p)
+                append(points, p)
+            }
+        }
+      case 0:
+        for x in 0 ..< side {
+            for y in 0 ..< side {
+                append(points, vec_cast(f32, x, y) / cast(f32) side)
+            }
+        }
+      case 1:
+        for x in 0 ..< side {
+            for y in 0 ..< side {
+                x := cast(f32) x
+                if y % 2 == 0 do x += 0.5
+                y := cast(f32) y
+                append(points, v2{x, y} / cast(f32) side)
+            }
+        }
+      case 2:
+        for x in 0 ..< side {
+            for y in 0 ..< side {
+                y := cast(f32) y
+                if x % 2 == 0 do y += 0.5
+                x := cast(f32) x
+                append(points, v2{x, y} / cast(f32) side)
+            }
+        }
+      case 3:
+        center :: 0.5
+        for index in 0..<count {
+            angle := 1.6180339887 * cast(f32) index
+            t := cast(f32) index / cast(f32) count
+            radius := linear_blend(f32(0.01), 0.5, square_root(t))
+            append(points, center + arm(angle) * radius)
+        }
+      case 4:
+        for _ in 0..<count {
+            append(points, random_unilateral(&entropy, v2))
+        }
+    }
+}
+
+
+setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^RandomSeries, arena: ^Arena, triangles: ^[] Triangle) {
     dimension = new_dimension // @todo(viktor): this is a really stupid idea
     
     ratio := vec_cast(f32, Screen_Size) / vec_cast(f32, new_dimension+10)
@@ -528,47 +612,148 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^R
         cell_size_on_screen = ratio.y 
     }
     
-    delete(average_colors)
-    delete(draw_board)
-    
     area := new_dimension.x * new_dimension.y
-    make(&grid, area)
-    make(&average_colors, area)
-    make(&draw_board, area)
+    _points := make_array(arena, v2, area)
+    generate_points(&_points, cast(u32) area)
+    dt: DelauneyTriangulation
+    // @todo(viktor): use f64s to not have stupid artifacts all over
+    begin_triangulation(&dt, arena, slice(_points))
+    triangles ^= complete_triangulation(&dt)
     
-    temp_neighbours:= make([dynamic] Neighbour, context.temp_allocator)
-    for y in 0..<new_dimension.y do for x in 0..<new_dimension.x {
-        index := x + y * new_dimension.x
-        cell := &grid[index]
-        cell.p = vec_cast(f32, x, y) + random_bilateral(entropy, v2) * deviation
+    for &triangle in triangles {
+        for &point in triangle {
+            point *= vec_cast(f32, dimension)
+        }
+    }
+    
+    point_to_tris := make(map[v2] [dynamic] ^Triangle, context.temp_allocator)
+    for &triangle in triangles {
+        for point in triangle {
+            if point not_in point_to_tris {
+                point_to_tris[point] = make([dynamic] ^Triangle, context.temp_allocator)
+            }
+            tris := &point_to_tris[point]
+            
+            found: bool
+            for it in tris do if it == &triangle {
+                found = true
+                break
+            }
+            
+            if !found {
+                append(tris, &triangle)
+            }
+        }
+    }
+    
+    Foo :: struct { center, point: v2}
+    centers := make([dynamic] Foo, context.temp_allocator)
+    for point, tris in point_to_tris {
+        clear(&centers)
+        
+        for triangle in tris {
+            append(&centers, Foo {circum_circle(triangle^).center, point})
+        }
+
+        // Sort centers counterclockwise around `point`
+        slices.sort_by(centers[:], proc(a: Foo, b: Foo) -> bool {
+            angle_a := atan2(a.center.y - a.point.y, a.center.x - a.point.x)
+            angle_b := atan2(b.center.y - b.point.y, b.center.x - b.point.x)
+            return angle_a < angle_b
+        })
+        
+        cell: Cell
+        cell.p = point
         cell.collapsed = false
         
         delete(cell.states)
         make(&cell.states, len(c.states))
         for &it, index in cell.states do it = cast(State_Id) index
         
-        for delta, direction in Deltas {
-            to := v2i {x, y} + delta
-            if !dimension_contains(dimension, to) && !wrapping do continue // :Wrapping we reached an edge
-            
-            to = rectangle_modulus(rectangle_min_dimension(v2i{}, dimension), to)
-            neighbour := Neighbour {
-                to_neighbour_in_grid = direction,
-                cell                 = &grid[to.x + to.y * dimension.x],
-            }
-            append(&temp_neighbours, neighbour)
+        cell.triangles = make([dynamic] Triangle)
+        for i in 0..<len(centers) {
+            a := centers[i]
+            b := centers[(i + 1) % len(centers)]
+            append(&cell.triangles, Triangle{point, a.center, b.center})
         }
         
-        make(&cell.neighbours, len(temp_neighbours))
-        copy(cell.neighbours, temp_neighbours[:])
-        clear(&temp_neighbours)
+        append(&grid, cell)
     }
     
-    for &cell in grid {
-        for &neighbour in cell.neighbours {
-            neighbour.to_neighbour = neighbour.cell.p - cell.p
+    point_to_cell := make(map[v2] ^Cell, context.temp_allocator)
+    for i in 0..<len(grid) {
+        point_to_cell[grid[i].p] = &grid[i]
+    }
+
+    neighbour_set := make(map[v2] bool, context.temp_allocator)
+    for point, tris in point_to_tris {
+        clear(&neighbour_set)
+        
+        cell := point_to_cell[point]
+        
+        for triangle in tris {
+                for vertex in triangle {
+                if vertex != point {
+                    neighbour_set[vertex] = true
+                }
+            }
+        }
+
+        for neighbour_point in neighbour_set {
+            neighbour := Neighbour {
+                cell = point_to_cell[neighbour_point],
+                to_neighbour = neighbour_point - point,
+                
+            }
+            append(&cell.neighbours, neighbour)
         }
     }
+    
+    for cell in grid {
+        for neighbour in cell.neighbours {
+            assert(neighbour.cell != nil)
+        }
+    }
+    
+    
+    delete(average_colors)
+    delete(draw_board)
+    make(&average_colors, area)
+    make(&draw_board, area)
+    
+    // temp_neighbours:= make([dynamic] Neighbour, context.temp_allocator)
+    // for y in 0..<new_dimension.y do for x in 0..<new_dimension.x {
+    //     index := x + y * new_dimension.x
+    //     cell := &grid[index]
+    //     cell.p = vec_cast(f32, x, y) + random_bilateral(entropy, v2) * deviation
+    //     cell.collapsed = false
+        
+    //     delete(cell.states)
+    //     make(&cell.states, len(c.states))
+    //     for &it, index in cell.states do it = cast(State_Id) index
+        
+    //     for delta, direction in Deltas {
+    //         to := v2i {x, y} + delta
+    //         if !dimension_contains(dimension, to) && !wrapping do continue // :Wrapping we reached an edge
+            
+    //         to = rectangle_modulus(rectangle_min_dimension(v2i{}, dimension), to)
+    //         neighbour := Neighbour {
+    //             to_neighbour_in_grid = direction,
+    //             cell                 = &grid[to.x + to.y * dimension.x],
+    //         }
+    //         append(&temp_neighbours, neighbour)
+    //     }
+        
+    //     make(&cell.neighbours, len(temp_neighbours))
+    //     copy(cell.neighbours, temp_neighbours[:])
+    //     clear(&temp_neighbours)
+    // }
+    
+    // for &cell in grid {
+    //     for &neighbour in cell.neighbours {
+    //         neighbour.to_neighbour = neighbour.cell.p - cell.p
+    //     }
+    // }
 }
 
 world_to_screen :: proc { world_to_screen_rec, world_to_screen_reci, world_to_screen_vec, world_to_screen_v2i }

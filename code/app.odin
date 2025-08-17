@@ -48,7 +48,7 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
     
     tile_count := len(c.states)
     imgui.text_colored(tile_count > 200 ? Red : White, tprint("Tile count %", tile_count))
-    imgui.text(tprint("Total time %",  view_time_duration(total_duration, show_limit_as_decimal = true, precision = 3)))
+    imgui.text(tprint("Total time %",  view_time_duration(total_duration, precision = 3)))
     
     if imgui.slider_float("Regularity", &this_frame.desired_regularity, 0, 1) {
         this_frame.tasks += { .resize_grid }
@@ -71,6 +71,7 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
     }
     
     imgui.checkbox("Average Color", &render_wavefunction_as_average)
+    imgui.checkbox("Show triangles", &show_triangulation)
     imgui.checkbox("Highlight changing cells", &highlight_changes)
     imgui.checkbox("Overlay drawing", &highlight_drawing)
     

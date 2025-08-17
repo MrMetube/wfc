@@ -8,7 +8,7 @@ import "core:strings"
 import "core:time"
 import win "core:sys/windows"
 
-optimizations := !false ? `-o:speed` : `-o:none`
+optimizations := false ? `-o:speed` : `-o:none`
 Pedantic      :: false
 
 debug    :: `-debug`
