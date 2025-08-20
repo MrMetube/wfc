@@ -6,6 +6,10 @@ import "base:intrinsics"
 import "core:simd/x86"
 
 ////////////////////////////////////////////////
+// Acquire:    Nothing after this, can be done until this is completed.
+// Release:    Everything before this point has to be done.
+// Full Fence: Acquire and Release
+////////////////////////////////////////////////
 // Atomics
 
 atomic_compare_exchange :: proc "contextless" (dst: ^$T, old, new: T) -> (ok: b32, was: T) {

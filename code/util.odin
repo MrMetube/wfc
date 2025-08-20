@@ -66,7 +66,6 @@ umm :: uintptr
 
 ////////////////////////////////////////////////
 
-
 Byte     :: 1
 Kilobyte :: 1024 * Byte
 Megabyte :: 1024 * Kilobyte
@@ -125,7 +124,6 @@ vec_cast :: proc { vcast_2, vcast_3, vcast_4, vcast_vec }
 }
 
 swap :: proc(a, b: ^$T ) { a^, b^ = b^, a^ }
-
 
 unused :: proc "contextless" (_: $T) {}
 

@@ -71,38 +71,35 @@ main :: proc() {
     
     if !check_printlikes(code_dir) do os.exit(1)
     cmd: Cmd
-    
     if .debugger in tasks {
-        tasklist: string
-        append(&cmd, "tasklist", "/NH")
-        run_command(&cmd, stdout = &tasklist)
-        lines := strings.split_lines(tasklist)
-        raddbg_is_running := false
-        for line in lines {
-            if strings.contains(line, raddbg) {
-                raddbg_is_running = true
-                break
-            }
-        }
-        if raddbg_is_running {
-            append(&cmd, "taskkill", "/IM", raddbg, "/F")
-            mute: string
-            run_command(&cmd, stdout = &mute)
+        if ok, pid := is_running(raddbg); ok {
+            fmt.printfln("INFO: Killing running debugger in order to build.")
+            kill(pid)
         }
     }
     
     // @todo(viktor): make .Kill and such also setable from the command line
     if handle_running_exe_gracefully(debug_exe, .Kill) {
-        odin_build(&cmd, code_dir, debug_exe_path)
-        append(&cmd, ..flags)
-        append(&cmd, debug)
-        append(&cmd, flags_for_imgui)
-        append(&cmd, check)
-        append(&cmd, windows)
-        append(&cmd, optimizations)
-        if Pedantic do append(&cmd, ..pedantic)
+        build := true
+        if (tasks & {.debugger, .renderdoc }) != {} {
+            if !did_change(debug_exe_path, code_dir) {
+                fmt.println("INFO: No changes detected. Skipping build.")
+                build = false
+            }
+        }
         
-        run_command(&cmd)
+        if build {
+            odin_build(&cmd, code_dir, debug_exe_path)
+            append(&cmd, ..flags)
+            append(&cmd, debug)
+            append(&cmd, flags_for_imgui)
+            append(&cmd, check)
+            append(&cmd, windows)
+            append(&cmd, optimizations)
+            if Pedantic do append(&cmd, ..pedantic)
+            
+            run_command(&cmd)
+        }
     }
     
     fmt.println("INFO: Build done.\n")
@@ -119,7 +116,7 @@ main :: proc() {
         
         os.change_directory(data_dir)
         captures := all_like("capture*")
-        // @todo(viktor): Wha t if we had multiple captures?
+        // @todo(viktor): What if we had multiple captures?
         if len(captures) == 1 {
             append(&cmd, renderdoc_gui, captures[0])
             run_command(&cmd)
@@ -215,12 +212,9 @@ handle_running_exe_gracefully :: proc(exe_name: string, handling: Handle_Running
             os.exit(0)
             
           case .Kill: 
-            fmt.printfln("INFO: Tried to build '%v', but the program is already running. Killing running instance in order to build.", exe_name)
-            handle := win.OpenProcess(win.PROCESS_TERMINATE, false, pid, )
-            if handle != nil {
-                win.TerminateProcess(handle, 0)
-                win.CloseHandle(handle)
-            }
+            fmt.printfln("INFO: Tried to build '%v', but the program is already running.", exe_name)
+            fmt.printfln("INFO: Killing running instance in order to build.")
+            kill(pid)
             return true
             
           case .Rename:
@@ -255,47 +249,23 @@ Error :: union { os2.Error, os.Error }
 
 go_rebuild_yourself :: proc() {
     error: Error
-    if strings.ends_with(os.get_current_directory(), "build") {
-        error = os.set_current_directory("..")
-        if error.(os.Error) != nil {
-            fmt.println("ERROR: failed to change directory out of build directory: ", error)
-        }
-    }
-    
     old_build_exe_path := fmt.tprintf("%vold-%v", build_src_path, build_exe_name)
     build_exe_path := fmt.tprintf("%v%v", build_src_path, build_exe_name)
     
-    gitignore := fmt.tprint(build_dir, `\.gitignore`, sep="")
+    remove_if_exists(old_build_exe_path)
+    
+    if did_change(build_exe_path, build_src_path) {
+        tasks += { .rebuild }
+    }
+    
+    gitignore := fmt.tprintf(`%v\.gitignore`, build_dir)
     if !os.exists(gitignore) {
         contents := "*\n!*.odin"
         os.write_entire_file(gitignore, transmute([]u8) contents)
     }
     
-    build_exe_info, err := os.stat(build_exe_path)
-    if err != nil {
-        tasks += { .rebuild }
-    }
-    
-    if .rebuild not_in tasks {
-        src_dir, error := os2.read_all_directory_by_path(build_src_path, context.allocator)
-        if error != nil {
-            fmt.println("ERROR: failed when checking build directory for changes: ", error)
-        }
-        for file in src_dir {
-            if strings.ends_with(file.name, ".odin") {
-                if time.diff(file.modification_time, build_exe_info.modification_time) < 0 {
-                    tasks += { .rebuild }
-                    break
-                }
-            }
-        }
-    }
-    
-    remove_if_exists(old_build_exe_path)
-    
     if .rebuild in tasks {
         fmt.println("INFO: Rebuilding")
-        
         
         pdb_path, _ := strings.replace_all(build_exe_path, ".exe", ".pdb")
         rdi_path, _ := strings.replace_all(build_exe_path, ".exe", ".rdi")
@@ -337,6 +307,43 @@ go_rebuild_yourself :: proc() {
         
         os.exit(0)
     }
+}
+
+did_change :: proc (output_path: string, inputs: .. string, extension: string = ".odin") -> (result: bool) {
+    output_info, err := os.stat(output_path)
+    if err != nil {
+        result = true
+    } else {
+        search: for input in inputs {
+            files : [] os2.File_Info
+            error: os2.Error
+            if os.is_dir(input) {
+                files, error = os2.read_all_directory_by_path(input, context.allocator)
+                if error != nil {
+                    fmt.printfln("ERROR: failed to read directory '%v' when checking for changes", input, error)
+                    break search
+                }
+            } else {
+                file, error := os2.stat(input, context.allocator)
+                files = { file }
+                if error != nil {
+                    fmt.printfln("ERROR: failed to read file '%v' when checking for changes", input, error)
+                    break search
+                }
+            }
+            
+            for file in files {
+                if extension == "" || strings.ends_with(file.name, extension) {
+                    if time.diff(file.modification_time, output_info.modification_time) < 0 {
+                        result = true
+                        break search
+                    }
+                }
+            }
+        }
+    }
+    
+    return result
 }
 
 remove_if_exists :: proc(path: string) {
@@ -400,10 +407,10 @@ run_command :: proc (cmd: ^Cmd, or_exit := true, keep := false, stdout: ^string 
     
     process_description := os2.Process_Desc { command = cmd[:] }
     process: os2.Process
-    state: os2.Process_State
-	output: []byte
-	error: []byte
-    err2: os2.Error
+    state:   os2.Process_State
+	output:  []byte
+	error:   []byte
+    err2:    os2.Error
     if async == nil {
         state, output, error, err2 = os2.process_exec(process_description, context.allocator)
     } else {
@@ -417,7 +424,6 @@ run_command :: proc (cmd: ^Cmd, or_exit := true, keep := false, stdout: ^string 
     }
     
     if async == nil {
-        // @todo(viktor): do this in Process_Desc beforehand and not afterwards
         if output != nil {
             if stdout != nil do stdout ^= string(output)
             else do fmt.println(string(output))
@@ -438,6 +444,14 @@ run_command :: proc (cmd: ^Cmd, or_exit := true, keep := false, stdout: ^string 
     if !keep do clear(cmd)
     
     return success
+}
+
+kill :: proc (pid: u32) {
+    handle := win.OpenProcess(win.PROCESS_TERMINATE, false, pid)
+    if handle != nil {
+        win.TerminateProcess(handle, 0)
+        win.CloseHandle(handle)
+    }
 }
 
 make_directory_if_not_exists :: proc(path: string) -> (result: b32) {

@@ -41,7 +41,6 @@ view_percentage_ratio :: proc(value: $F) -> (result: View) {
 
 ////////////////////////////////////////////////
 // @todo(viktor): multi magnitude support, 10 Billion 583 Million 699 Thousand 496 and whatever
-// @todo(viktor): view_number_with_divider, thousands dividers
 // @todo(viktor): should there be a view_debug which shows all the types instead of that being a flag on the format_context?
 
 Magnitude :: struct ($T: typeid) { upper_bound: T, symbol: string }
