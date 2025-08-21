@@ -60,12 +60,12 @@ supports_from_to :: proc (c: ^Collapse, from: State_Id, to: State_Id) -> (result
     return result
 }
 
-get_closeness :: proc (sampling_direction: v2) -> (result: [Direction] f32) {
+get_closeness :: proc (sampling_direction: v2d) -> (result: [Direction] f64) {
     sampling_direction := sampling_direction
     sampling_direction = normalize(sampling_direction)
     
     for &closeness, other in result {
-        other_dir := normalize(vec_cast(f32, Deltas[other]))
+        other_dir := normalize(vec_cast(f64, Deltas[other]))
         switch view_mode {
           case .Cos:         closeness = dot(sampling_direction, other_dir)
           case .AcosCos:     closeness = 1 - acos(dot(sampling_direction, other_dir))
@@ -76,7 +76,7 @@ get_closeness :: proc (sampling_direction: v2) -> (result: [Direction] f32) {
     return result
 }
 
-get_support_amount_ :: proc (support: Support, closeness: [Direction] f32) -> (result: f32) {
+get_support_amount_ :: proc (support: Support, closeness: [Direction] f64) -> (result: f64) {
     for other in Direction {
         amount := support.amount[other]
         result += amount * closeness[other]
@@ -85,7 +85,7 @@ get_support_amount_ :: proc (support: Support, closeness: [Direction] f32) -> (r
     return result
 }
 
-get_support_amount :: proc (c: ^Collapse, from: State_Id, to: State_Id, closeness: [Direction] f32) -> (result: f32) {
+get_support_amount :: proc (c: ^Collapse, from: State_Id, to: State_Id, closeness: [Direction] f64) -> (result: f64) {
     support := supports(c, from, to)
     result = get_support_amount_(support, closeness)
     return result

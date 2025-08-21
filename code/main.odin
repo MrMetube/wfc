@@ -30,8 +30,6 @@ Screen_Size :: v2i{1920, 1080}
 TargetFps       :: 60
 TargetFrameTime :: 1./TargetFps
 
-deviation: f32 = 0.05
-
 ////////////////////////////////////////////////
 // App
 
@@ -110,7 +108,6 @@ this_frame: Frame
 Frame :: struct {
     tasks: bit_set[Task],
     
-    desired_regularity: f32,
     // extract states
     desired_N:        i32,
     pixels:           [] rl.Color,
@@ -127,7 +124,6 @@ Task :: enum {
     extract_states, 
     clear_drawing, 
     restart, 
-    copy_old_grid,
     update,
 }
 
@@ -172,7 +168,6 @@ main :: proc () {
     triangles: [] Triangle
     setup_grid(&collapse, dimension, dimension, &entropy, &arena, &triangles)
     this_frame.desired_N = N
-    this_frame.desired_regularity = 1 - deviation
     
     for !rl.WindowShouldClose() {
         spall_scope("Frame")
@@ -257,10 +252,9 @@ main :: proc () {
                 
                 this_frame.old_grid = grid[:]
                 this_frame.old_dimension = dimension
-                deviation = 1 - this_frame.desired_regularity
                 setup_grid(&collapse, dimension, this_frame.desired_dimension, &entropy, &arena, &triangles)
                 
-                this_frame.tasks += { .restart/* , .copy_old_grid */ }
+                this_frame.tasks += { .restart }
             }
             
             if .extract_states in this_frame.tasks {
@@ -284,42 +278,9 @@ main :: proc () {
             if .restart in this_frame.tasks {
                 this_frame.tasks -= { .restart }
                 
-                restart(&collapse)
+                update_state = .Initialize_States
                 total_duration = 0
                 for &it in average_colors do it = {}
-            }
-            
-            if .copy_old_grid in this_frame.tasks {
-                this_frame.tasks -= { .copy_old_grid }
-                
-                assert(this_frame.old_grid != nil)
-                defer delete(this_frame.old_grid)
-                // defer delete ps
-                using this_frame
-                
-                // @cleanup
-                // @todo(viktor): :Constrained When growing handle that it must connect to existing.
-                when false do if !wrapping && old_grid != nil && new_dimension != old_dimension {
-                    new_dimension := desired_dimension
-                    delta := abs_vec(new_dimension - old_dimension) / 2
-                    if (new_dimension.x > old_dimension.x || new_dimension.y > old_dimension.y) {
-                        for y in 0..<old_dimension.y {
-                            for x in 0..<old_dimension.x {
-                                d := delta + {x, y}
-                                grid[d.x + d.x * new_dimension.x].value = old_grid[x + y * old_dimension.x].value
-                            }
-                        }
-                    } else {
-                        for y in 0..<new_dimension.y {
-                            for x in 0..<new_dimension.x {
-                                d := delta + {x, y}
-                                grid[x + y * new_dimension.x].value = old_grid[d.x + d.y * old_dimension.x].value
-                            }
-                        }
-                    }
-                }
-                
-                assert(false)
             }
             
             if .update in this_frame.tasks {
@@ -336,7 +297,9 @@ main :: proc () {
                     this_frame.tasks += { .restart }
                     
                   case .Continue:
-                    total_duration += time.since(this_update_start)
+                    if update_state >= .Search_Cells {
+                        total_duration += time.since(this_update_start)
+                    }
                     
                     if time.duration_seconds(time.since(update_start)) < TargetFrameTime * 0.95 {
                         this_frame.tasks += { .update }
@@ -362,6 +325,9 @@ main :: proc () {
         5 - make a graph/lattice that is still a regular grid
         6 - make the lattice irregular
         X - display the lattice as a voronoi diagram
+        
+        - Clip/remove triangles outside of the region
+        - limit sides to length of <= 1
         */
         
         // rl.DrawRectangleRec(world_to_screen(rectangle_min_dimension(v2i{}, dimension)), v4_to_rl_color(grid_background_color))
@@ -408,15 +374,15 @@ main :: proc () {
                 
                 for tri in cell.triangles {
                     rl.DrawTriangle(
-                        world_to_screen(tri[0]),
-                        world_to_screen(tri[1]),
-                        world_to_screen(tri[2]),
+                        world_to_screen(vec_cast(f32, tri[0])),
+                        world_to_screen(vec_cast(f32, tri[1])),
+                        world_to_screen(vec_cast(f32, tri[2])),
                         average.color
                     )
                     
                     rl.DrawLineV(
-                        world_to_screen(tri[1]), 
-                        world_to_screen(tri[2]),
+                        world_to_screen(vec_cast(f32, tri[1])), 
+                        world_to_screen(vec_cast(f32, tri[2])),
                         rl.BLACK
                     )
                 }
@@ -436,9 +402,9 @@ main :: proc () {
             if show_triangulation {
                 for tri in triangles {
                     rl.DrawTriangleLines(
-                        world_to_screen(tri[0]),
-                        world_to_screen(tri[1]),
-                        world_to_screen(tri[2]),
+                        world_to_screen(vec_cast(f32, tri[0])),
+                        world_to_screen(vec_cast(f32, tri[1])),
+                        world_to_screen(vec_cast(f32, tri[2])),
                         v4_to_rl_color(Emerald)
                     )
                 }
@@ -462,13 +428,13 @@ main :: proc () {
             
             if highlight_changes {
                 for cell_p in changes {
-                    rec := world_to_screen(rectangle_min_dimension(cell_p, 1))
+                    rec := world_to_screen(rectangle_min_dimension(vec_cast(f32, cell_p), 1))
                     rl.DrawRectangleRec(rec, rl.ColorAlpha(rl.YELLOW, 0.4))
                 }
             }
             
             for cell in to_be_collapsed {
-                rect := world_to_screen(rectangle_min_dimension(cell.p, 1))
+                rect := world_to_screen(rectangle_min_dimension(vec_cast(f32, cell.p), 1))
                 rl.DrawRectangleRec(rect, rl.PURPLE)
             }
             
@@ -490,13 +456,13 @@ main :: proc () {
                 ring_size := cell_size_on_screen * 3
                 ring_padding := 0.2 * ring_size
                 
-                max_support: f32
-                total_supports:= make([dynamic] f32, view_slices, context.temp_allocator)
+                max_support: f64
+                total_supports:= make([dynamic] f64, view_slices, context.temp_allocator)
                 
-                turns := cast(f32) view_slices
+                turns := cast(f64) view_slices
                 for slice in 0..<view_slices {
-                    turn := cast(f32) slice
-                    turn += view_slice_start
+                    turn := cast(f64) slice
+                    turn += cast(f64) view_slice_start
                     
                     sampling_direction := arm(turn * Tau / turns)
                     
@@ -510,19 +476,19 @@ main :: proc () {
                 }
                 
                 for slice in 0..<view_slices {
-                    turn := cast(f32) slice
-                    turn += view_slice_start
+                    turn := cast(f64) slice
+                    turn += cast(f64) view_slice_start
                     
                     sampling_direction := arm(turn * Tau / turns)
                     
                     total_support := total_supports[slice]
-                    alpha := safe_ratio_0(total_support, max_support)
+                    alpha := cast(f32) safe_ratio_0(total_support, max_support)
                     color := rl.ColorAlpha(comparing_group.color, alpha)
                     
                     center := direction_to_angles(sampling_direction)
-                    width: f32 = 360. / turns
-                    start := center - width * .5
-                    stop  := center + width * .5
+                    width: f64 = 360. / turns
+                    start := cast(f32) (center - width * .5)
+                    stop  := cast(f32) (center + width * .5)
                     
                     inner := (center_size +  ring_size) + cast(f32) group_index * ring_size + ring_padding
                     outer := inner + ring_size
@@ -548,15 +514,15 @@ main :: proc () {
 }
 
 
-generate_points :: proc(points: ^Array(v2), count: u32) {
+generate_points :: proc(points: ^Array(v2d), count: u32) {
     side := round(u32, square_root(cast(f32) count))
     entropy := seed_random_series(123456789)
-    switch -1  {
+    switch 0  {
       case -1:
         for x in 0 ..< side {
             for y in 0 ..< side {
-                p := vec_cast(f32, x, y) / cast(f32) side
-                p += random_bilateral(&entropy, v2) * (0.05 / cast(f32) side)
+                p := vec_cast(f64, x, y) / cast(f64) side
+                p += random_bilateral(&entropy, v2d) * (0.05 / cast(f64) side)
                 p = clamp(p, 0, 1)
                 // p = rectangle_modulus(rectangle_min_dimension(v2{}, 1), p)
                 append(points, p)
@@ -565,38 +531,38 @@ generate_points :: proc(points: ^Array(v2), count: u32) {
       case 0:
         for x in 0 ..< side {
             for y in 0 ..< side {
-                append(points, vec_cast(f32, x, y) / cast(f32) side)
+                append(points, vec_cast(f64, x, y) / cast(f64) side)
             }
         }
       case 1:
         for x in 0 ..< side {
             for y in 0 ..< side {
-                x := cast(f32) x
+                x := cast(f64) x
                 if y % 2 == 0 do x += 0.5
-                y := cast(f32) y
-                append(points, v2{x, y} / cast(f32) side)
+                y := cast(f64) y
+                append(points, v2d{x, y} / cast(f64) side)
             }
         }
       case 2:
         for x in 0 ..< side {
             for y in 0 ..< side {
-                y := cast(f32) y
+                y := cast(f64) y
                 if x % 2 == 0 do y += 0.5
-                x := cast(f32) x
-                append(points, v2{x, y} / cast(f32) side)
+                x := cast(f64) x
+                append(points, v2d{x, y} / cast(f64) side)
             }
         }
       case 3:
         center :: 0.5
         for index in 0..<count {
-            angle := 1.6180339887 * cast(f32) index
-            t := cast(f32) index / cast(f32) count
-            radius := linear_blend(f32(0.01), 0.5, square_root(t))
+            angle := 1.6180339887 * cast(f64) index
+            t := cast(f64) index / cast(f64) count
+            radius := linear_blend(f64(0.01), 0.5, square_root(t))
             append(points, center + arm(angle) * radius)
         }
       case 4:
         for _ in 0..<count {
-            append(points, random_unilateral(&entropy, v2))
+            append(points, random_unilateral(&entropy, v2d))
         }
     }
 }
@@ -613,7 +579,7 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^R
     }
     
     area := new_dimension.x * new_dimension.y
-    _points := make_array(arena, v2, area)
+    _points := make_array(arena, v2d, area)
     generate_points(&_points, cast(u32) area)
     dt: DelauneyTriangulation
     // @todo(viktor): use f64s to not have stupid artifacts all over
@@ -622,11 +588,11 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^R
     
     for &triangle in triangles {
         for &point in triangle {
-            point *= vec_cast(f32, dimension)
+            point *= vec_cast(f64, dimension)
         }
     }
     
-    point_to_tris := make(map[v2] [dynamic] ^Triangle, context.temp_allocator)
+    point_to_tris := make(map[v2d] [dynamic] ^Triangle, context.temp_allocator)
     for &triangle in triangles {
         for point in triangle {
             if point not_in point_to_tris {
@@ -646,7 +612,7 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^R
         }
     }
     
-    Foo :: struct { center, point: v2}
+    Foo :: struct { center, point: v2d}
     centers := make([dynamic] Foo, context.temp_allocator)
     for point, tris in point_to_tris {
         clear(&centers)
@@ -680,12 +646,12 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^R
         append(&grid, cell)
     }
     
-    point_to_cell := make(map[v2] ^Cell, context.temp_allocator)
+    point_to_cell := make(map[v2d] ^Cell, context.temp_allocator)
     for i in 0..<len(grid) {
         point_to_cell[grid[i].p] = &grid[i]
     }
 
-    neighbour_set := make(map[v2] bool, context.temp_allocator)
+    neighbour_set := make(map[v2d] bool, context.temp_allocator)
     for point, tris in point_to_tris {
         clear(&neighbour_set)
         
@@ -806,7 +772,7 @@ screen_to_world :: proc (screen: v2) -> (world: v2i) {
     return world
 }
 
-direction_to_angles :: proc(direction: v2) -> (angle: f32) {
+direction_to_angles :: proc(direction: [2]$T) -> (angle: T) {
     angle = atan2(direction.y, direction.x)  * (360 / Tau)
     return angle
 }

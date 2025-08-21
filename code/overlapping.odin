@@ -18,7 +18,7 @@ grid: [dynamic] Cell
 to_be_collapsed: [dynamic] ^Cell
 
 Cell :: struct {
-    p: v2, 
+    p: v2d, 
     triangles: [dynamic] Triangle, 
     
     collapsed:       bool,
@@ -32,13 +32,25 @@ Cell :: struct {
 
 Neighbour :: struct {
     cell:         ^Cell,
-    to_neighbour: v2,
-    support:      [/* State_Id */] f32,
+    to_neighbour: v2d,
+    support:      [/* State_Id */] f64,
 }
 
-doing_changes: b32
+Update_State :: enum {
+    Initialize_States,
+    Initialize_Supports,
+    Enforce_Drawing,
+    
+    Search_Cells,
+    Collapse_Cells,
+    Propagate_Changes,
+}
+update_state: Update_State
+
 // @todo(viktor): its nice that its constant time lookup but the arbitrary order when iterating is worse
-changes: map[v2] Change
+changes: map[v2d] Change
+init_cell_index: int
+
 
 Change :: struct {
     cell: ^Cell,
@@ -47,7 +59,7 @@ Change :: struct {
 
 Support :: struct {
     id:     State_Id,
-    amount: [Direction] f32,
+    amount: [Direction] f64,
 }
 
 Wave_Support :: struct {
@@ -67,112 +79,173 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
     if c.states == nil do return .CollapseUninialized
     
     result = .Continue
-    if !doing_changes {
-        if len(to_be_collapsed) == 0 {
-            // Find next cell to be collapsed 
-            spall_scope("Find next cell to be collapsed")
-            
-            cells: [] ^Cell
-            reached_end := true
-            found_invalid := false
-            switch search_mode {
-              case .Scanline:
-                scan: for &cell in grid do if !cell.collapsed {
-                    cells = { &cell }
-                    reached_end = false
-                    break scan
-                }
-                
-              case .Metric:
-                minimal: Search
-                init_search(&minimal, c, search_metric, context.temp_allocator)
-                
-                loop: for &cell, index in grid {
-                    if !cell.collapsed {
-                        switch test_search_cell(&minimal, &cell) {
-                          case .Continue: // nothing
-                          case .Done:     break loop
-                            
-                          case .Found_Invalid: 
-                            found_invalid = true
-                            break loop
-                        }
-                    }
-                    
-                    reached_end = index == len(grid)-1
-                }
-                
-                
-                if found_invalid {
-                    result = .FoundContradiction
-                    unreachable()
-                } else {
-                    cells = minimal.cells[:]
-                }
-            }
-            
-            if len(cells) > 0 {
-                if len(cells[0].states) == 1 {
-                    spall_scope("Set All chosen cells to be collapse")
-                    append(&to_be_collapsed, ..cells)
-                } else {
-                    append(&to_be_collapsed, random_value(entropy, cells))
-                }
+    
+    switch update_state {
+      case .Initialize_States:
+        clear(&changes)
+        to_be_collapsed = nil
+        spall_scope("Restart: initialize states")
+        for &cell, cell_index in grid {
+            if !cell.collapsed {
+                delete(cell.states)
             } else {
-                if reached_end {
-                    result = .AllCollapsed
+                cell.collapsed = false
+            }
+            
+            make(&cell.states, len(c.states))
+            for &id, index in cell.states do id = cast(State_Id) index
+            
+            print("Restart: initialize states % %% \r", view_percentage(cell_index, len(grid)))
+        }
+        print("Restart: initialize states done           \n")
+        update_state = .Initialize_Supports
+        
+      case .Initialize_Supports:
+        spall_scope("Restart: initialize support")
+        if init_cell_index < len(grid) {
+            cell := &grid[init_cell_index]
+            for &neighbour in cell.neighbours {
+                delete(neighbour.support)
+                make(&neighbour.support, len(c.states))
+            }
+            
+            for &neighbour in cell.neighbours {
+                closeness := get_closeness(neighbour.to_neighbour)
+                for from in cell.states {
+                    for to in neighbour.cell.states {
+                        neighbour.support[from] += get_support_amount(c, from, to, closeness)
+                    }
                 }
             }
+            init_cell_index += 1
         } else {
-            // Collapse chosen cell
-            spall_scope("Collapse chosen cell")
+            init_cell_index = 0
+            update_state = .Enforce_Drawing
+        }
+        
+      case .Enforce_Drawing:
+        spall_scope("Restart: enforce drawing")
+        // @todo(viktor): why dont we just use this as the initial value above?
+        for y in 0..<dimension.y {
+            for x in 0..<dimension.x {
+                group := draw_board[x + y * dimension.x]
+                if group != nil {
+                    restrict_cell_to_drawn(c, {x, y}, group)
+                    drawing_initializing = true
+                }
+            }
+        }
+        update_state = .Search_Cells
+        print("Restart: Done\n")
+        
+      case .Search_Cells:
+        // Find next cell to be collapsed 
+        assert(len(to_be_collapsed) == 0)
+        spall_scope("Find next cell to be collapsed")
+        
+        cells: [] ^Cell
+        reached_end := true
+        found_invalid := false
+        switch search_mode {
+            case .Scanline:
+            scan: for &cell in grid do if !cell.collapsed {
+                cells = { &cell }
+                reached_end = false
+                break scan
+            }
             
-            for cell in to_be_collapsed {
-                pick := Invalid_State
-                if len(cell.states) == 1 {
-                    pick = cell.states[0]
-                } else {
-                    // Random
-                    total_frequency: i32
-                    for id in cell.states {
-                        total_frequency += c.states[id].frequency
+            case .Metric:
+            minimal: Search
+            init_search(&minimal, c, search_metric, context.temp_allocator)
+            
+            loop: for &cell, index in grid {
+                if !cell.collapsed {
+                    switch test_search_cell(&minimal, &cell) {
+                        case .Continue: // nothing
+                        case .Done:     break loop
+                        
+                        case .Found_Invalid: 
+                        found_invalid = true
+                        break loop
                     }
-                    
-                    target := random_between(entropy, i32, 0, total_frequency)
-                    picking: for id in cell.states {
-                        target -= c.states[id].frequency
-                        if target <= 0 {
-                            pick = id
-                            break picking
-                        }
-                    }
-                    assert(pick != Invalid_State)
                 }
                 
-                assert(pick != Invalid_State)
-                {
-                    for id in cell.states {
-                        if pick != id {
-                            remove_state(c, cell, id)
-                        }
-                    }
-                    
-                    delete(cell.states)
-                    cell.collapsed = true
-                    cell.collapsed_state = pick
-                }
+                reached_end = index == len(grid)-1
             }
             
-            clear(&to_be_collapsed)
-            doing_changes = true
+            
+            if found_invalid {
+                result = .FoundContradiction
+                unreachable()
+            } else {
+                cells = minimal.cells[:]
+            }
         }
-    } else {
-        // Propagate changes
+        
+        if len(cells) > 0 {
+            if len(cells[0].states) == 1 {
+                spall_scope("Set All chosen cells to be collapse")
+                append(&to_be_collapsed, ..cells)
+            } else {
+                append(&to_be_collapsed, random_value(entropy, cells))
+            }
+            
+            update_state = .Collapse_Cells
+        } else {
+            if reached_end {
+                result = .AllCollapsed
+            }
+        }
+        
+      case .Collapse_Cells:
+        // Collapse chosen cell
+        spall_scope("Collapse chosen cell")
+        
+        for cell in to_be_collapsed {
+            pick := Invalid_State
+            if len(cell.states) == 1 {
+                pick = cell.states[0]
+            } else {
+                // Random
+                total_frequency: i32
+                for id in cell.states {
+                    total_frequency += c.states[id].frequency
+                }
+                
+                target := random_between(entropy, i32, 0, total_frequency)
+                picking: for id in cell.states {
+                    target -= c.states[id].frequency
+                    if target <= 0 {
+                        pick = id
+                        break picking
+                    }
+                }
+                assert(pick != Invalid_State)
+            }
+            
+            assert(pick != Invalid_State)
+            {
+                for id in cell.states {
+                    if pick != id {
+                        remove_state(c, cell, id)
+                    }
+                }
+                
+                delete(cell.states)
+                cell.collapsed = true
+                cell.collapsed_state = pick
+            }
+        }
+        
+        clear(&to_be_collapsed)
+        update_state = .Propagate_Changes
+        
+      case .Propagate_Changes:
         spall_scope("Propagate changes")
         
         if len(changes) == 0 {
+            update_state = .Search_Cells
             drawing_initializing = false
-            doing_changes = false
         } else {
             changed: Change
             for k, v in changes {
@@ -233,6 +306,7 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
                 }
             }
         }
+    
     }
     
     return result
@@ -268,66 +342,6 @@ remove_state :: proc (c: ^Collapse, cell: ^Cell, removed_state: State_Id) {
             unimplemented()
         }
     }
-}
-
-restart :: proc (c: ^Collapse) {
-    spall_proc()
-    clear(&changes)
-    to_be_collapsed = nil
-    
-    {
-        spall_scope("Restart: initialize states")
-        for &cell, cell_index in grid {
-            if !cell.collapsed {
-                delete(cell.states)
-            } else {
-                cell.collapsed = false
-            }
-            
-            make(&cell.states, len(c.states))
-            for &id, index in cell.states do id = cast(State_Id) index
-            
-            print("Restart: initialize states % %% \r", view_percentage(cell_index, len(grid)))
-        }
-        print("Restart: initialize states done           \n")
-    }
-    
-    {
-        spall_scope("Restart: initialize support")
-        for &cell, cell_index in grid {
-            for &neighbour in cell.neighbours {
-                delete(neighbour.support)
-                make(&neighbour.support, len(c.states))
-            }
-            
-            for &neighbour in cell.neighbours {
-                closeness := get_closeness(neighbour.to_neighbour)
-                for from in cell.states {
-                    for to in neighbour.cell.states {
-                        neighbour.support[from] += get_support_amount(c, from, to, closeness)
-                    }
-                }
-            }
-            print("Restart: initialize support % %% \r", view_percentage(cell_index, len(grid)))
-        }
-        print("Restart: initialize support done           \n")
-    }
-    
-    {
-        spall_scope("Restart: enforce drawing")
-        // @todo(viktor): why dont we just use this as the initial value above?
-        for y in 0..<dimension.y {
-            for x in 0..<dimension.x {
-                group := draw_board[x + y * dimension.x]
-                if group != nil {
-                    restrict_cell_to_drawn(c, {x, y}, group)
-                    drawing_initializing = true
-                }
-            }
-        }
-    }
-        
-    print("Restart: Done\n")
 }
 
 extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {

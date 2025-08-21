@@ -1,5 +1,7 @@
 package main
 
+Rectangle2d :: Rectangle([2] f64)
+
 QuadTree :: struct ($D: typeid) {
     root:      QuadNode(D),
     max_depth: i32,
@@ -12,7 +14,7 @@ QuadNode :: struct ($D: typeid) {
     parent:   ^QuadNode(D),
     children: ^[4]QuadNode(D),
     order:    QuadOrder,
-    bounds:   Rectangle2,
+    bounds:   Rectangle2d,
     sentinel: QuadEntry(D),
 }
 
@@ -29,7 +31,7 @@ QuadEntry :: struct ($D: typeid) {
     next: ^QuadEntry(D),
 }
 
-init_quad_tree :: proc (tree: ^QuadTree($D), arena: ^Arena, bounds: Rectangle2, max_depth: i32 = 16) {
+init_quad_tree :: proc (tree: ^QuadTree($D), arena: ^Arena, bounds: Rectangle2d, max_depth: i32 = 16) {
     tree.arena = arena
     
     tree.root.bounds = bounds
@@ -40,14 +42,14 @@ init_quad_tree :: proc (tree: ^QuadTree($D), arena: ^Arena, bounds: Rectangle2, 
     tree.max_depth = max_depth
 }
 
-quad_test :: proc(tree: ^QuadTree($D), bounds: Rectangle2) -> (result: ^QuadNode(D)) { 
+quad_test :: proc(tree: ^QuadTree($D), bounds: Rectangle2d) -> (result: ^QuadNode(D)) { 
     result = quad_op(tree, &tree.root, D{}, bounds, tree.max_depth, .Test)
     if result == nil {
         result = &tree.root
     }
     return result
 }
-quad_insert :: proc(tree: ^QuadTree($D), node: ^QuadNode(D), data: D, bounds: Rectangle2) -> (result: ^QuadNode(D)) { 
+quad_insert :: proc(tree: ^QuadTree($D), node: ^QuadNode(D), data: D, bounds: Rectangle2d) -> (result: ^QuadNode(D)) { 
     result = quad_op(tree, node, data, bounds, tree.max_depth, .Insert)
     if result == nil {
         result = &tree.root
@@ -58,7 +60,7 @@ quad_insert :: proc(tree: ^QuadTree($D), node: ^QuadNode(D), data: D, bounds: Re
     return result
 }
 
-quad_op :: proc(tree: ^QuadTree($D), node: ^QuadNode(D), data: D, bounds: Rectangle2, max_depth: i32, $op: enum { Test, Insert }) -> (result: ^QuadNode(D)) {
+quad_op :: proc(tree: ^QuadTree($D), node: ^QuadNode(D), data: D, bounds: Rectangle2d, max_depth: i32, $op: enum { Test, Insert }) -> (result: ^QuadNode(D)) {
     if max_depth >= 0 && contains_rect(node.bounds, bounds) {
         b_dim := get_dimension(bounds)
         dim := get_dimension(node.bounds) * 0.5
@@ -103,7 +105,7 @@ quad_init_children :: proc (tree: ^QuadTree($D), node: ^QuadNode(D)) {
     tl := rectangle_min_dimension(node.bounds.min + dim * {0,1}, dim)
     tr := rectangle_min_dimension(node.bounds.min + dim * {1,1}, dim)
     
-    sub_rects: [4]Rectangle2 = ---
+    sub_rects: [4]Rectangle2d = ---
     switch node.order {
         case .ClockwiseFromBottom:        sub_rects = {bl, tl, tr, br}
         case .CounterclockwiseFromBottom: sub_rects = {bl, br, tr, tl}

@@ -4,12 +4,15 @@ import "core:fmt"
 import "core:time"
 import "core:math"
 
-Triangle :: [3]v2
-TriIndex :: [3]i32
-Edge     :: [2]i32
+v2d :: [2] f64
+v3d :: [3] f64
+
+Triangle :: [3] v2d
+TriIndex :: [3] i32
+Edge     :: [2] i32
 Circle :: struct {
-    center:         v2,
-    radius_squared: f32,
+    center:         v2d,
+    radius_squared: f64,
 }
 
 WorkTriangle :: struct {
@@ -19,7 +22,7 @@ WorkTriangle :: struct {
 
 DelauneyTriangulation :: struct {
     arena:  ^Arena,
-    points: []v2,
+    points: [] v2d,
     
     tree: QuadTree(WorkTriangle),
     
@@ -42,11 +45,11 @@ III: time.Duration // ~ O(n)
 IV:  time.Duration // ~ O(n)
 step_count: u32
 
-begin_triangulation :: proc(dt: ^DelauneyTriangulation, arena: ^Arena, points: []v2) {
+begin_triangulation :: proc(dt: ^DelauneyTriangulation, arena: ^Arena, points: []v2d) {
     dt.arena  = arena
     dt.points = points
 
-    max_vertex: v2 = 1
+    max_vertex: v2d = 1
     extra :: 0
     dt.super_triangle[0] = 0 - extra
     dt.super_triangle[1] = {2*max_vertex.x, 0} + {extra*2, -extra}
@@ -62,18 +65,18 @@ begin_triangulation :: proc(dt: ^DelauneyTriangulation, arena: ^Arena, points: [
         temp := begin_temporary_memory(arena)
         defer end_temporary_memory(temp)
         
-        point_tree: QuadTree(v2)
-        init_quad_tree(&point_tree, temp.arena, rectangle_min_dimension(v2{}, 2))
+        point_tree: QuadTree(v2d)
+        init_quad_tree(&point_tree, temp.arena, rectangle_min_dimension(v2d{}, 2))
         
         for point in points {
             quad_insert(&point_tree, &point_tree.root, point, rectangle_min_dimension(point, 0))
         }
         
-        buffer := Array(v2) { data = points }
+        buffer := Array(v2d) { data = points }
         collect_points(&point_tree.root, &buffer)
     }
     
-    init_quad_tree(&dt.tree, dt.arena, rectangle_center_dimension(v2{.5,.5}, v2{400,400}))
+    init_quad_tree(&dt.tree, dt.arena, rectangle_center_dimension(v2d{.5,.5}, v2d{400,400}))
     
     triangulation_append(dt, dt.super_tri_index, dt.super_triangle)
 }
@@ -170,7 +173,7 @@ triangle_from_index :: proc (dt: ^DelauneyTriangulation, index: TriIndex) -> (re
     return result
 }
 
-collect_points :: proc (node: ^QuadNode(v2), dest: ^Array(v2)) {
+collect_points :: proc (node: ^QuadNode(v2d), dest: ^Array(v2d)) {
     if node.children != nil {
         for &child in node.children {
             collect_points(&child, dest)
@@ -187,7 +190,7 @@ collect_points :: proc (node: ^QuadNode(v2), dest: ^Array(v2)) {
     }
 }
 
-collect_triangles :: proc (node: ^QuadNode(WorkTriangle), dest: ^Array(Triangle), points: []v2) {
+collect_triangles :: proc (node: ^QuadNode(WorkTriangle), dest: ^Array(Triangle), points: []v2d) {
     if node.children != nil {
         for &child in node.children {
             collect_triangles(&child, dest, points)
@@ -248,8 +251,8 @@ circum_circle :: proc(t: Triangle) -> (result: Circle) {
     bl := length_squared(b)
     cl := length_squared(c)
     
-    ux := dot(v3{al, bl, cl},  v3{bc.y, ca.y, ab.y})
-    uy := dot(v3{al, bl, cl}, -v3{bc.x, ca.x, ab.x})
+    ux := dot(v3d{al, bl, cl},  v3d{bc.y, ca.y, ab.y})
+    uy := dot(v3d{al, bl, cl}, -v3d{bc.x, ca.x, ab.x})
     
     result.center  = {ux, uy} * d
     result.radius_squared = length_squared(result.center - a)
@@ -257,7 +260,7 @@ circum_circle :: proc(t: Triangle) -> (result: Circle) {
     return result
 }
 
-inside_circumcircle :: proc(circle: Circle, p: v2) -> b32 {
+inside_circumcircle :: proc(circle: Circle, p: v2d) -> b32 {
     distance := length_squared(p - circle.center)
     return distance < circle.radius_squared
 }

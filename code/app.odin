@@ -48,10 +48,14 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
     
     tile_count := len(c.states)
     imgui.text_colored(tile_count > 200 ? Red : White, tprint("Tile count %", tile_count))
-    imgui.text(tprint("Total time %",  view_time_duration(total_duration, precision = 3)))
     
-    if imgui.slider_float("Regularity", &this_frame.desired_regularity, 0, 1) {
-        this_frame.tasks += { .resize_grid }
+    if update_state >= .Search_Cells {
+        imgui.text(tprint("Total time %",  view_time_duration(total_duration, precision = 3)))
+    } else {
+        if update_state == .Initialize_Supports {
+            imgui.text_unformatted(tprint("Restart: % %%", view_percentage(init_cell_index, len(grid))))
+        }
+        
     }
     
     if len(c.states) != 0 {
