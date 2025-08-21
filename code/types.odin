@@ -8,7 +8,7 @@ Array :: struct ($T: typeid) {
     data:  []T,
     count: i64,
 }
-StringBuilder :: Array(u8)
+String_Builder :: Array(u8)
 FixedArray :: struct ($N: i64, $T: typeid) {
     data:  [N]T,
     count: i64,
@@ -55,11 +55,11 @@ append_fixed_array_many :: proc(a: ^FixedArray($N, $T), values: []T) -> (result:
     return result
 }
 
-append_string :: proc(a: ^StringBuilder, value: string) -> (result: string) {
+append_string :: proc(a: ^String_Builder, value: string) -> (result: string) {
     return cast(string) append_array_many(a, transmute([]u8) value)
 }
 
-make_string_builds :: proc(arena: ^Arena, #any_int len: i32, params := DefaultPushParams) -> (result: StringBuilder) {
+make_string_builds :: proc(arena: ^Arena, #any_int len: i32, params := DefaultPushParams) -> (result: String_Builder) {
     result.data = push_slice(arena, u8, len, params)
     return result
 }
@@ -79,7 +79,7 @@ slice_array_pointer :: proc(array: ^Array($T)) -> []T {
     return array.data[:array.count]
 }
 
-to_string :: proc(array: StringBuilder) -> string {
+to_string :: proc(array: String_Builder) -> string {
     return cast(string) array.data[:array.count]
 }
 

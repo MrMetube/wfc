@@ -132,7 +132,7 @@ assert :: proc(condition: $B, message := #caller_expression(condition), loc := #
     if !condition {
         print("% %", loc, prefix)
         if len(message) > 0 {
-            println(": %", message)
+            print(": %\n", message)
         }
         
         when ODIN_DEBUG {

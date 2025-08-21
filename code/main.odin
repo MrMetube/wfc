@@ -216,7 +216,7 @@ main :: proc () {
                                 if selected_group != nil {
                                     restrict_cell_to_drawn(&collapse, p, selected_group)
                                 } else {
-                                    println("unimplemented")
+                                    print("unimplemented\n")
                                     // //  @copypasta from restart
                                     // // @todo(viktor): :Constrained the current implementation does not consider existing constraints
                                     // cell := &grid[index]

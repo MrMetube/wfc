@@ -673,13 +673,13 @@ to_chars_64 :: proc (v: floating_decimal_64, sign: bool, result: []u8) -> int {
     
     if (exp >= 100) {
         c: i32 = exp % 10;
-        result[cast(i32) index + 0] = DIGIT_TABLE[2 * (exp / 10) +0];
-        result[cast(i32) index + 1] = DIGIT_TABLE[2 * (exp / 10) +1];
+        result[index + 0] = DIGIT_TABLE[2 * (exp / 10) +0];
+        result[index + 1] = DIGIT_TABLE[2 * (exp / 10) +1];
         result[index + 2] = (u8) ('0' + c);
         index += 3;
     } else if (exp >= 10) {
-        result[cast(i32) index + 0] = DIGIT_TABLE[2 * exp +0];
-        result[cast(i32) index + 1] = DIGIT_TABLE[2 * exp +1];
+        result[index + 0] = DIGIT_TABLE[2 * exp +0];
+        result[index + 1] = DIGIT_TABLE[2 * exp +1];
         index += 2;
     } else {
         result[index] = (u8) ('0' + exp);

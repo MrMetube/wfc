@@ -39,6 +39,14 @@ view_percentage_ratio :: proc(value: $F) -> (result: View) {
     return result
 }
 
+view_variable :: proc (value: $T, middle := " = ", expression := #caller_expression(value)) -> (Temp_Views) {
+    begin_temp_views()
+    append_temp_view(view_string(expression))
+    append_temp_view(view_string(middle))
+    append_temp_view(view_integer(value))
+    return end_temp_views()
+}
+
 ////////////////////////////////////////////////
 // @todo(viktor): multi magnitude support, 10 Billion 583 Million 699 Thousand 496 and whatever
 // @todo(viktor): should there be a view_debug which shows all the types instead of that being a flag on the format_context?
@@ -81,7 +89,7 @@ Time_Unit :: enum {
     hours        = 5,
 }
 
-view_magnitude :: proc (value: $T, table: [] Magnitude (T), scale, limit: int, precision: u8 = 0) -> (result: TempViews) {
+view_magnitude :: proc (value: $T, table: [] Magnitude (T), scale, limit: int, precision: u8 = 0) -> (result: Temp_Views) {
     begin_temp_views()
     section := table[scale:limit]
     
@@ -192,14 +200,14 @@ units_table := [?] Magnitude (f64) {
 ////////////////////////////////////////////////
 // Time
 
-view_memory_size :: proc (value: umm, scale := Memory.bytes, limit := Memory.exabytes, precision: u8 = 0) -> (result: TempViews) {
+view_memory_size :: proc (value: umm, scale := Memory.bytes, limit := Memory.exabytes, precision: u8 = 0) -> (result: Temp_Views) {
     return view_magnitude(value, bytes_table[:], cast(int) scale, cast(int) limit, precision)
 }
-view_time_duration :: proc (value: time.Duration, scale := Time_Unit.nanoseconds, limit := Time_Unit.hours, precision: u8 = 0) -> (result: TempViews) {
+view_time_duration :: proc (value: time.Duration, scale := Time_Unit.nanoseconds, limit := Time_Unit.hours, precision: u8 = 0) -> (result: Temp_Views) {
     return view_magnitude(value, seconds_table[:], cast(int) scale, cast(int) limit, precision)
 }
 
-view_time :: proc (value: time.Time) -> (result: TempViews) {
+view_time :: proc (value: time.Time) -> (result: Temp_Views) {
     t := value
     y, mon, d := time.date(t)
     h, min, s := time.clock(t)
@@ -235,7 +243,7 @@ view_time :: proc (value: time.Time) -> (result: TempViews) {
 
 ////////////////////////////////////////////////
 
-view_source_code_location :: proc(value: runtime.Source_Code_Location) -> (result: TempViews) {
+view_source_code_location :: proc(value: runtime.Source_Code_Location) -> (result: Temp_Views) {
     begin_temp_views()
     
     append_temp_view(view_string(value.file_path))

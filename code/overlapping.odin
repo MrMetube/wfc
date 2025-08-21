@@ -289,7 +289,7 @@ restart :: proc (c: ^Collapse) {
             
             print("Restart: initialize states % %% \r", view_percentage(cell_index, len(grid)))
         }
-        println("Restart: initialize states done           ")
+        print("Restart: initialize states done           \n")
     }
     
     {
@@ -310,7 +310,7 @@ restart :: proc (c: ^Collapse) {
             }
             print("Restart: initialize support % %% \r", view_percentage(cell_index, len(grid)))
         }
-        println("Restart: initialize support done           ")
+        print("Restart: initialize support done           \n")
     }
     
     {
@@ -327,7 +327,7 @@ restart :: proc (c: ^Collapse) {
         }
     }
         
-    println("Restart: Done")
+    print("Restart: Done\n")
 }
 
 extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
@@ -362,8 +362,7 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
             
             print("Extraction: State extraction % %%\r", view_percentage(by, height))
         }
-        println("Extraction: State extraction done: %        ", view_time_duration(time.since(start), precision = 3))
-        println("Test 1 nano with precision%        ", view_time_duration(1, precision = 3))
+        print("Extraction: State extraction done: %        \n", view_time_duration(time.since(start), precision = 3))
     }
     // 1.3s  | 6.7s
     // 1.2s  | 6.1s
@@ -395,7 +394,7 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
             
         }
         
-        println("Extraction: Supports generation done: %       ", view_time_duration(time.since(start), precision = 3))
+        print("Extraction: Supports generation done: %       \n", view_time_duration(time.since(start), precision = 3))
     }
     
     {
@@ -422,5 +421,5 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
         }
     }
     
-    println("Extraction: Done")
+    print("Extraction: Done\n")
 }
