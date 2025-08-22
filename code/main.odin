@@ -2,7 +2,6 @@ package main
 
 import "core:os/os2"
 import "core:strings"
-import slices "core:slice"
 import "core:time"
 
 import rl "vendor:raylib"
@@ -58,7 +57,7 @@ Color_Group :: struct {
 
 grid_background_color := DarkGreen
 
-dimension: v2i = {15, 15}
+dimension: v2i = {40, 40}
 
 File :: struct {
     data:    [] u8,
@@ -79,8 +78,11 @@ Direction :: enum {
     East, North, West, South,
 }
 
-search_mode   := Search_Mode.Metric
 search_metric := Search_Metric.Entropy
+
+////////////////////////////////////////////////
+
+Neighbour_Threshold: f32 = 1.2
 
 ////////////////////////////////////////////////
 
@@ -107,6 +109,8 @@ Task :: enum {
 }
 
 main :: proc () {
+    unused(screen_to_world)
+    
     rl.SetTraceLogLevel(.WARNING)
     rl.InitWindow(Screen_Size.x, Screen_Size.y, "Wave Function Collapse")
     rl.SetTargetFPS(TargetFps)
@@ -144,7 +148,7 @@ main :: proc () {
 
     entropy := seed_random_series(7458)
     collapse: Collapse
-    triangles: [] Triangle
+    triangles: [] [3] v2
     setup_grid(&collapse, dimension, dimension, &entropy, &arena, &triangles)
     this_frame.desired_N = N
     
@@ -165,8 +169,6 @@ main :: proc () {
         this_frame.old_grid = nil
         
         ui(&collapse, images)
-        sp := rl.GetMousePosition()
-        wp := screen_to_world(sp)
         
         ////////////////////////////////////////////////
         // Update 
@@ -251,8 +253,6 @@ main :: proc () {
         - limit sides to length of <= 1
         */
         
-        // rl.DrawRectangleRec(world_to_screen(rectangle_min_dimension(v2i{}, dimension)), v4_to_rl_color(grid_background_color))
-        
         for cell, index in grid {
             average := &average_colors[index]
             
@@ -290,58 +290,67 @@ main :: proc () {
         
         if viewing_group == nil {
             spall_begin("Render cells")
+            temp_points := make([dynamic] v2, context.temp_allocator)
             for cell, index in grid {
+                clear(&temp_points)
                 average := &average_colors[index]
                 
-                for tri in cell.triangles {
-                    rl.DrawTriangle(
-                        world_to_screen(vec_cast(f32, tri[0])),
-                        world_to_screen(vec_cast(f32, tri[1])),
-                        world_to_screen(vec_cast(f32, tri[2])),
-                        average.color
-                    )
-                    
+                for point in cell.triangle_points {
+                    append(&temp_points, world_to_screen(point))
+                }
+                if len(cell.triangle_points) < 2 do continue
+                append(&temp_points, world_to_screen(cell.triangle_points[1]))
+                rl.DrawTriangleFan(raw_data(temp_points), cast(i32) len(temp_points), average.color)
+                
+                // @todo(viktor): technically we draw every edge twice, once per adjoining cell
+                for p_index in 1..<len(temp_points)-1 {
                     rl.DrawLineV(
-                        world_to_screen(vec_cast(f32, tri[1])), 
-                        world_to_screen(vec_cast(f32, tri[2])),
-                        rl.BLACK
+                        temp_points[p_index],
+                        temp_points[p_index+1],
+                        rl.BLACK,
                     )
                 }
-                
-                // rect := world_to_screen(rectangle_min_dimension(cell.p, 1))
-                // radius := cell_size_on_screen * 0.5
-                // if average.states_count_when_computed == 1 {
-                //     rl.DrawCircleV(v2{rect.x, rect.y} + radius, radius, average.color)
-                // } else {
-                //     if render_wavefunction_as_average {
-                //         rl.DrawCircleV(v2{rect.x, rect.y} + radius, radius, average.color)
-                //     }
-                // }
             }
             spall_end()
             
             if show_triangulation {
+                color := v4_to_rl_color(Emerald) 
                 for tri in triangles {
-                    rl.DrawTriangleLines(
-                        world_to_screen(vec_cast(f32, tri[0])),
-                        world_to_screen(vec_cast(f32, tri[1])),
-                        world_to_screen(vec_cast(f32, tri[2])),
-                        v4_to_rl_color(Emerald)
-                    )
+                    a, b := tri[0], tri[1]
+                    if length_squared(b-a) < square(Neighbour_Threshold) {
+                        rl.DrawLineV(world_to_screen(a), world_to_screen(b), color)
+                    }
+                    
+                    a = tri[2]
+                    if length_squared(b-a) < square(Neighbour_Threshold) {
+                        rl.DrawLineV(world_to_screen(a), world_to_screen(b), color)
+                    }
+                    
+                    b = tri[0]
+                    if length_squared(b-a) < square(Neighbour_Threshold) {
+                        rl.DrawLineV(world_to_screen(a), world_to_screen(b), color)
+                    }
                 }
             }
             
             spall_begin("Render extra")
             if highlight_changes {
+                // @todo(viktor): we would need the whole cell here
                 for cell_p in changes {
-                    rec := world_to_screen(rectangle_min_dimension(vec_cast(f32, cell_p), 1))
-                    rl.DrawRectangleRec(rec, rl.ColorAlpha(rl.YELLOW, 0.4))
+                    // rec := world_to_screen(rectangle_min_dimension(cell_p, 1))
+                    // rl.DrawRectangleRec(rec, rl.ColorAlpha(rl.YELLOW, 0.4))
                 }
             }
             
             for cell in to_be_collapsed {
-                rect := world_to_screen(rectangle_min_dimension(vec_cast(f32, cell.p), 1))
-                rl.DrawRectangleRec(rect, rl.PURPLE)
+                clear(&temp_points)
+                
+                for point in cell.triangle_points {
+                    append(&temp_points, world_to_screen(point))
+                }
+                if len(cell.triangle_points) < 2 do continue
+                append(&temp_points, world_to_screen(cell.triangle_points[1]))
+                rl.DrawTriangleFan(raw_data(temp_points), cast(i32) len(temp_points), rl.PURPLE)
             }
         } else {
             spall_scope("View Neighbours")
@@ -353,13 +362,13 @@ main :: proc () {
                 ring_size := cell_size_on_screen * 3
                 ring_padding := 0.2 * ring_size
                 
-                max_support: f64
-                total_supports:= make([dynamic] f64, view_slices, context.temp_allocator)
+                max_support: f32
+                total_supports := make([dynamic] f32, view_slices, context.temp_allocator)
                 
-                turns := cast(f64) view_slices
+                turns := cast(f32) view_slices
                 for slice in 0..<view_slices {
-                    turn := cast(f64) slice
-                    turn += cast(f64) view_slice_start
+                    turn := cast(f32) slice
+                    turn += view_slice_start
                     
                     sampling_direction := arm(turn * Tau / turns)
                     
@@ -373,19 +382,19 @@ main :: proc () {
                 }
                 
                 for slice in 0..<view_slices {
-                    turn := cast(f64) slice
-                    turn += cast(f64) view_slice_start
+                    turn := cast(f32) slice
+                    turn += view_slice_start
                     
                     sampling_direction := arm(turn * Tau / turns)
                     
                     total_support := total_supports[slice]
-                    alpha := cast(f32) safe_ratio_0(total_support, max_support)
+                    alpha := safe_ratio_0(total_support, max_support)
                     color := rl.ColorAlpha(comparing_group.color, alpha)
                     
                     center := direction_to_angles(sampling_direction)
-                    width: f64 = 360. / turns
-                    start := cast(f32) (center - width * .5)
-                    stop  := cast(f32) (center + width * .5)
+                    width: f32 = 360. / turns
+                    start := center - width * .5
+                    stop  := center + width * .5
                     
                     inner := (center_size +  ring_size) + cast(f32) group_index * ring_size + ring_padding
                     outer := inner + ring_size
@@ -395,8 +404,8 @@ main :: proc () {
             }
             
             rl.DrawCircleV(p, center_size, viewing_group.color)
+            spall_end()
         }
-        spall_end()
         
         spall_end()
         
@@ -414,14 +423,13 @@ main :: proc () {
 generate_points :: proc(points: ^Array(v2d), count: u32) {
     side := round(u32, square_root(cast(f32) count))
     entropy := seed_random_series(123456789)
-    switch 4  {
+    switch -1  {
       case -1:
         for x in 0 ..< side {
             for y in 0 ..< side {
                 p := vec_cast(f64, x, y) / cast(f64) side
                 p += random_bilateral(&entropy, v2d) * (0.05 / cast(f64) side)
                 p = clamp(p, 0, 1)
-                // p = rectangle_modulus(rectangle_min_dimension(v2{}, 1), p)
                 append(points, p)
             }
         }
@@ -465,7 +473,7 @@ generate_points :: proc(points: ^Array(v2d), count: u32) {
 }
 
 
-setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^RandomSeries, arena: ^Arena, triangles: ^[] Triangle) {
+setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^RandomSeries, arena: ^Arena, triangles: ^[] [3] v2) {
     dimension = new_dimension // @todo(viktor): this is a really stupid idea
     
     ratio := vec_cast(f32, Screen_Size) / vec_cast(f32, new_dimension+10)
@@ -476,110 +484,58 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^R
     }
     
     area := new_dimension.x * new_dimension.y
+    delete(average_colors)
+    make(&average_colors, area)
+    
     points := make_array(arena, v2d, area)
     generate_points(&points, cast(u32) area)
-    dt: DelauneyTriangulation
+    
+    dt: Delauney_Triangulation
     begin_triangulation(&dt, arena, slice(points))
     complete_triangulation(&dt)
-    triangles ^= end_triangulation(&dt)
+    voronoi_cells := end_triangulation_voronoi_cells(&dt)
     
-    for &triangle in triangles {
-        for &point in triangle {
-            point *= vec_cast(f64, dimension)
+    triangles_double := end_triangulation(&dt)
+    make(triangles, len(triangles_double))
+    for &it, index in triangles {
+        for &p, p_index in it {
+            pd := triangles_double[index][p_index] * vec_cast(f64, dimension)
+            p = vec_cast(f32, pd)
         }
     }
     
-    point_to_tris := make(map[v2d] [dynamic] ^Triangle, context.temp_allocator)
-    for &triangle in triangles {
-        for point in triangle {
-            if point not_in point_to_tris {
-                point_to_tris[point] = make([dynamic] ^Triangle, context.temp_allocator)
-            }
-            tris := &point_to_tris[point]
-            
-            found: bool
-            for it in tris do if it == &triangle {
-                found = true
-                break
-            }
-            
-            if !found {
-                append(tris, &triangle)
-            }
-        }
-    }
-    
-    Foo :: struct { center, point: v2d}
-    centers := make([dynamic] Foo, context.temp_allocator)
-    for point, tris in point_to_tris {
-        clear(&centers)
-        
-        for triangle in tris {
-            append(&centers, Foo {circum_circle(triangle^).center, point})
-        }
-
-        // Sort centers counterclockwise around `point`
-        slices.sort_by(centers[:], proc(a: Foo, b: Foo) -> bool {
-            angle_a := atan2(a.center.y - a.point.y, a.center.x - a.point.x)
-            angle_b := atan2(b.center.y - b.point.y, b.center.x - b.point.x)
-            return angle_a < angle_b
-        })
-        
+    for it in voronoi_cells {
         cell: Cell
-        cell.p = point
+        cell.p = vec_cast(f32, it.center * vec_cast(f64, dimension))
         cell.collapsed = false
         
         delete(cell.states)
         make(&cell.states, len(c.states))
         for &it, index in cell.states do it = cast(State_Id) index
         
-        cell.triangles = make([dynamic] Triangle)
-        for i in 0..<len(centers) {
-            a := centers[i]
-            b := centers[(i + 1) % len(centers)]
-            append(&cell.triangles, Triangle{point, a.center, b.center})
+        make(&cell.triangle_points, 0, len(it.points)+1)
+        append(&cell.triangle_points, cell.p)
+        
+        for point in it.points {
+            p := vec_cast(f32, point * vec_cast(f64, dimension))
+            append(&cell.triangle_points, p)
         }
         
         append(&grid, cell)
     }
     
-    point_to_cell := make(map[v2d] ^Cell, context.temp_allocator)
-    for i in 0..<len(grid) {
-        point_to_cell[grid[i].p] = &grid[i]
-    }
-
-    neighbour_set := make(map[v2d] bool, context.temp_allocator)
-    for point, tris in point_to_tris {
-        clear(&neighbour_set)
-        
-        cell := point_to_cell[point]
-        
-        for triangle in tris {
-                for vertex in triangle {
-                if vertex != point {
-                    neighbour_set[vertex] = true
-                }
+    for &cell, index in grid {
+        voronoi := voronoi_cells[index]
+        for neighbour_index in voronoi.neighbour_indices {
+            neighbour: Neighbour
+            neighbour.cell = &grid[neighbour_index]
+            neighbour.to_neighbour = neighbour.cell.p - cell.p
+            // @todo(viktor): what should this threshold be?
+            if length(neighbour.to_neighbour) <= Neighbour_Threshold {
+                append(&cell.neighbours, neighbour)
             }
         }
-
-        for neighbour_point in neighbour_set {
-            neighbour := Neighbour {
-                cell = point_to_cell[neighbour_point],
-                to_neighbour = neighbour_point - point,
-                
-            }
-            append(&cell.neighbours, neighbour)
-        }
     }
-    
-    for cell in grid {
-        for neighbour in cell.neighbours {
-            assert(neighbour.cell != nil)
-        }
-    }
-    
-    delete(average_colors)
-    make(&average_colors, area)
 }
 
 world_to_screen :: proc { world_to_screen_rec, world_to_screen_vec, world_to_screen_v2i }

@@ -79,27 +79,15 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
     imgui.checkbox("Show triangles", &show_triangulation)
     imgui.checkbox("Highlight changing cells", &highlight_changes)
     
-    modes := [Search_Mode] string {
-        .Scanline = "top to bottom, left to right",
-        .Metric   = "search by a metric",
-    }
     metrics := [Search_Metric] string {
         .States  = "fewest possible states",
         .Entropy = "lowest entropy",
     }
-    for text, mode in modes {
-        if imgui.radio_button(text, mode == search_mode) {
-            search_mode = mode
+    imgui.text("Search Metric")
+    for text, metric in metrics {
+        if imgui.radio_button(text, metric == search_metric) {
+            search_metric = metric
         }
-    }
-    if search_mode == .Metric {
-        imgui.tree_push("Metric")
-        for text, metric in metrics {
-            if imgui.radio_button(text, metric == search_metric) {
-                search_metric = metric
-            }
-        }
-        imgui.tree_pop()
     }
     
     imgui.begin("Viewing")

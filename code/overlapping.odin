@@ -9,8 +9,8 @@ grid: [dynamic] Cell
 to_be_collapsed: [dynamic] ^Cell
 
 Cell :: struct {
-    p: v2d, 
-    triangles: [dynamic] Triangle, 
+    p: v2, 
+    triangle_points: [dynamic] v2,
     
     collapsed:       bool,
     collapsed_state: State_Id,
@@ -23,8 +23,8 @@ Cell :: struct {
 
 Neighbour :: struct {
     cell:         ^Cell,
-    to_neighbour: v2d,
-    support:      [/* State_Id */] f64,
+    to_neighbour: v2,
+    support:      [/* State_Id */] f32,
 }
 
 Update_State :: enum {
@@ -38,7 +38,7 @@ Update_State :: enum {
 update_state: Update_State
 
 // @todo(viktor): its nice that its constant time lookup but the arbitrary order when iterating is worse
-changes: map[v2d] Change
+changes: map[v2] Change
 init_cell_index: int
 
 
@@ -49,7 +49,7 @@ Change :: struct {
 
 Support :: struct {
     id:     State_Id,
-    amount: [Direction] f64,
+    amount: [Direction] f32,
 }
 
 Wave_Support :: struct {
@@ -122,40 +122,30 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
         cells: [] ^Cell
         reached_end := true
         found_invalid := false
-        switch search_mode {
-            case .Scanline:
-            scan: for &cell in grid do if !cell.collapsed {
-                cells = { &cell }
-                reached_end = false
-                break scan
-            }
-            
-            case .Metric:
-            minimal: Search
-            init_search(&minimal, c, search_metric, context.temp_allocator)
-            
-            loop: for &cell, index in grid {
-                if !cell.collapsed {
-                    switch test_search_cell(&minimal, &cell) {
-                        case .Continue: // nothing
-                        case .Done:     break loop
-                        
-                        case .Found_Invalid: 
-                        found_invalid = true
-                        break loop
-                    }
+        minimal: Search
+        init_search(&minimal, c, search_metric, context.temp_allocator)
+        
+        loop: for &cell, index in grid {
+            if !cell.collapsed {
+                switch test_search_cell(&minimal, &cell) {
+                    case .Continue: // nothing
+                    case .Done:     break loop
+                    
+                    case .Found_Invalid: 
+                    found_invalid = true
+                    break loop
                 }
-                
-                reached_end = index == len(grid)-1
             }
             
-            
-            if found_invalid {
-                result = .FoundContradiction
-                unreachable()
-            } else {
-                cells = minimal.cells[:]
-            }
+            reached_end = index == len(grid)-1
+        }
+        
+        
+        if found_invalid {
+            result = .FoundContradiction
+            unreachable()
+        } else {
+            cells = minimal.cells[:]
         }
         
         if len(cells) > 0 {
@@ -302,7 +292,7 @@ remove_state :: proc (c: ^Collapse, cell: ^Cell, removed_state: State_Id) {
         make(&change.removed_supports, len(c.states))
     }
 
-    if false do for neighbour in cell.neighbours {
+    when false do for neighbour in cell.neighbours {
         if neighbour.cell.collapsed do continue
         
         direction_from_neighbour := -neighbour.to_neighbour
@@ -313,7 +303,7 @@ remove_state :: proc (c: ^Collapse, cell: ^Cell, removed_state: State_Id) {
             removed_support.id = support.id
             
             amount := get_support_amount_(support, closeness)
-            // removed_support.amount[neighbour.to_neighbour_in_grid] += amount
+            removed_support.amount[neighbour.to_neighbour_in_grid] += amount
             unimplemented()
         }
     }

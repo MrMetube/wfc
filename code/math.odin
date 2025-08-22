@@ -228,11 +228,12 @@ distance :: proc (to: $T, from: T) -> (result: T) {
     return abs(a - b)
 }
 
-sin :: math.sin
-cos :: math.cos
-acos  :: math.acos
-atan2 :: math.atan2
 log2 :: math.log2
+sin  :: math.sin
+cos  :: math.cos
+acos :: math.acos
+atan2     :: proc { math.atan2_f64, math.atan2_f32, atan2_vec }
+atan2_vec :: proc (v: [2] $T) -> (result: T) { return math.atan2(v.y, v.x) }
 
 ////////////////////////////////////////////////
 // Vector operations

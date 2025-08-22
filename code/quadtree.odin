@@ -2,36 +2,37 @@ package main
 
 Rectangle2d :: Rectangle([2] f64)
 
-QuadTree :: struct ($D: typeid) {
-    root:      QuadNode(D),
+Quad_Tree :: struct ($D: typeid) {
+    root:      Quad_Node(D),
     max_depth: i32,
     arena:     ^Arena,
     
-    first_free_entry: ^QuadEntry(D),
+    first_free_entry: ^Quad_Entry(D),
 }
 
-QuadNode :: struct ($D: typeid) {
-    parent:   ^QuadNode(D),
-    children: ^[4]QuadNode(D),
-    order:    QuadOrder,
+Quad_Node :: struct ($D: typeid) {
+    parent:   ^Quad_Node(D),
+    children: ^[4]Quad_Node(D),
+    order:    Quad_Order,
     bounds:   Rectangle2d,
-    sentinel: QuadEntry(D),
+    sentinel: Quad_Entry(D),
 }
 
-QuadOrder :: enum {
+Quad_Order :: enum {
     ClockwiseFromBottom,
     CounterclockwiseFromBottom,
     ClockwiseFromTop,
     CounterclockwiseFromTop,
 }
 
-QuadEntry :: struct ($D: typeid) {
+Quad_Entry :: struct ($D: typeid) {
     data: D,
-    prev: ^QuadEntry(D),
-    next: ^QuadEntry(D),
+    prev: ^Quad_Entry(D),
+    next: ^Quad_Entry(D),
 }
 
-init_quad_tree :: proc (tree: ^QuadTree($D), arena: ^Arena, bounds: Rectangle2d, max_depth: i32 = 16) {
+init_quad_tree :: proc (tree: ^Quad_Tree($D), arena: ^Arena, bounds: Rectangle2d, max_depth: i32 = 16) {
+    spall_proc()
     tree.arena = arena
     
     tree.root.bounds = bounds
@@ -42,31 +43,35 @@ init_quad_tree :: proc (tree: ^QuadTree($D), arena: ^Arena, bounds: Rectangle2d,
     tree.max_depth = max_depth
 }
 
-quad_test :: proc(tree: ^QuadTree($D), bounds: Rectangle2d) -> (result: ^QuadNode(D)) { 
+quad_test :: proc(tree: ^Quad_Tree($D), bounds: Rectangle2d) -> (result: ^Quad_Node(D)) { 
+    spall_proc()
     result = quad_op(tree, &tree.root, D{}, bounds, tree.max_depth, .Test)
     if result == nil {
         result = &tree.root
     }
     return result
 }
-quad_insert :: proc(tree: ^QuadTree($D), node: ^QuadNode(D), data: D, bounds: Rectangle2d) -> (result: ^QuadNode(D)) { 
+quad_insert :: proc(tree: ^Quad_Tree($D), node: ^Quad_Node(D), data: D, bounds: Rectangle2d) -> (result: ^Quad_Node(D)) { 
+    spall_proc()
     result = quad_op(tree, node, data, bounds, tree.max_depth, .Insert)
     if result == nil {
         result = &tree.root
-        link := list_pop_head(&tree.first_free_entry) or_else push(tree.arena, QuadEntry(D))
+        link := list_pop_head(&tree.first_free_entry) or_else push(tree.arena, Quad_Entry(D))
         link ^= { data = data }
         list_prepend(&result.sentinel, link)
     }
     return result
 }
 
-quad_op :: proc(tree: ^QuadTree($D), node: ^QuadNode(D), data: D, bounds: Rectangle2d, max_depth: i32, $op: enum { Test, Insert }) -> (result: ^QuadNode(D)) {
+quad_op :: proc(tree: ^Quad_Tree($D), node: ^Quad_Node(D), data: D, bounds: Rectangle2d, max_depth: i32, $op: enum { Test, Insert }) -> (result: ^Quad_Node(D)) {
     if max_depth >= 0 && contains_rect(node.bounds, bounds) {
-        b_dim := get_dimension(bounds)
-        dim := get_dimension(node.bounds) * 0.5
-        when op == .Insert do if (b_dim.x < dim.x && b_dim.y < dim.y) {
-            if node.children == nil {
-                quad_init_children(tree, node)
+        when op == .Insert {
+            b_dim := get_dimension(bounds)
+            dim := get_dimension(node.bounds) * 0.5
+            if (b_dim.x < dim.x && b_dim.y < dim.y) {
+                if node.children == nil {
+                    quad_init_children(tree, node)
+                }
             }
         }
         
@@ -80,7 +85,7 @@ quad_op :: proc(tree: ^QuadTree($D), node: ^QuadNode(D), data: D, bounds: Rectan
         if result == nil {
             result = node
             when op == .Insert {
-                link := list_pop_head(&tree.first_free_entry) or_else push(tree.arena, QuadEntry(D))
+                link := list_pop_head(&tree.first_free_entry) or_else push(tree.arena, Quad_Entry(D))
                 link ^= { data = data }
                 list_prepend(&result.sentinel, link)
             }
@@ -96,7 +101,8 @@ quad_op :: proc(tree: ^QuadTree($D), node: ^QuadNode(D), data: D, bounds: Rectan
     The 2nd and 3rd child always keep their parents order.
     The 1st and 4th child change the order based on their parents order.
  */
-quad_init_children :: proc (tree: ^QuadTree($D), node: ^QuadNode(D)) {
+quad_init_children :: proc (tree: ^Quad_Tree($D), node: ^Quad_Node(D)) {
+    spall_proc()
     node.children = push_struct(tree.arena, type_of(node.children^))
     
     dim := get_dimension(node.bounds) * 0.5
@@ -113,7 +119,7 @@ quad_init_children :: proc (tree: ^QuadTree($D), node: ^QuadNode(D)) {
         case .CounterclockwiseFromTop:    sub_rects = {tr, tl, bl, br}
     }
     
-    first_child, last_child: QuadOrder = ---, ---
+    first_child, last_child: Quad_Order = ---, ---
     switch node.order {
         case .ClockwiseFromBottom:        first_child, last_child = .CounterclockwiseFromBottom, .CounterclockwiseFromTop
         case .CounterclockwiseFromBottom: first_child, last_child = .ClockwiseFromBottom, .ClockwiseFromTop
@@ -131,5 +137,4 @@ quad_init_children :: proc (tree: ^QuadTree($D), node: ^QuadNode(D)) {
     node.children[1].order = node.order
     node.children[2].order = node.order
     node.children[3].order = last_child
-    
 }
