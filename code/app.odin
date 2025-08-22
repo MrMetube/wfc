@@ -53,7 +53,8 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
         imgui.text(tprint("Total time %",  view_time_duration(total_duration, precision = 3)))
     } else {
         if update_state == .Initialize_Supports {
-            imgui.text_unformatted(tprint("Restart: % %%", view_percentage(init_cell_index, len(grid))))
+            percent := view_percentage(init_cell_index, len(grid))
+            imgui.text_unformatted(tprint("Restart: % %%", percent))
         }
         
     }
@@ -77,7 +78,6 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
     imgui.checkbox("Average Color", &render_wavefunction_as_average)
     imgui.checkbox("Show triangles", &show_triangulation)
     imgui.checkbox("Highlight changing cells", &highlight_changes)
-    imgui.checkbox("Overlay drawing", &highlight_drawing)
     
     modes := [Search_Mode] string {
         .Scanline = "top to bottom, left to right",
@@ -102,29 +102,6 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
         imgui.tree_pop()
     }
     
-    imgui.begin("Drawing")
-        if imgui.button("Clear drawing") {
-            this_frame.tasks += { .clear_drawing }
-        }
-        
-        if imgui.radio_button("Erase", selected_group == nil) {
-            selected_group = nil
-        }
-        
-        imgui.columns(2)
-        for &group, index in draw_groups {
-            selected := &group == selected_group
-            if imgui.radio_button(tprint("%", index), selected) {
-                selected_group = &group
-            }
-            imgui.next_column()
-            
-            imgui.color_button("", rl_color_to_v4(group.color), flags = color_edit_flags_just_display)
-            imgui.next_column()
-        }
-        imgui.columns()
-    imgui.end()
-    
     imgui.begin("Viewing")
         if viewing_group != nil {
             if imgui.button("Stop viewing") {
@@ -137,7 +114,7 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
         imgui.next_column()
         imgui.text("Neighbour")
         imgui.next_column()
-        for &group, index in draw_groups {
+        for &group, index in color_groups {
             {
                 selected := &group == viewing_group
                 if imgui.radio_button(tprint("v%", index), selected) {
@@ -166,22 +143,4 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
         }
         
     imgui.end()
-}
-
-clear_draw_board :: proc () {
-    for &it in draw_board do it = nil
-}
-
-restrict_cell_to_drawn :: proc (c: ^Collapse, p: v2i, group: ^Draw_Group) {
-    selected := group.ids
-    
-    cell := &grid[p.x + p.y * dimension.x]
-    if !cell.collapsed {
-        for id in cell.states {
-            is_selected:= selected[id]
-            if !is_selected {
-                remove_state(c, cell, id)
-            }
-        }
-    }
 }

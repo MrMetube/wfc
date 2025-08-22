@@ -2,15 +2,6 @@ package main
 
 import "core:time"
 
- /*
- * if we ignore even N values then the difference between overlapping and tiled mode is:
- * overlapping: tiles match on a side if N-1 rows/columns match
- * tiled:       tiles match on a side if   1 row/column matches
- * 
- * overlapping: extract NxN at every pixel
- * tiled:       extract NxN at every N-th pixel
-*/
-
 N: i32 = 3
 
 grid: [dynamic] Cell
@@ -39,7 +30,6 @@ Neighbour :: struct {
 Update_State :: enum {
     Initialize_States,
     Initialize_Supports,
-    Enforce_Drawing,
     
     Search_Cells,
     Collapse_Cells,
@@ -120,24 +110,10 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
             init_cell_index += 1
         } else {
             init_cell_index = 0
-            update_state = .Enforce_Drawing
+            update_state = .Search_Cells
+            print("Restart: Done\n")
         }
-        
-      case .Enforce_Drawing:
-        spall_scope("Restart: enforce drawing")
-        // @todo(viktor): why dont we just use this as the initial value above?
-        for y in 0..<dimension.y {
-            for x in 0..<dimension.x {
-                group := draw_board[x + y * dimension.x]
-                if group != nil {
-                    restrict_cell_to_drawn(c, {x, y}, group)
-                    drawing_initializing = true
-                }
-            }
-        }
-        update_state = .Search_Cells
-        print("Restart: Done\n")
-        
+                
       case .Search_Cells:
         // Find next cell to be collapsed 
         assert(len(to_be_collapsed) == 0)
@@ -245,7 +221,6 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
         
         if len(changes) == 0 {
             update_state = .Search_Cells
-            drawing_initializing = false
         } else {
             changed: Change
             for k, v in changes {
@@ -349,13 +324,11 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
     
     reset_collapse(c)
     
-    for &group in draw_groups {
+    for &group in color_groups {
         delete(group.ids)
     }
-    clear(&draw_groups)
-    selected_group  = nil
+    clear(&color_groups)
     viewing_group   = nil
-    clear_draw_board()
     
     // @incomplete: Allow for rotations and mirroring here
     {
@@ -412,13 +385,13 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
     }
     
     {
-        spall_scope("Extraction: Draw Groups grouping")
+        spall_scope("Extraction: Color Groups")
         for state in c.states {
             color_id := state.values[N/2 + N/2 * N] // middle
             color := c.values[color_id]
             
-            group: ^Draw_Group
-            for &it in draw_groups {
+            group: ^Color_Group
+            for &it in color_groups {
                 if it.color == color {
                     group = &it
                     break
@@ -426,8 +399,8 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
             }
             
             if group == nil {
-                append(&draw_groups, Draw_Group { color = color })
-                group = &draw_groups[len(draw_groups)-1]
+                append(&color_groups, Color_Group { color = color })
+                group = &color_groups[len(color_groups)-1]
                 make(&group.ids, len(c.states))
             }
             

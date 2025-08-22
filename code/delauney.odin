@@ -93,12 +93,10 @@ triangulation_append :: proc (dt: ^DelauneyTriangulation, index: TriIndex, trian
     dt.triangle_count += 1
 }
 
-complete_triangulation :: proc (dt: ^DelauneyTriangulation) -> (triangles: [] Triangle) {
+complete_triangulation :: proc (dt: ^DelauneyTriangulation) {
     for dt.point_index < auto_cast len(dt.points) {
         step_triangulation(dt)
     }
-    triangles = end_triangulation(dt)
-    return triangles
 }
 
 step_triangulation :: proc(dt: ^DelauneyTriangulation) {
@@ -190,10 +188,10 @@ collect_points :: proc (node: ^QuadNode(v2d), dest: ^Array(v2d)) {
     }
 }
 
-collect_triangles :: proc (node: ^QuadNode(WorkTriangle), dest: ^Array(Triangle), points: []v2d) {
+collect_triangles :: proc (node: ^QuadNode(WorkTriangle), dest: ^Array(Triangle), points: []v2d, dt: ^DelauneyTriangulation) {
     if node.children != nil {
         for &child in node.children {
-            collect_triangles(&child, dest, points)
+            collect_triangles(&child, dest, points, dt)
         }
     }
     
@@ -203,19 +201,20 @@ collect_triangles :: proc (node: ^QuadNode(WorkTriangle), dest: ^Array(Triangle)
         next := link.next
         defer link = next
         
-        contains_vertex: b32
+        contains_vertex_of_super_triangle: b32
         check: for index in link.data.triangle {
             if index < 0 {
-                contains_vertex = true
+                contains_vertex_of_super_triangle = true
                 break check
             }
         }
         
-        if !contains_vertex {
+        if !contains_vertex_of_super_triangle {
+            index := link.data.triangle
             tri := Triangle {
-                points[link.data.triangle[0]],
-                points[link.data.triangle[1]],
-                points[link.data.triangle[2]],
+                points[index[0]],
+                points[index[1]],
+                points[index[2]],
             }
             append(dest, tri)
         }
@@ -225,7 +224,7 @@ collect_triangles :: proc (node: ^QuadNode(WorkTriangle), dest: ^Array(Triangle)
 end_triangulation :: proc(dt: ^DelauneyTriangulation) -> ([]Triangle) {
     buffer := make_array(dt.arena, Triangle, dt.triangle_count)
     
-    collect_triangles(&dt.tree.root, &buffer, dt.points)
+    collect_triangles(&dt.tree.root, &buffer, dt.points, dt)
     
     return slice(buffer)
 }

@@ -5,8 +5,6 @@ import "core:strings"
 import slices "core:slice"
 import "core:time"
 
-// @todo(viktor): Minesweeper fields should be possible to generate if you also count diagonal edges in the extraction
-
 import rl "vendor:raylib"
 import imgui "../lib/odin-imgui/"
 import rlimgui "../lib/odin-imgui/examples/raylib"
@@ -49,36 +47,18 @@ Average_Color :: struct {
 
 show_triangulation := false
 render_wavefunction_as_average := true
-highlight_drawing := true
 highlight_changes := false
 
-textures_length: int
-textures_and_images: [dynamic] struct {
-    image:   rl.Image,
-    texture: rl.Texture,
-}
-
-Draw_Group :: struct {
+viewing_group: ^Color_Group
+color_groups:  [dynamic] Color_Group
+Color_Group :: struct {
     color: rl.Color,
     ids:   [/* State_Id */] b32,
 }
 
-brush_size_speed: f32 = 60
-brush_size: f32 = 2
-d_brush_size: f32 = 0
-dd_brush_size: f32 = 0
-
-viewing_group:   ^Draw_Group
-
 grid_background_color := DarkGreen
 
-// @todo(viktor): Rethink this api now that I kinda know what I want to be able to do. Can it be done with tasks?
-drawing_initializing: b32
-selected_group: ^Draw_Group
-draw_board:     [] ^Draw_Group
-draw_groups:    [dynamic] Draw_Group
-
-dimension: v2i = {20, 20}
+dimension: v2i = {15, 15}
 
 File :: struct {
     data:    [] u8,
@@ -122,7 +102,6 @@ Frame :: struct {
 Task :: enum {
     resize_grid, 
     extract_states, 
-    clear_drawing, 
     restart, 
     update,
 }
@@ -189,57 +168,6 @@ main :: proc () {
         sp := rl.GetMousePosition()
         wp := screen_to_world(sp)
         
-        if viewing_group == nil {
-            dd_brush_size = -rl.GetMouseWheelMove() * min(300, brush_size_speed * brush_size)
-            d_brush_size += dd_brush_size * rl.GetFrameTime()
-            d_brush_size += -d_brush_size * rl.GetFrameTime() * 10
-            brush_size += d_brush_size * rl.GetFrameTime()
-            brush_size = clamp(brush_size, 0.3, 10)
-        
-            if dimension_contains(dimension, wp) {
-                if rl.IsMouseButtonDown(.LEFT) {
-                    this_frame.tasks -= { .update }
-                    
-                    diameter := max(1, ceil(i32, brush_size*2))
-                    area := rectangle_center_dimension(wp, diameter)
-                    for y in area.min.y..<area.max.y {
-                        for x in area.min.x..<area.max.x {
-                            p := v2i{x, y}
-                            if dimension_contains(dimension, p) && length_squared(p - wp) <= square(diameter/2) {
-                                index := x + y * dimension.x
-                                draw_board[index] = selected_group
-                                if selected_group != nil {
-                                    restrict_cell_to_drawn(&collapse, p, selected_group)
-                                } else {
-                                    print("unimplemented\n")
-                                    // //  @copypasta from restart
-                                    // // @todo(viktor): :Constrained the current implementation does not consider existing constraints
-                                    // cell := &grid[index]
-                                    // wave, ok := &cell.value.(Wave)
-                                    // if ok {
-                                    //     delete(wave.supports)
-                                    // } else {
-                                    //     cell.value = Wave  {}
-                                    //     wave = &cell.value.(Wave)
-                                    // }
-                                    
-                                    // make(&wave.supports, len(collapse.states))
-                                    // for &it, index in wave.supports {
-                                    //     it.id = cast(State_Id) index
-                                    //     for &amount, direction in it.amount {
-                                    //         amount = maximum_support[direction][it.id]
-                                    //     }
-                                    // }
-                                    
-                                    // delete_key(&changes, p)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
         ////////////////////////////////////////////////
         // Update 
         update_start: time.Time
@@ -265,13 +193,6 @@ main :: proc () {
                 N = this_frame.desired_N
                 extract_states(&collapse, this_frame.pixels, this_frame.pixels_dimension.x, this_frame.pixels_dimension.y)
                     
-                this_frame.tasks += { .restart, .clear_drawing }
-            }
-            
-            if .clear_drawing in this_frame.tasks {
-                this_frame.tasks -= { .clear_drawing }
-                
-                clear_draw_board()
                 this_frame.tasks += { .restart }
             }
             
@@ -411,21 +332,6 @@ main :: proc () {
             }
             
             spall_begin("Render extra")
-            // @todo(viktor): actually use cell.p and draw circles or something
-            if highlight_drawing {
-                for y in 0..<dimension.y {
-                    for x in 0..<dimension.x {
-                        index := x + y * dimension.x
-                        drawn := draw_board[index]
-                        if drawn != nil {
-                            p := world_to_screen(v2i{x, y})
-                            rect := rectangle_min_dimension(p, cell_size_on_screen)
-                            rl.DrawRectangleRec(to_rl_rectangle(rect), rl.ColorAlpha(drawn.color, 0.7))
-                        }
-                    }
-                }
-            }
-            
             if highlight_changes {
                 for cell_p in changes {
                     rec := world_to_screen(rectangle_min_dimension(vec_cast(f32, cell_p), 1))
@@ -437,22 +343,13 @@ main :: proc () {
                 rect := world_to_screen(rectangle_min_dimension(vec_cast(f32, cell.p), 1))
                 rl.DrawRectangleRec(rect, rl.PURPLE)
             }
-            
-            if dimension_contains(dimension, wp) {
-                wsp := world_to_screen(wp)
-                rect := rl.Rectangle {wsp.x, wsp.y, cell_size_on_screen, cell_size_on_screen}
-                
-                color := selected_group == nil ? rl.RAYWHITE : selected_group.color
-                rl.DrawRectangleRec(rect, color)
-                rl.DrawCircleLinesV(sp,   brush_size * cell_size_on_screen, rl.YELLOW)
-            }
         } else {
             spall_scope("View Neighbours")
             center := get_center(rectangle_min_dimension(v2i{}, dimension))
             p := world_to_screen(center)
             
             center_size := cell_size_on_screen*3
-            for comparing_group, group_index in draw_groups {
+            for comparing_group, group_index in color_groups {
                 ring_size := cell_size_on_screen * 3
                 ring_padding := 0.2 * ring_size
                 
@@ -517,7 +414,7 @@ main :: proc () {
 generate_points :: proc(points: ^Array(v2d), count: u32) {
     side := round(u32, square_root(cast(f32) count))
     entropy := seed_random_series(123456789)
-    switch 0  {
+    switch 4  {
       case -1:
         for x in 0 ..< side {
             for y in 0 ..< side {
@@ -579,12 +476,12 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^R
     }
     
     area := new_dimension.x * new_dimension.y
-    _points := make_array(arena, v2d, area)
-    generate_points(&_points, cast(u32) area)
+    points := make_array(arena, v2d, area)
+    generate_points(&points, cast(u32) area)
     dt: DelauneyTriangulation
-    // @todo(viktor): use f64s to not have stupid artifacts all over
-    begin_triangulation(&dt, arena, slice(_points))
-    triangles ^= complete_triangulation(&dt)
+    begin_triangulation(&dt, arena, slice(points))
+    complete_triangulation(&dt)
+    triangles ^= end_triangulation(&dt)
     
     for &triangle in triangles {
         for &point in triangle {
@@ -681,59 +578,12 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^R
         }
     }
     
-    
     delete(average_colors)
-    delete(draw_board)
     make(&average_colors, area)
-    make(&draw_board, area)
-    
-    // temp_neighbours:= make([dynamic] Neighbour, context.temp_allocator)
-    // for y in 0..<new_dimension.y do for x in 0..<new_dimension.x {
-    //     index := x + y * new_dimension.x
-    //     cell := &grid[index]
-    //     cell.p = vec_cast(f32, x, y) + random_bilateral(entropy, v2) * deviation
-    //     cell.collapsed = false
-        
-    //     delete(cell.states)
-    //     make(&cell.states, len(c.states))
-    //     for &it, index in cell.states do it = cast(State_Id) index
-        
-    //     for delta, direction in Deltas {
-    //         to := v2i {x, y} + delta
-    //         if !dimension_contains(dimension, to) && !wrapping do continue // :Wrapping we reached an edge
-            
-    //         to = rectangle_modulus(rectangle_min_dimension(v2i{}, dimension), to)
-    //         neighbour := Neighbour {
-    //             to_neighbour_in_grid = direction,
-    //             cell                 = &grid[to.x + to.y * dimension.x],
-    //         }
-    //         append(&temp_neighbours, neighbour)
-    //     }
-        
-    //     make(&cell.neighbours, len(temp_neighbours))
-    //     copy(cell.neighbours, temp_neighbours[:])
-    //     clear(&temp_neighbours)
-    // }
-    
-    // for &cell in grid {
-    //     for &neighbour in cell.neighbours {
-    //         neighbour.to_neighbour = neighbour.cell.p - cell.p
-    //     }
-    // }
 }
 
-world_to_screen :: proc { world_to_screen_rec, world_to_screen_reci, world_to_screen_vec, world_to_screen_v2i }
-world_to_screen_reci :: proc (world: Rectangle2i) -> (screen: rl.Rectangle) {
-    wmin := world_to_screen(world.min)
-    wmax := world_to_screen(world.max)
-    screen.x = wmin.x
-    screen.y = wmax.y
-    dim := abs_vec(wmax - wmin)
-    screen.width  = dim.x
-    screen.height = dim.y
-    return screen
-}
-world_to_screen_rec :: proc (world: Rectangle2) -> (screen: rl.Rectangle) {
+world_to_screen :: proc { world_to_screen_rec, world_to_screen_vec, world_to_screen_v2i }
+world_to_screen_rec :: proc (world: Rectangle($T)) -> (screen: rl.Rectangle) {
     wmin := world_to_screen(world.min)
     wmax := world_to_screen(world.max)
     screen.x = wmin.x
