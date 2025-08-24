@@ -8,6 +8,12 @@ import rl "vendor:raylib"
 import imgui "../lib/odin-imgui/"
 import rlimgui "../lib/odin-imgui/examples/raylib"
 
+/* @todo(viktor): 
+    - Clip/remove triangles outside of the region
+    - Make Neighbour Relation not per cell but per cell-pair, so that when limiting the neighbours with neighbour_mode, we don't get a cell that has a neighbour who does not have that cell as its neighbour
+    X limit sides to length of <= 1
+*/
+
 Deltas := [Direction] v2i { 
     .East  = { 1, 0},
     .North = { 0, 1},
@@ -44,7 +50,7 @@ Average_Color :: struct {
     color: rl.Color,
 }
 
-show_triangulation := false
+show_neighbours := false
 render_wavefunction_as_average := true
 highlight_changes := false
 
@@ -57,7 +63,7 @@ Color_Group :: struct {
 
 grid_background_color := DarkGreen
 
-dimension: v2i = {40, 40}
+dimension: v2i = {10, 10}
 
 File :: struct {
     data:    [] u8,
@@ -82,7 +88,23 @@ search_metric := Search_Metric.Entropy
 
 ////////////////////////////////////////////////
 
-Neighbour_Threshold: f32 = 1.2
+neighbour_mode := Neighbour_Mode {
+    kind = {.Closest_N},
+    amount = 4,
+    allow_multiple_at_same_distance = true,
+}
+Neighbour_Kind :: enum {
+    Threshold,
+    Closest_N,
+}
+Neighbour_Mode :: struct {
+    kind: bit_set[Neighbour_Kind],
+
+    threshold: f32,
+    
+    amount: i32,
+    allow_multiple_at_same_distance: bool,    
+}
 
 ////////////////////////////////////////////////
 
@@ -148,8 +170,7 @@ main :: proc () {
 
     entropy := seed_random_series(7458)
     collapse: Collapse
-    triangles: [] [3] v2
-    setup_grid(&collapse, dimension, dimension, &entropy, &arena, &triangles)
+    setup_grid(&collapse, dimension, dimension, &entropy, &arena)
     this_frame.desired_N = N
     
     for !rl.WindowShouldClose() {
@@ -182,7 +203,7 @@ main :: proc () {
                 
                 this_frame.old_grid = grid[:]
                 this_frame.old_dimension = dimension
-                setup_grid(&collapse, dimension, this_frame.desired_dimension, &entropy, &arena, &triangles)
+                setup_grid(&collapse, dimension, this_frame.desired_dimension, &entropy, &arena)
                 
                 this_frame.tasks += { .restart }
             }
@@ -239,19 +260,6 @@ main :: proc () {
         spall_begin("Render")
         rl.BeginDrawing()
         rl.ClearBackground({0x54, 0x57, 0x66, 0xFF})
-        
-        /* @todo(viktor): 
-        X - abstract support in a direction to allow that lookup to be as complex as needed
-        X - remove Direction from the grid / wavefunction and just work with the respective vector
-        X - display the neighbour likelyhood on a circle of each color with each other color
-        X - interpolate the likelyhood over the whole circle
-        5 - make a graph/lattice that is still a regular grid
-        6 - make the lattice irregular
-        X - display the lattice as a voronoi diagram
-        
-        - Clip/remove triangles outside of the region
-        - limit sides to length of <= 1
-        */
         
         for cell, index in grid {
             average := &average_colors[index]
@@ -313,22 +321,15 @@ main :: proc () {
             }
             spall_end()
             
-            if show_triangulation {
-                color := v4_to_rl_color(Emerald) 
-                for tri in triangles {
-                    a, b := tri[0], tri[1]
-                    if length_squared(b-a) < square(Neighbour_Threshold) {
-                        rl.DrawLineV(world_to_screen(a), world_to_screen(b), color)
-                    }
-                    
-                    a = tri[2]
-                    if length_squared(b-a) < square(Neighbour_Threshold) {
-                        rl.DrawLineV(world_to_screen(a), world_to_screen(b), color)
-                    }
-                    
-                    b = tri[0]
-                    if length_squared(b-a) < square(Neighbour_Threshold) {
-                        rl.DrawLineV(world_to_screen(a), world_to_screen(b), color)
+            if show_neighbours {
+                color := v4_to_rl_color(Emerald * {1,1,1,0.5}) 
+                
+                for cell in grid {
+                    center := world_to_screen(cell.p)
+                    rl.DrawCircleV(center, 4, color)
+                    for neighbour in cell.neighbours {
+                        end := world_to_screen(cell.p + neighbour.to_neighbour)
+                        rl.DrawLineEx(center, end, 2, color)
                     }
                 }
             }
@@ -423,7 +424,7 @@ main :: proc () {
 generate_points :: proc(points: ^Array(v2d), count: u32) {
     side := round(u32, square_root(cast(f32) count))
     entropy := seed_random_series(123456789)
-    switch -1  {
+    switch 4  {
       case -1:
         for x in 0 ..< side {
             for y in 0 ..< side {
@@ -473,7 +474,7 @@ generate_points :: proc(points: ^Array(v2d), count: u32) {
 }
 
 
-setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^RandomSeries, arena: ^Arena, triangles: ^[] [3] v2) {
+setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^RandomSeries, arena: ^Arena) {
     dimension = new_dimension // @todo(viktor): this is a really stupid idea
     
     ratio := vec_cast(f32, Screen_Size) / vec_cast(f32, new_dimension+10)
@@ -482,6 +483,8 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^R
     } else {
         cell_size_on_screen = ratio.y 
     }
+    
+    clear(&grid)
     
     area := new_dimension.x * new_dimension.y
     delete(average_colors)
@@ -494,15 +497,6 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^R
     begin_triangulation(&dt, arena, slice(points))
     complete_triangulation(&dt)
     voronoi_cells := end_triangulation_voronoi_cells(&dt)
-    
-    triangles_double := end_triangulation(&dt)
-    make(triangles, len(triangles_double))
-    for &it, index in triangles {
-        for &p, p_index in it {
-            pd := triangles_double[index][p_index] * vec_cast(f64, dimension)
-            p = vec_cast(f32, pd)
-        }
-    }
     
     for it in voronoi_cells {
         cell: Cell
@@ -530,10 +524,46 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^R
             neighbour: Neighbour
             neighbour.cell = &grid[neighbour_index]
             neighbour.to_neighbour = neighbour.cell.p - cell.p
-            // @todo(viktor): what should this threshold be?
-            if length(neighbour.to_neighbour) <= Neighbour_Threshold {
-                append(&cell.neighbours, neighbour)
+            
+            do_append := true
+            
+            if do_append && .Threshold in neighbour_mode.kind {
+                if length(neighbour.to_neighbour) > neighbour_mode.threshold {
+                    do_append = false
+                }
             }
+            
+            if do_append && .Closest_N in neighbour_mode.kind {
+                if neighbour_mode.amount <= auto_cast len(cell.neighbours) {
+                    to_neighbour := length_squared(neighbour.to_neighbour)
+                    to_furthest: f32
+                    removed := false
+                    #reverse for &it, it_index in cell.neighbours {
+                        to_it := length_squared(it.to_neighbour)
+                        if to_it > to_neighbour {
+                            remove := false
+                            if neighbour_mode.allow_multiple_at_same_distance {
+                                if to_it >= to_furthest {
+                                    remove = true
+                                }
+                            } else {
+                                if to_it > to_furthest {
+                                    remove = true
+                                }
+                            }
+                            
+                            if remove {
+                                unordered_remove(&cell.neighbours, it_index)
+                                removed = true
+                            }
+                        }
+                    }
+                    
+                    if !removed do do_append = false
+                }
+            }
+            
+            if do_append do append(&cell.neighbours, neighbour)
         }
     }
 }

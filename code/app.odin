@@ -76,7 +76,7 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
     }
     
     imgui.checkbox("Average Color", &render_wavefunction_as_average)
-    imgui.checkbox("Show triangles", &show_triangulation)
+    imgui.checkbox("Show Neighbours", &show_neighbours)
     imgui.checkbox("Highlight changing cells", &highlight_changes)
     
     metrics := [Search_Metric] string {
@@ -89,6 +89,31 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
             search_metric = metric
         }
     }
+    
+    neighbours := [Neighbour_Kind] string {
+        .Closest_N = "Closest N neighbours",
+        .Threshold = "Distance Threshold",
+    }
+    imgui.text("Neighbour Mode")
+    
+    before := neighbour_mode
+    for text, mode in neighbours {
+        b := mode in neighbour_mode.kind
+        if imgui.checkbox(text, &b) {
+            if  b do neighbour_mode.kind += { mode }
+            if !b do neighbour_mode.kind -= { mode }
+        }
+    }
+    
+    if .Threshold in neighbour_mode.kind {
+        imgui.slider_float("Threshold", &neighbour_mode.threshold, 0, 5)
+    }
+    if .Closest_N in neighbour_mode.kind {
+        imgui.slider_int("Amount", &neighbour_mode.amount, 0, 15)
+        imgui.checkbox("allow multiple at same distance", &neighbour_mode.allow_multiple_at_same_distance)
+    }
+    
+    if before != neighbour_mode do this_frame.tasks += { .resize_grid }
     
     imgui.begin("Viewing")
         if viewing_group != nil {
