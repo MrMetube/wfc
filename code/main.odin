@@ -1,6 +1,7 @@
 package main
 
 import "core:os/os2"
+import slices "core:slice"
 import "core:strings"
 import "core:time"
 
@@ -44,7 +45,7 @@ wrapping: b32
 
 cell_size_on_screen: f32
 
-average_colors: #soa [] Average_Color
+average_colors: [] Average_Color
 Average_Color :: struct {
     states_count_when_computed: u32,
     color: rl.Color,
@@ -63,7 +64,7 @@ Color_Group :: struct {
 
 grid_background_color := DarkGreen
 
-dimension: v2i = {10, 10}
+dimension: v2i = {5, 5}
 
 File :: struct {
     data:    [] u8,
@@ -89,9 +90,9 @@ search_metric := Search_Metric.Entropy
 ////////////////////////////////////////////////
 
 neighbour_mode := Neighbour_Mode {
-    kind = {.Closest_N},
-    amount = 4,
-    allow_multiple_at_same_distance = true,
+    // kind = {.Closest_N},
+    // amount = 4,
+    // allow_multiple_at_same_distance = true,
 }
 Neighbour_Kind :: enum {
     Threshold,
@@ -105,6 +106,8 @@ Neighbour_Mode :: struct {
     amount: i32,
     allow_multiple_at_same_distance: bool,    
 }
+
+Generate_Kind: i32 = 5
 
 ////////////////////////////////////////////////
 
@@ -129,6 +132,8 @@ Task :: enum {
     restart, 
     update,
 }
+
+show_index: i32 = -1
 
 main :: proc () {
     unused(screen_to_world)
@@ -196,16 +201,17 @@ main :: proc () {
         update_start: time.Time
         
         spall_begin("Update")
-        for this_frame.tasks != {} {
+        task_loop: for this_frame.tasks != {} {
             // @todo(viktor): if drawing_initializing and do_restart: Tell the user that their drawing may be unsolvable
             if .resize_grid in this_frame.tasks {
                 this_frame.tasks -= { .resize_grid }
                 
-                this_frame.old_grid = grid[:]
+                this_frame.old_grid = cells[:]
                 this_frame.old_dimension = dimension
                 setup_grid(&collapse, dimension, this_frame.desired_dimension, &entropy, &arena)
                 
                 this_frame.tasks += { .restart }
+                if paused do break task_loop
             }
             
             if .extract_states in this_frame.tasks {
@@ -214,17 +220,22 @@ main :: proc () {
                 assert(this_frame.pixels != nil)
                 
                 N = this_frame.desired_N
+                reset_collapse(&collapse)
                 extract_states(&collapse, this_frame.pixels, this_frame.pixels_dimension.x, this_frame.pixels_dimension.y)
-                    
+                
                 this_frame.tasks += { .restart }
+                if paused do break task_loop
             }
             
             if .restart in this_frame.tasks {
                 this_frame.tasks -= { .restart }
                 
+                restart_collapse(&collapse)
+                
                 update_state = .Initialize_States
                 total_duration = 0
-                for &it in average_colors do it = {}
+                zero(average_colors[:])
+                if paused do break task_loop
             }
             
             if .update in this_frame.tasks {
@@ -233,7 +244,8 @@ main :: proc () {
                 if update_start == {} do update_start = time.now()
                 
                 this_update_start := time.now()
-                switch update(&collapse, &entropy) {
+                state := update(&collapse, &entropy)
+                switch state {
                   case .CollapseUninialized: // nothing
                   case .AllCollapsed: 
                     
@@ -243,12 +255,14 @@ main :: proc () {
                   case .Continue:
                     if update_state >= .Search_Cells {
                         total_duration += time.since(this_update_start)
+                        if paused do break task_loop
                     }
                     
                     if time.duration_seconds(time.since(update_start)) < TargetFrameTime * 0.95 {
                         this_frame.tasks += { .update }
                     }
                 }
+                
             }
         }
         spall_end()
@@ -261,7 +275,7 @@ main :: proc () {
         rl.BeginDrawing()
         rl.ClearBackground({0x54, 0x57, 0x66, 0xFF})
         
-        for cell, index in grid {
+        for cell, index in cells {
             average := &average_colors[index]
             
             if cell.collapsed {
@@ -271,7 +285,7 @@ main :: proc () {
                 average.states_count_when_computed = 1
             } else {
                 if len(cell.states) == 0 {
-                    average.color = { 255, 0, 255, 255 }
+                    average.color = { 255, 0, 255, 128 }
                 }
                 
                 if render_wavefunction_as_average {
@@ -298,38 +312,60 @@ main :: proc () {
         
         if viewing_group == nil {
             spall_begin("Render cells")
-            temp_points := make([dynamic] v2, context.temp_allocator)
-            for cell, index in grid {
-                clear(&temp_points)
-                average := &average_colors[index]
+            Foo :: struct { angle: f32, point: v2}
+            foos := make([dynamic] Foo, context.temp_allocator)
+            points := make([dynamic] v2, context.temp_allocator)
+            for &cell, index in cells {
+                clear(&points)
+                clear(&foos)
                 
-                for point in cell.triangle_points {
-                    append(&temp_points, world_to_screen(point))
+                if !(show_index < 0 || show_index == auto_cast index) {
+                    continue
                 }
-                if len(cell.triangle_points) < 2 do continue
-                append(&temp_points, world_to_screen(cell.triangle_points[1]))
-                rl.DrawTriangleFan(raw_data(temp_points), cast(i32) len(temp_points), average.color)
+                value := cell.p / vec_cast(f32, dimension)
+                average := average_colors[index].color
+                for a, ai in cell.triangle_points {
+                    delta := a - cell.p
+                    assert(length(delta) > 0.01)
+                    append(&foos, Foo { angle = atan2(delta), point = a })
+                }
+                slices.sort_by(foos[:], proc (a,b: Foo) -> bool { return a.angle < b.angle })
+                sorted := slices.is_sorted_by(foos[:], proc (a,b: Foo) -> bool { return a.angle < b.angle })
+                assert(sorted)
+                for foo in foos {
+                    append(&points, world_to_screen(foo.point))
+                }
                 
-                // @todo(viktor): technically we draw every edge twice, once per adjoining cell
-                for p_index in 1..<len(temp_points)-1 {
-                    rl.DrawLineV(
-                        temp_points[p_index],
-                        temp_points[p_index+1],
-                        rl.BLACK,
-                    )
+                
+                center := world_to_screen(cell.p)
+                for p_index in 0..<len(points) {
+                    rl.DrawTriangle(center, points[p_index], points[(p_index+1)%len(points)], average)
+                }
+                rl.DrawCircleV(center, 7, v4_to_rl_color(Blue))
+                
+                color_wheel := color_wheel
+                color := v4_to_rl_color(color_wheel[(index) % len(color_wheel)])
+                for point, p_index in points {
+                    rl.DrawCircleV(point, 3, color)
+                }
+                // @speed: technically we draw every edge twice, once per adjoining cell
+                for p_index in 0..<len(points) {
+                    rl.DrawLineV(points[p_index]+1, points[(p_index+1)%len(points)]+1, rl.BLACK)
+                    rl.DrawLineV(points[p_index], points[(p_index+1)%len(points)], color)
                 }
             }
             spall_end()
             
             if show_neighbours {
-                color := v4_to_rl_color(Emerald * {1,1,1,0.5}) 
+                color := v4_to_rl_color(Emerald) 
+                color_alpha := v4_to_rl_color(Emerald * {1,1,1,0.5}) 
                 
-                for cell in grid {
+                for cell in cells {
                     center := world_to_screen(cell.p)
                     rl.DrawCircleV(center, 4, color)
                     for neighbour in cell.neighbours {
                         end := world_to_screen(cell.p + neighbour.to_neighbour)
-                        rl.DrawLineEx(center, end, 2, color)
+                        rl.DrawLineEx(center, end, 2, color_alpha)
                     }
                 }
             }
@@ -337,21 +373,21 @@ main :: proc () {
             spall_begin("Render extra")
             if highlight_changes {
                 // @todo(viktor): we would need the whole cell here
-                for cell_p in changes {
-                    // rec := world_to_screen(rectangle_min_dimension(cell_p, 1))
-                    // rl.DrawRectangleRec(rec, rl.ColorAlpha(rl.YELLOW, 0.4))
-                }
+                // for cell_p in collapse.changes {
+                //     rec := world_to_screen(rectangle_min_dimension(cell_p, 1))
+                //     rl.DrawRectangleRec(rec, rl.ColorAlpha(rl.YELLOW, 0.4))
+                // }
             }
             
-            for cell in to_be_collapsed {
-                clear(&temp_points)
+            for cell in collapse.to_be_collapsed {
+                clear(&points)
                 
                 for point in cell.triangle_points {
-                    append(&temp_points, world_to_screen(point))
+                    append(&points, world_to_screen(point))
                 }
                 if len(cell.triangle_points) < 2 do continue
-                append(&temp_points, world_to_screen(cell.triangle_points[1]))
-                rl.DrawTriangleFan(raw_data(temp_points), cast(i32) len(temp_points), rl.PURPLE)
+                append(&points, world_to_screen(cell.triangle_points[1]))
+                rl.DrawTriangleFan(raw_data(points), cast(i32) len(points), rl.PURPLE)
             }
         } else {
             spall_scope("View Neighbours")
@@ -421,25 +457,27 @@ main :: proc () {
 }
 
 
-generate_points :: proc(points: ^Array(v2d), count: u32) {
+generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
     side := round(u32, square_root(cast(f32) count))
     entropy := seed_random_series(123456789)
-    switch 4  {
+    switch Generate_Kind  {
       case -1:
         for x in 0 ..< side {
             for y in 0 ..< side {
                 p := vec_cast(f64, x, y) / cast(f64) side
                 p += random_bilateral(&entropy, v2d) * (0.05 / cast(f64) side)
-                p = clamp(p, 0, 1)
+                p = clamp(p, 0.01, 0.98)
                 append(points, p)
             }
         }
+        
       case 0:
         for x in 0 ..< side {
             for y in 0 ..< side {
                 append(points, vec_cast(f64, x, y) / cast(f64) side)
             }
         }
+        
       case 1:
         for x in 0 ..< side {
             for y in 0 ..< side {
@@ -449,6 +487,7 @@ generate_points :: proc(points: ^Array(v2d), count: u32) {
                 append(points, v2d{x, y} / cast(f64) side)
             }
         }
+        
       case 2:
         for x in 0 ..< side {
             for y in 0 ..< side {
@@ -458,6 +497,7 @@ generate_points :: proc(points: ^Array(v2d), count: u32) {
                 append(points, v2d{x, y} / cast(f64) side)
             }
         }
+        
       case 3:
         center :: 0.5
         for index in 0..<count {
@@ -466,10 +506,20 @@ generate_points :: proc(points: ^Array(v2d), count: u32) {
             radius := linear_blend(f64(0.01), 0.5, square_root(t))
             append(points, center + arm(angle) * radius)
         }
+        
       case 4:
         for _ in 0..<count {
             append(points, random_unilateral(&entropy, v2d))
         }
+        
+      case 5:
+        append(points, v2d {.2, .2})
+        append(points, v2d {.3, .7})
+        append(points, v2d {.7, .3})
+        append(points, v2d {.8, .8})
+        append(points, v2d {.5, .5})
+        
+      case: unreachable()
     }
 }
 
@@ -484,17 +534,18 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^R
         cell_size_on_screen = ratio.y 
     }
     
-    clear(&grid)
+    clear(&cells)
     
     area := new_dimension.x * new_dimension.y
     delete(average_colors)
     make(&average_colors, area)
     
-    points := make_array(arena, v2d, area)
+    points := make([dynamic] v2d)
+    defer  delete(points)
     generate_points(&points, cast(u32) area)
     
     dt: Delauney_Triangulation
-    begin_triangulation(&dt, arena, slice(points))
+    begin_triangulation(&dt, arena, points[:])
     complete_triangulation(&dt)
     voronoi_cells := end_triangulation_voronoi_cells(&dt)
     
@@ -507,22 +558,21 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^R
         make(&cell.states, len(c.states))
         for &it, index in cell.states do it = cast(State_Id) index
         
-        make(&cell.triangle_points, 0, len(it.points)+1)
-        append(&cell.triangle_points, cell.p)
+        make(&cell.triangle_points, 0, len(it.points))
         
         for point in it.points {
             p := vec_cast(f32, point * vec_cast(f64, dimension))
             append(&cell.triangle_points, p)
         }
         
-        append(&grid, cell)
+        append(&cells, cell)
     }
     
-    for &cell, index in grid {
+    for &cell, index in cells {
         voronoi := voronoi_cells[index]
         for neighbour_index in voronoi.neighbour_indices {
             neighbour: Neighbour
-            neighbour.cell = &grid[neighbour_index]
+            neighbour.cell = &cells[neighbour_index]
             neighbour.to_neighbour = neighbour.cell.p - cell.p
             
             do_append := true

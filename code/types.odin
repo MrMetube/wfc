@@ -16,7 +16,7 @@ FixedArray :: struct ($N: i64, $T: typeid) {
 
 append :: proc { 
     append_fixed_array, append_array, append_array_, append_array_many, append_fixed_array_many, append_string, 
-    builtin.append_elem, builtin.append_elems,
+    builtin.append_elem, builtin.append_elems, builtin.append_soa_elems, builtin.append_soa_elem, 
 }
 @(require_results) append_array_ :: proc(a: ^Array($T)) -> (result: ^T) {
     result = &a.data[a.count]
@@ -91,7 +91,7 @@ rest_array :: proc(array: Array($T)) -> []T {
     return array.data[array.count:]
 }
 
-clear :: proc { array_clear, builtin.clear_dynamic_array, builtin.clear_map }
+clear :: proc { array_clear, builtin.clear_dynamic_array, builtin.clear_map, }
 array_clear :: proc(a: ^Array($T)) {
     a.count = 0
 }

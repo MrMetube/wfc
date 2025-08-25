@@ -7,8 +7,8 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
     imgui.begin("Extract")
         imgui.text("Choose Input Image")
         imgui.slider_int("Tile Size", &this_frame.desired_N, 1, 10)
-        imgui.slider_int("Size X", &this_frame.desired_dimension.x, 3, 300)
-        imgui.slider_int("Size Y", &this_frame.desired_dimension.y, 3, 150)
+        imgui.slider_int("Size X", &this_frame.desired_dimension.x, 3, 50)
+        imgui.slider_int("Size Y", &this_frame.desired_dimension.y, 3, 50)
         if this_frame.desired_dimension != dimension {
             this_frame.tasks += { .resize_grid }
         }
@@ -48,23 +48,7 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
     
     tile_count := len(c.states)
     imgui.text_colored(tile_count > 200 ? Red : White, tprint("Tile count %", tile_count))
-    
-    if update_state >= .Search_Cells {
-        imgui.text(tprint("Total time %",  view_time_duration(total_duration, precision = 3)))
-    } else {
-        if update_state == .Initialize_Supports {
-            percent := view_percentage(init_cell_index, len(grid))
-            imgui.text_unformatted(tprint("Restart: % %%", percent))
-        }
-        
-    }
-    
-    if len(c.states) != 0 {
-        if imgui.button("Restart") {
-            this_frame.tasks += { .restart }
-        }
-    }
-    
+
     if paused {
         if imgui.button("Unpause") do paused = false
         if imgui.button("Step")    {
@@ -74,7 +58,23 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
         if imgui.button("Pause") do paused = true
         this_frame.tasks += { .update }
     }
+    imgui.text(tprint("%", update_state))
     
+    if update_state >= .Search_Cells {
+        imgui.text(tprint("Total time %",  view_time_duration(total_duration, precision = 3)))
+    }
+    
+    if len(c.states) != 0 {
+        if update_state == .Initialize_Supports {
+            percent := view_percentage(init_cell_index, len(cells))
+            imgui.text_unformatted(tprint("Restart: % %%", percent))
+        } else {
+            if imgui.button("Restart") {
+                this_frame.tasks += { .restart }
+            }
+        }
+    }
+        
     imgui.checkbox("Average Color", &render_wavefunction_as_average)
     imgui.checkbox("Show Neighbours", &show_neighbours)
     imgui.checkbox("Highlight changing cells", &highlight_changes)
@@ -114,6 +114,12 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
     }
     
     if before != neighbour_mode do this_frame.tasks += { .resize_grid }
+    
+    imgui.slider_int("Show index", &show_index, -1, 99)
+    
+    if imgui.slider_int("Generate Kind", &Generate_Kind, -1, 5) {
+        this_frame.tasks += { .resize_grid }
+    }
     
     imgui.begin("Viewing")
         if viewing_group != nil {

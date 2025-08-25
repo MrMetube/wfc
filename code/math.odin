@@ -311,8 +311,8 @@ dot :: proc(a, b: $V/[$N]$E) -> (result: E) {
 
 cross2 :: proc(a, b: $V/[2]$E) -> (result: E) {
     // just the z term, 
-    // isn't this also just the determinant?
-    result = a.x*b.y - a.y*b.x
+    // isn't this also just the determinant? Yes!
+    result = a.x * b.y - a.y * b.x
     return result
 }
 cross :: proc(a, b: $V/[3]$E) -> (result: V) {

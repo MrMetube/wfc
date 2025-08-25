@@ -11,9 +11,23 @@ Collapse :: struct {
     values:   [dynamic] Value,
     supports: [/* center - State_Id */] [/* neighbour - State_Id */] Support,
     
+    to_be_collapsed: [dynamic] ^Cell,
+    // @todo(viktor): its nice that its constant time lookup but the arbitrary order when iterating is worse
+    changes: map[v2] Change,
+    
     // Extraction
     is_defining_state:  b32,
     temp_state_values:  [dynamic] Value_Id,
+}
+
+Change :: struct {
+    cell: ^Cell,
+    removed_supports: [/* State_Id */] Support,
+}
+
+Support :: struct {
+    id:     State_Id,
+    amount: [Direction] f32,
 }
 
 Search :: struct {
@@ -90,18 +104,37 @@ get_support_amount :: proc (c: ^Collapse, from: State_Id, to: State_Id, closenes
     return result
 }
 
-////////////////////////////////////////////////^
+////////////////////////////////////////////////
+
+mark_to_be_collapsed :: proc (c: ^Collapse, cells: ..^Cell) {
+    append(&c.to_be_collapsed, ..cells)
+}
+
+////////////////////////////////////////////////
 
 reset_collapse :: proc (c: ^Collapse) {
     // @todo(viktor): there should be an easier way
     // println("%", view_variable(size_of(Collapse))); assert(false)
-    #assert(size_of(Collapse) <= 144, "members have changed")
+    #assert(size_of(Collapse) <= 216, "members have changed")
+    
+    restart_collapse(c)
+    
     delete(c.states)
     delete(c.temp_state_values)
     for a in c.supports do delete(a)
     delete(c.supports)
     
     c ^= {}
+}
+
+restart_collapse :: proc (c: ^Collapse) {
+    clear(&c.to_be_collapsed)
+ 
+    for _, change in c.changes {
+        delete(change.removed_supports)
+    }
+    
+    clear(&c.changes)
 }
 
 ////////////////////////////////////////////////

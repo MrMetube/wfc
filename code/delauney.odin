@@ -25,7 +25,7 @@ Delauney_Triangulation :: struct {
     
     tree: Quad_Tree(Work_Triangle),
     
-    // takes index -3 -2 -1
+    // defined as index -3 -2 -1
     super_tri_index: TriIndex,
     super_triangle:  Triangle,
     point_index:     i32,
@@ -38,7 +38,14 @@ Delauney_Triangulation :: struct {
 
 ////////////////////////////////////////////////
 
-step_count: u32
+Voronoi_Cell :: struct {
+    is_edge: bool,
+    center:  v2d,
+    points:            [dynamic] v2d,
+    neighbour_indices: [dynamic] i32,
+}
+
+////////////////////////////////////////////////
 
 begin_triangulation :: proc(dt: ^Delauney_Triangulation, arena: ^Arena, points: []v2d) {
     spall_proc()
@@ -157,7 +164,6 @@ step_triangulation :: proc(dt: ^Delauney_Triangulation) {
     }
     
     spall_end()
-    step_count += 1
 }
 
 triangle_from_index :: proc (dt: ^Delauney_Triangulation, index: TriIndex) -> (result: Triangle) {
@@ -234,14 +240,14 @@ collect_work_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^Array(Wo
         defer link = next
         
         
-        contains_vertex_of_super_triangle: i32
+        contains_vertex_of_super_triangle: bool
         check: for index in link.data.triangle {
             if index < 0 {
-                contains_vertex_of_super_triangle += 1
+                contains_vertex_of_super_triangle = true
             }
         }
         
-        if contains_vertex_of_super_triangle == 0 {
+        if !contains_vertex_of_super_triangle {
             append(dest, link.data)
         }
     }
@@ -257,11 +263,6 @@ end_triangulation :: proc(dt: ^Delauney_Triangulation) -> (result: [] Triangle) 
     return result
 }
 
-Voronoi_Cell :: struct {
-    center: v2d,
-    points:            [dynamic] v2d,
-    neighbour_indices: [dynamic] i32,
-}
 end_triangulation_voronoi_cells :: proc(dt: ^Delauney_Triangulation) -> (result: [] Voronoi_Cell) {
     spall_proc()
     buffer := make_array(dt.arena, Work_Triangle, dt.triangle_count)
@@ -270,59 +271,99 @@ end_triangulation_voronoi_cells :: proc(dt: ^Delauney_Triangulation) -> (result:
     
     triangles := slice(buffer)
     
-    result = make([] Voronoi_Cell, len(dt.points))
-    for &it, index in result {
-        it.center = dt.points[index]
+    is_hull_edge :: proc(a: i32, b: i32, triangles: []Work_Triangle) -> bool {
+        count := 0
+        for wt in triangles {
+            has_a, has_b := false, false
+            for idx in wt.triangle {
+                if idx == a do has_a = true
+                if idx == b do has_b = true
+            }
+            if has_a && has_b {
+                count += 1
+                if count > 1 {
+                    return false
+                }
+            }
+        }
+        return count == 1
     }
     
+    result = make([] Voronoi_Cell, len(dt.points))
+    
     for wt in triangles {
-        contains_super_triangles: b32
-        for index in wt.triangle do if index < 0 {
-            contains_super_triangles = true
-            break
-        }
-        if contains_super_triangles do continue
-        
         append_unique :: proc (array: ^[dynamic] $T, value: T) {
-            spall_proc()
             for it in array do if it == value do return
             append(array, value)
         }
+        append_unique_v2 :: proc (array: ^[dynamic] v2d, value: v2d) {
+            for it in array do if length(it - value) < 0.001 do return
+            append(array, value)
+        }
         
-        for a in wt.triangle {
-            voronoi := &result[a]
-            append_unique(&voronoi.points, wt.circum_circle.center)
+        for index_a in wt.triangle {
+            voronoi := &result[index_a]
+            append_unique_v2(&voronoi.points, wt.circum_circle.center)
             
-            for b in wt.triangle {
-                if a != b {
-                    append_unique(&voronoi.neighbour_indices, b)
-                    pa := dt.points[a]
-                    pb := dt.points[b]
-                    edge_center := linear_blend(pa, pb, 0.5)
-                    append_unique(&voronoi.points, edge_center)
+            for index_b in wt.triangle {
+                if index_a != index_b {
+                    append_unique(&voronoi.neighbour_indices, index_b)
+                    if is_hull_edge(index_a, index_b, triangles){
+                        pa := dt.points[index_a]
+                        pb := dt.points[index_b]
+                        edge_center := linear_blend(pa, pb, 0.5)
+                        append_unique_v2(&voronoi.points, edge_center)
+                        append_unique_v2(&voronoi.points, pa)
+                    }
                 }
             }
         }
     }
     
-    Foo :: struct { center, point: v2d}
-    points := make([dynamic] Foo, context.temp_allocator)
-    for &cell in result {
-        clear(&points)
-        for point in cell.points {
-            append(&points, Foo { cell.center, point})
+    Foo :: struct { angle: f64, point: v2d}
+    foos := make([dynamic] Foo, context.temp_allocator)
+    for &voronoi in result {
+        clear(&foos)
+        
+        for point in voronoi.points {
+            voronoi.center += point
+        }
+        voronoi.center /= auto_cast len(voronoi.points)
+        if length(voronoi.center - {0.92, 0.4}) < 0.01 {
+            voronoi.center += 0
         }
         
-        // Sort centers counterclockwise around `center`
-        slices.sort_by(points[:], proc(a: Foo, b: Foo) -> (result: bool) {
-            angle_a := atan2(a.point - a.center)
-            angle_b := atan2(b.point - b.center)
-            result = angle_a < angle_b
-            return result
-        })
+        for point, point_index in voronoi.points {
+            append(&foos, Foo { angle = atan2(point - voronoi.center), point = point })
+        }
         
-        for it, index in points {
-            cell.points[index] = it.point
+        // Sort points counterclockwise around centeroid
+        slices.sort_by(foos[:], proc(a: Foo, b: Foo) -> (result: bool) { return a.angle < b.angle })
+        
+        for it, index in foos {
+            voronoi.points[index] = it.point
+        }
+        
+        #reverse for point, point_index in voronoi.points {
+            // @todo(viktor): make this an assert
+            delta := length(point - voronoi.center)
+            invalid := false
+            if delta < 0.01 do invalid = true
+            
+            prev := voronoi.points[(point_index+len(voronoi.points)-1) % len(voronoi.points)]
+            next := voronoi.points[(point_index+1) % len(voronoi.points)]
+            np := normalize(point - prev)
+            nn := normalize(next - point)
+            
+            sin_theta := cross2(np, nn)
+            cos_theta := dot(np, nn)
+            angle     := atan2(sin_theta, cos_theta)
+            
+            if angle < 0 do invalid = true
+            
+            if invalid {
+                unordered_remove(&voronoi.points, point_index)
+            }
         }
     }
     

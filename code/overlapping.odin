@@ -4,9 +4,7 @@ import "core:time"
 
 N: i32 = 3
 
-grid: [dynamic] Cell
-
-to_be_collapsed: [dynamic] ^Cell
+cells: [dynamic] Cell
 
 Cell :: struct {
     p: v2, 
@@ -37,20 +35,8 @@ Update_State :: enum {
 }
 update_state: Update_State
 
-// @todo(viktor): its nice that its constant time lookup but the arbitrary order when iterating is worse
-changes: map[v2] Change
+
 init_cell_index: int
-
-
-Change :: struct {
-    cell: ^Cell,
-    removed_supports: [/* State_Id */] Support,
-}
-
-Support :: struct {
-    id:     State_Id,
-    amount: [Direction] f32,
-}
 
 Wave_Support :: struct {
     id:     State_Id,
@@ -72,10 +58,11 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
     
     switch update_state {
       case .Initialize_States:
-        clear(&changes)
-        to_be_collapsed = nil
+        assert(len(c.changes) == 0)
+        assert(len(c.to_be_collapsed) == 0)
+        
         spall_scope("Restart: initialize states")
-        for &cell, cell_index in grid {
+        for &cell, cell_index in cells {
             if !cell.collapsed {
                 delete(cell.states)
             } else {
@@ -85,15 +72,15 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
             make(&cell.states, len(c.states))
             for &id, index in cell.states do id = cast(State_Id) index
             
-            print("Restart: initialize states % %% \r", view_percentage(cell_index, len(grid)))
+            print("Restart: initialize states % %% \r", view_percentage(cell_index, len(cells)))
         }
         print("Restart: initialize states done           \n")
         update_state = .Initialize_Supports
         
       case .Initialize_Supports:
         spall_scope("Restart: initialize support")
-        if init_cell_index < len(grid) {
-            cell := &grid[init_cell_index]
+        if init_cell_index < len(cells) {
+            cell := &cells[init_cell_index]
             for &neighbour in cell.neighbours {
                 delete(neighbour.support)
                 make(&neighbour.support, len(c.states))
@@ -116,28 +103,28 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
                 
       case .Search_Cells:
         // Find next cell to be collapsed 
-        assert(len(to_be_collapsed) == 0)
+        assert(len(c.to_be_collapsed) == 0)
         spall_scope("Find next cell to be collapsed")
         
-        cells: [] ^Cell
+        found: [] ^Cell
         reached_end := true
         found_invalid := false
         minimal: Search
         init_search(&minimal, c, search_metric, context.temp_allocator)
         
-        loop: for &cell, index in grid {
+        loop: for &cell, index in cells {
             if !cell.collapsed {
                 switch test_search_cell(&minimal, &cell) {
-                    case .Continue: // nothing
-                    case .Done:     break loop
+                  case .Continue: // nothing
+                  case .Done:     break loop
                     
-                    case .Found_Invalid: 
+                  case .Found_Invalid: 
                     found_invalid = true
                     break loop
                 }
             }
             
-            reached_end = index == len(grid)-1
+            reached_end = index == len(found)-1
         }
         
         
@@ -145,15 +132,15 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
             result = .FoundContradiction
             unreachable()
         } else {
-            cells = minimal.cells[:]
+            found = minimal.cells[:]
         }
         
-        if len(cells) > 0 {
-            if len(cells[0].states) == 1 {
+        if len(found) > 0 {
+            if len(found[0].states) == 1 {
                 spall_scope("Set All chosen cells to be collapse")
-                append(&to_be_collapsed, ..cells)
+                mark_to_be_collapsed(c, ..found)
             } else {
-                append(&to_be_collapsed, random_value(entropy, cells))
+                mark_to_be_collapsed(c, random_value(entropy, found))
             }
             
             update_state = .Collapse_Cells
@@ -167,7 +154,7 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
         // Collapse chosen cell
         spall_scope("Collapse chosen cell")
         
-        for cell in to_be_collapsed {
+        for cell in c.to_be_collapsed {
             pick := Invalid_State
             if len(cell.states) == 1 {
                 pick = cell.states[0]
@@ -203,19 +190,19 @@ update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result)
             }
         }
         
-        clear(&to_be_collapsed)
+        clear(&c.to_be_collapsed)
         update_state = .Propagate_Changes
         
       case .Propagate_Changes:
         spall_scope("Propagate changes")
         
-        if len(changes) == 0 {
+        if len(c.changes) == 0 {
             update_state = .Search_Cells
         } else {
             changed: Change
-            for k, v in changes {
+            for k, v in c.changes {
                 changed = v
-                delete_key(&changes, k)
+                delete_key(&c.changes, k)
                 break
             }
             defer delete(changed.removed_supports)
@@ -281,10 +268,10 @@ remove_state :: proc (c: ^Collapse, cell: ^Cell, removed_state: State_Id) {
     spall_proc()
     
     p := cell.p
-    change, ok := &changes[p]
+    change, ok := &c.changes[p]
     if !ok {
-        changes[p] = { cell = cell }
-        change = &changes[p]
+        c.changes[p] = { cell = cell }
+        change = &c.changes[p]
     }
     
     if change.removed_supports == nil {
@@ -311,8 +298,6 @@ remove_state :: proc (c: ^Collapse, cell: ^Cell, removed_state: State_Id) {
 
 extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
     spall_proc()
-    
-    reset_collapse(c)
     
     for &group in color_groups {
         delete(group.ids)
@@ -341,14 +326,10 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
         }
         print("Extraction: State extraction done: %        \n", view_time_duration(time.since(start), precision = 3))
     }
-    // 1.3s  | 6.7s
-    // 1.2s  | 6.1s
-    // 1.2s  | 3.9s
-    // 1.2s  | 3.0s
-    // 450ms | 3.0s
     
     make(&c.supports, len(c.states))
     for &it in c.supports do make(&it, len(c.states))
+    
     {
         start := time.now()
         spall_scope("Extraction: Supports generation")
