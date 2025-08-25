@@ -67,10 +67,6 @@ Pi  :: 3.14159265358979323846264338327950288
 
 E   :: 2.71828182845904523536
 
-τ :: Tau
-π :: Pi
-e :: E
-
 SqrtTwo   :: 1.41421356237309504880168872420969808
 SqrtThree :: 1.73205080756887729352744634150587236
 SqrtFive  :: 2.23606797749978969640917366873127623
@@ -87,8 +83,8 @@ NegativeInfinity64 :: math.NEG_INF_F64
 PositiveInfinity   :: math.INF_F32
 PositiveInfinity64 :: math.INF_F64
 
-RadPerDeg :: Tau/360.0
-DegPerRad :: 360.0/Tau
+RadiansPerDegree :: Tau / 360.0
+DegreesPerRadian :: 360.0 / Tau
 
 ////////////////////////////////////////////////
 // Scalar operations
@@ -493,6 +489,14 @@ contains :: proc(rect: Rectangle($T), point: T) -> (result: b32) {
     result = true
     #unroll for i in 0..<len(T) {
         result &&= rect.min[i] <= point[i] && point[i] < rect.max[i] 
+    }
+    return result
+}
+
+contains_inclusive :: proc(rect: Rectangle($T), point: T) -> (result: b32) {
+    result = true
+    #unroll for i in 0..<len(T) {
+        result &&= rect.min[i] <= point[i] && point[i] <= rect.max[i] 
     }
     return result
 }

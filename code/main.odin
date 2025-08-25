@@ -1,7 +1,6 @@
 package main
 
 import "core:os/os2"
-import slices "core:slice"
 import "core:strings"
 import "core:time"
 
@@ -43,7 +42,7 @@ paused: b32
 
 wrapping: b32
 
-cell_size_on_screen: f32
+cell_size_on_screen: v2
 
 average_colors: [] Average_Color
 Average_Color :: struct {
@@ -52,8 +51,9 @@ Average_Color :: struct {
 }
 
 show_neighbours := false
+show_voronoi_cells := true
 render_wavefunction_as_average := true
-highlight_changes := false
+highlight_changes := true
 
 viewing_group: ^Color_Group
 color_groups:  [dynamic] Color_Group
@@ -73,7 +73,7 @@ File :: struct {
 }
 
 view_slices: i32 = 4
-view_slice_start: f32 // @todo(viktor): this can be used not only in viewing but also in the collapse itself. could be interesting.
+view_slice_start: f32
 view_mode := View_Mode.AcosCos
 View_Mode :: enum {
     Cos, AcosCos, AcosAcosCos,
@@ -107,7 +107,7 @@ Neighbour_Mode :: struct {
     allow_multiple_at_same_distance: bool,    
 }
 
-Generate_Kind: i32 = 5
+Generate_Kind: i32 = 1
 
 ////////////////////////////////////////////////
 
@@ -275,6 +275,11 @@ main :: proc () {
         rl.BeginDrawing()
         rl.ClearBackground({0x54, 0x57, 0x66, 0xFF})
         
+        if len(average_colors) != len(cells) {
+            delete(average_colors)
+            make(&average_colors, len(cells))
+        }
+        
         for cell, index in cells {
             average := &average_colors[index]
             
@@ -285,7 +290,7 @@ main :: proc () {
                 average.states_count_when_computed = 1
             } else {
                 if len(cell.states) == 0 {
-                    average.color = { 255, 0, 255, 128 }
+                    average.color = { 0, 0, 0, 0 }
                 }
                 
                 if render_wavefunction_as_average {
@@ -309,52 +314,39 @@ main :: proc () {
             }
         }
         
+        rl.DrawRectangleRec(world_to_screen(rectangle_min_dimension(v2{}, vec_cast(f32, dimension))), v4_to_rl_color(grid_background_color))
         
         if viewing_group == nil {
-            spall_begin("Render cells")
-            Foo :: struct { angle: f32, point: v2}
-            foos := make([dynamic] Foo, context.temp_allocator)
-            points := make([dynamic] v2, context.temp_allocator)
             for &cell, index in cells {
-                clear(&points)
-                clear(&foos)
+                if !(show_index < 0 || show_index == auto_cast index) do continue
                 
-                if !(show_index < 0 || show_index == auto_cast index) {
-                    continue
-                }
-                value := cell.p / vec_cast(f32, dimension)
                 average := average_colors[index].color
-                for a, ai in cell.triangle_points {
-                    delta := a - cell.p
-                    assert(length(delta) > 0.01)
-                    append(&foos, Foo { angle = atan2(delta), point = a })
-                }
-                slices.sort_by(foos[:], proc (a,b: Foo) -> bool { return a.angle < b.angle })
-                sorted := slices.is_sorted_by(foos[:], proc (a,b: Foo) -> bool { return a.angle < b.angle })
-                assert(sorted)
-                for foo in foos {
-                    append(&points, world_to_screen(foo.point))
+                
+                a := world_to_screen(cell.p)
+                for p_index in 0..<len(cell.points) {
+                    b := world_to_screen(cell.points[p_index])
+                    c := world_to_screen(cell.points[(p_index+1)%len(cell.points)])
+                    rl.DrawTriangle(a, b, c, average)
                 }
                 
-                
-                center := world_to_screen(cell.p)
-                for p_index in 0..<len(points) {
-                    rl.DrawTriangle(center, points[p_index], points[(p_index+1)%len(points)], average)
-                }
-                rl.DrawCircleV(center, 7, v4_to_rl_color(Blue))
-                
-                color_wheel := color_wheel
-                color := v4_to_rl_color(color_wheel[(index) % len(color_wheel)])
-                for point, p_index in points {
-                    rl.DrawCircleV(point, 3, color)
-                }
-                // @speed: technically we draw every edge twice, once per adjoining cell
-                for p_index in 0..<len(points) {
-                    rl.DrawLineV(points[p_index]+1, points[(p_index+1)%len(points)]+1, rl.BLACK)
-                    rl.DrawLineV(points[p_index], points[(p_index+1)%len(points)], color)
+            }
+            if show_voronoi_cells {
+                for cell, index in cells {
+                    if !(show_index < 0 || show_index == auto_cast index) do continue
+                    
+                    center := world_to_screen(cell.p)
+                    rl.DrawCircleV(center, 3, v4_to_rl_color(Blue))
+                    
+                    color_wheel := color_wheel
+                    color := v4_to_rl_color(color_wheel[(index) % len(color_wheel)])
+                    
+                    for p_index in 0..<len(cell.points) {
+                        begin := world_to_screen(cell.points[p_index])
+                        end   := world_to_screen(cell.points[(p_index+1)%len(cell.points)])
+                        rl.DrawLineV(begin, end, color)
+                    }
                 }
             }
-            spall_end()
             
             if show_neighbours {
                 color := v4_to_rl_color(Emerald) 
@@ -370,7 +362,6 @@ main :: proc () {
                 }
             }
             
-            spall_begin("Render extra")
             if highlight_changes {
                 // @todo(viktor): we would need the whole cell here
                 // for cell_p in collapse.changes {
@@ -380,23 +371,23 @@ main :: proc () {
             }
             
             for cell in collapse.to_be_collapsed {
-                clear(&points)
-                
-                for point in cell.triangle_points {
-                    append(&points, world_to_screen(point))
+                a := world_to_screen(cell.p)
+                for p_index in 0..<len(cell.points) {
+                    b := world_to_screen(cell.points[p_index])
+                    c := world_to_screen(cell.points[(p_index+1)%len(cell.points)])
+                    rl.DrawTriangle(a, b, c, rl.PURPLE)
                 }
-                if len(cell.triangle_points) < 2 do continue
-                append(&points, world_to_screen(cell.triangle_points[1]))
-                rl.DrawTriangleFan(raw_data(points), cast(i32) len(points), rl.PURPLE)
             }
+        
         } else {
             spall_scope("View Neighbours")
             center := get_center(rectangle_min_dimension(v2i{}, dimension))
             p := world_to_screen(center)
             
-            center_size := cell_size_on_screen*3
+            size := min(cell_size_on_screen.x, cell_size_on_screen.y)
+            center_size := size * 3
             for comparing_group, group_index in color_groups {
-                ring_size := cell_size_on_screen * 3
+                ring_size := size * 3
                 ring_padding := 0.2 * ring_size
                 
                 max_support: f32
@@ -444,8 +435,6 @@ main :: proc () {
             spall_end()
         }
         
-        spall_end()
-        
         spall_begin("Execute Render")
         
         imgui.render()
@@ -474,7 +463,9 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
       case 0:
         for x in 0 ..< side {
             for y in 0 ..< side {
-                append(points, vec_cast(f64, x, y) / cast(f64) side)
+                percent := vec_cast(f64, x, y) / cast(f64) side
+                pad := 0.01
+                append(points, pad + percent * (1-pad*2))
             }
         }
         
@@ -513,6 +504,28 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
         }
         
       case 5:
+        r := square_root(1.0 / (Pi * f64(count)))
+        min_dist_squared := r * r
+        
+        for _ in 0..<count {
+            valid := false
+            new_point: v2d
+            
+            for !valid {
+                new_point = random_unilateral(&entropy, v2d)
+                valid = true
+                check: for point in points {
+                    if length_squared(point - new_point) < min_dist_squared {
+                        valid = false
+                        break check
+                    }
+                }
+            }
+            
+            append(points, new_point)
+        }
+        
+      case 6:
         append(points, v2d {.2, .2})
         append(points, v2d {.3, .7})
         append(points, v2d {.7, .3})
@@ -527,7 +540,7 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
 setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^RandomSeries, arena: ^Arena) {
     dimension = new_dimension // @todo(viktor): this is a really stupid idea
     
-    ratio := vec_cast(f32, Screen_Size) / vec_cast(f32, new_dimension+10)
+    ratio := vec_cast(f32, Screen_Size-100) / vec_cast(f32, new_dimension)
     if ratio.x < ratio.y {
         cell_size_on_screen = ratio.x
     } else {
@@ -541,7 +554,8 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^R
     make(&average_colors, area)
     
     points := make([dynamic] v2d)
-    defer  delete(points)
+    defer delete(points)
+    
     generate_points(&points, cast(u32) area)
     
     dt: Delauney_Triangulation
@@ -558,11 +572,11 @@ setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^R
         make(&cell.states, len(c.states))
         for &it, index in cell.states do it = cast(State_Id) index
         
-        make(&cell.triangle_points, 0, len(it.points))
+        make(&cell.points, 0, len(it.points))
         
         for point in it.points {
             p := vec_cast(f32, point * vec_cast(f64, dimension))
-            append(&cell.triangle_points, p)
+            append(&cell.points, p)
         }
         
         append(&cells, cell)
@@ -659,6 +673,6 @@ screen_to_world :: proc (screen: v2) -> (world: v2i) {
 }
 
 direction_to_angles :: proc(direction: [2]$T) -> (angle: T) {
-    angle = atan2(direction.y, direction.x)  * (360 / Tau)
+    angle = atan2(direction.y, direction.x)  * DegreesPerRadian
     return angle
 }

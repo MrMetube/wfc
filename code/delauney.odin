@@ -53,7 +53,7 @@ begin_triangulation :: proc(dt: ^Delauney_Triangulation, arena: ^Arena, points: 
     dt.points = points
 
     max_vertex: v2d = 1
-    extra :: 0
+    extra :: 1
     dt.super_triangle[0] = 0 - extra
     dt.super_triangle[1] = {2*max_vertex.x, 0} + {extra*2, -extra}
     dt.super_triangle[2] = {0, 2*max_vertex.y} + {-extra, extra*2}
@@ -239,17 +239,7 @@ collect_work_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^Array(Wo
         next := link.next
         defer link = next
         
-        
-        contains_vertex_of_super_triangle: bool
-        check: for index in link.data.triangle {
-            if index < 0 {
-                contains_vertex_of_super_triangle = true
-            }
-        }
-        
-        if !contains_vertex_of_super_triangle {
-            append(dest, link.data)
-        }
+        append(dest, link.data)
     }
 }
 
@@ -263,6 +253,27 @@ end_triangulation :: proc(dt: ^Delauney_Triangulation) -> (result: [] Triangle) 
     return result
 }
 
+// @todo(viktor): what is this called? its an intersection between a vector and a side of a aabb
+foo :: proc (a, b: $V/[2]$E, is_x: bool, side: E) -> (result: V) {
+    ab := b - a
+    assert( is_x || ab.y != 0)
+    assert(!is_x || ab.x != 0)
+    
+    result.x =  is_x ? side : (a.x + ab.x * (side-a.y) / ab.y)
+    result.y = !is_x ? side : (a.y + ab.y * (side-a.x) / ab.x)
+    
+    return result
+}
+
+foo_all :: proc (a, b: $V, bounds: Rectangle(V)) -> (ok: b32, result: V) {
+    if b.x < bounds.min.x && !(a.x < bounds.min.x) { ok = true; result = foo(a, b,  true, bounds.min.x) }
+    if b.x > bounds.max.x && !(a.x > bounds.max.x) { ok = true; result = foo(a, b,  true, bounds.max.x) }
+    if b.y < bounds.min.y && !(a.y < bounds.min.y) { ok = true; result = foo(a, b, false, bounds.min.y) }
+    if b.y > bounds.max.y && !(a.y > bounds.max.y) { ok = true; result = foo(a, b, false, bounds.max.y) }
+    
+    return ok, result
+}
+
 end_triangulation_voronoi_cells :: proc(dt: ^Delauney_Triangulation) -> (result: [] Voronoi_Cell) {
     spall_proc()
     buffer := make_array(dt.arena, Work_Triangle, dt.triangle_count)
@@ -271,103 +282,92 @@ end_triangulation_voronoi_cells :: proc(dt: ^Delauney_Triangulation) -> (result:
     
     triangles := slice(buffer)
     
-    is_hull_edge :: proc(a: i32, b: i32, triangles: []Work_Triangle) -> bool {
-        count := 0
-        for wt in triangles {
-            has_a, has_b := false, false
-            for idx in wt.triangle {
-                if idx == a do has_a = true
-                if idx == b do has_b = true
-            }
-            if has_a && has_b {
-                count += 1
-                if count > 1 {
-                    return false
-                }
-            }
-        }
-        return count == 1
-    }
-    
     result = make([] Voronoi_Cell, len(dt.points))
     
+    bounds := rectangle_min_dimension(v2d {0,0}, 1)
+    
+    append_unique :: proc (array: ^[dynamic] $T, value: T) {
+        for it in array do if it == value do return
+        append(array, value)
+    }
+    
+    append_unique_v2 :: proc (array: ^[dynamic] v2d, value: v2d) {
+        for it in array do if length(it - value) < 0.01 do return
+        append(array, value)
+    }
+    
     for wt in triangles {
-        append_unique :: proc (array: ^[dynamic] $T, value: T) {
-            for it in array do if it == value do return
-            append(array, value)
-        }
-        append_unique_v2 :: proc (array: ^[dynamic] v2d, value: v2d) {
-            for it in array do if length(it - value) < 0.001 do return
-            append(array, value)
-        }
-        
-        for index_a in wt.triangle {
+        for index_a, it_index in wt.triangle {
+            if index_a < 0 do continue
             voronoi := &result[index_a]
-            append_unique_v2(&voronoi.points, wt.circum_circle.center)
             
-            for index_b in wt.triangle {
-                if index_a != index_b {
-                    append_unique(&voronoi.neighbour_indices, index_b)
-                    if is_hull_edge(index_a, index_b, triangles){
-                        pa := dt.points[index_a]
-                        pb := dt.points[index_b]
-                        edge_center := linear_blend(pa, pb, 0.5)
-                        append_unique_v2(&voronoi.points, edge_center)
-                        append_unique_v2(&voronoi.points, pa)
-                    }
-                }
+            index_b := wt.triangle[(it_index + 1)%3]
+            index_c := wt.triangle[(it_index + 2)%3]
+            
+            if index_b >= 0 do append_unique(&voronoi.neighbour_indices, index_b)
+            if index_c >= 0 do append_unique(&voronoi.neighbour_indices, index_c)
+            
+            append_unique_v2(&voronoi.points, wt.circum_circle.center)
+        }
+    }
+    
+    for &voronoi in result {
+        sort_points_counterclockwise_around_center(&voronoi.center, voronoi.points[:])
+    }
+    
+    for &voronoi in result {
+        for point_index := 0; point_index < len(voronoi.points); {
+            
+            point := voronoi.points[point_index]
+            if contains_inclusive(bounds, point) {
+                point_index += 1
+            } else {
+                prev := voronoi.points[(point_index + len(voronoi.points) - 1) % len(voronoi.points)]
+                next := voronoi.points[(point_index + len(voronoi.points) + 1) % len(voronoi.points)]
+                
+                unordered_remove(&voronoi.points, point_index)
+                
+                p_ok, p := foo_all(prev, point, bounds)
+                n_ok, n := foo_all(next, point, bounds)
+                for it in voronoi.points do if length(it - p) < 0.01 { p_ok = false; break }
+                for it in voronoi.points do if length(it - n) < 0.01 { n_ok = false; break }
+                
+                if p_ok do append(&voronoi.points, p)
+                if n_ok do append(&voronoi.points, n)
+                point_index = 0
+                
+                sort_points_counterclockwise_around_center(&voronoi.center, voronoi.points[:])
             }
         }
     }
     
-    Foo :: struct { angle: f64, point: v2d}
-    foos := make([dynamic] Foo, context.temp_allocator)
     for &voronoi in result {
-        clear(&foos)
-        
-        for point in voronoi.points {
-            voronoi.center += point
-        }
-        voronoi.center /= auto_cast len(voronoi.points)
-        if length(voronoi.center - {0.92, 0.4}) < 0.01 {
-            voronoi.center += 0
-        }
-        
-        for point, point_index in voronoi.points {
-            append(&foos, Foo { angle = atan2(point - voronoi.center), point = point })
-        }
-        
-        // Sort points counterclockwise around centeroid
-        slices.sort_by(foos[:], proc(a: Foo, b: Foo) -> (result: bool) { return a.angle < b.angle })
-        
-        for it, index in foos {
-            voronoi.points[index] = it.point
-        }
-        
-        #reverse for point, point_index in voronoi.points {
-            // @todo(viktor): make this an assert
-            delta := length(point - voronoi.center)
-            invalid := false
-            if delta < 0.01 do invalid = true
-            
-            prev := voronoi.points[(point_index+len(voronoi.points)-1) % len(voronoi.points)]
-            next := voronoi.points[(point_index+1) % len(voronoi.points)]
-            np := normalize(point - prev)
-            nn := normalize(next - point)
-            
-            sin_theta := cross2(np, nn)
-            cos_theta := dot(np, nn)
-            angle     := atan2(sin_theta, cos_theta)
-            
-            if angle < 0 do invalid = true
-            
-            if invalid {
-                unordered_remove(&voronoi.points, point_index)
-            }
-        }
+        sort_points_counterclockwise_around_center(&voronoi.center, voronoi.points[:])
     }
     
     return result
+}
+
+sort_points_counterclockwise_around_center :: proc (center: ^$V/[2]$E, points: [] V) {
+    Foo :: struct { angle: E, point: V}
+    foos := make([dynamic] Foo, 0, len(points), context.temp_allocator)
+    defer delete(foos)
+    
+    center ^= 0
+    for point in points {
+        center^ += point
+    }
+    center^ /= auto_cast len(points)
+    
+    for point in points {
+        append(&foos, Foo { angle = atan2(point - center^), point = point })
+    }
+    
+    slices.sort_by(foos[:], proc(a: Foo, b: Foo) -> (result: bool) { return a.angle < b.angle })
+    
+    for it, it_index in foos {
+        points[it_index] = it.point
+    }
 }
 
 circum_circle :: proc(t: Triangle) -> (result: Circle) {

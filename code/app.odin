@@ -60,10 +60,6 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
     }
     imgui.text(tprint("%", update_state))
     
-    if update_state >= .Search_Cells {
-        imgui.text(tprint("Total time %",  view_time_duration(total_duration, precision = 3)))
-    }
-    
     if len(c.states) != 0 {
         if update_state == .Initialize_Supports {
             percent := view_percentage(init_cell_index, len(cells))
@@ -77,6 +73,7 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
         
     imgui.checkbox("Average Color", &render_wavefunction_as_average)
     imgui.checkbox("Show Neighbours", &show_neighbours)
+    imgui.checkbox("Show Voronoi Cells", &show_voronoi_cells)
     imgui.checkbox("Highlight changing cells", &highlight_changes)
     
     metrics := [Search_Metric] string {
@@ -106,19 +103,23 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
     }
     
     if .Threshold in neighbour_mode.kind {
-        imgui.slider_float("Threshold", &neighbour_mode.threshold, 0, 5)
+        imgui.slider_float("Threshold", &neighbour_mode.threshold, 0.5, 2)
     }
     if .Closest_N in neighbour_mode.kind {
-        imgui.slider_int("Amount", &neighbour_mode.amount, 0, 15)
+        imgui.slider_int("Amount", &neighbour_mode.amount, 0, 10)
         imgui.checkbox("allow multiple at same distance", &neighbour_mode.allow_multiple_at_same_distance)
     }
     
     if before != neighbour_mode do this_frame.tasks += { .resize_grid }
     
-    imgui.slider_int("Show index", &show_index, -1, 99)
+    imgui.slider_int("Show index", &show_index, -1, auto_cast len(cells))
     
-    if imgui.slider_int("Generate Kind", &Generate_Kind, -1, 5) {
+    if imgui.slider_int("Generate Kind", &Generate_Kind, -1, 6) {
         this_frame.tasks += { .resize_grid }
+    }
+    
+    if update_state >= .Search_Cells {
+        imgui.text(tprint("Total time %",  view_time_duration(total_duration, precision = 3)))
     }
     
     imgui.begin("Viewing")

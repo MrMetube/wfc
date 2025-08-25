@@ -8,7 +8,7 @@ cells: [dynamic] Cell
 
 Cell :: struct {
     p: v2, 
-    triangle_points: [dynamic] v2,
+    points: [dynamic] v2,
     
     collapsed:       bool,
     collapsed_state: State_Id,
