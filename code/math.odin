@@ -78,10 +78,8 @@ MaxF64Precision :: 16 // Maximum number of meaningful digits after the decimal p
 MaxF32Precision ::  8 // Maximum number of meaningful digits after the decimal point for 'f32'
 MaxF16Precision ::  4 // Maximum number of meaningful digits after the decimal point for 'f16'
 
-NegativeInfinity   :: math.NEG_INF_F32
-NegativeInfinity64 :: math.NEG_INF_F64
-PositiveInfinity   :: math.INF_F32
-PositiveInfinity64 :: math.INF_F64
+Infinity   :: math.INF_F32
+Infinity64 :: math.INF_F64
 
 RadiansPerDegree :: Tau / 360.0
 DegreesPerRadian :: 360.0 / Tau

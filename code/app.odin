@@ -59,7 +59,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
     
     if len(c.states) != 0 {
         if update_state == .Initialize_Supports {
-            percent := view_percentage(init_cell_index, len(cells))
+            percent := view_percentage(c.init_cell_index, len(cells))
             imgui.text_unformatted(tprint("Restart: % %%", percent))
         } else {
             if imgui.button("Restart") {
@@ -138,7 +138,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
                 this_frame.tasks += { .setup_grid }
             }
         }
-        imgui.slider_int2("Size", &this_frame.desired_dimension, 3, 50)
+        imgui.slider_int2("Size", &this_frame.desired_dimension, 3, 500)
         
         imgui.slider_int("Show index", &show_index, -1, auto_cast len(cells))
         imgui.checkbox("Show Neighbours", &show_neighbours)
@@ -168,5 +168,4 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         
         
     imgui.end()
-    
 }

@@ -379,11 +379,7 @@ circum_circle :: proc(t: Triangle) -> (result: Circle) {
     ca := c-a
     ab := a-b
     
-    // @note(viktor): If the denominator is 0 or close enough the result will 
-    // have an Infinity. This happens when the triangle is degenerate, i.e. the 
-    // points are colinear. It is however fine as we only use the circum circles
-    // to check if a point lies within, and a circle of infinite radius will 
-    // behave correctly in that regard.
+    // @note(viktor): If the denominator is 0 or close enough the result will have an Infinity. This happens when the triangle is degenerate, i.e. the points are colinear. It is however fine as we only use the circum circles to check if a point lies within, and a circle of infinite radius will behave correctly in that regard.
     abc := v3d { a.x, b.x, c.x }
     bca := v3d { bc.y, ca.y, ab.y }
     d :=  0.5 / dot(abc, bca)

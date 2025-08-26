@@ -12,8 +12,6 @@ import rlimgui "../lib/odin-imgui/examples/raylib"
     - Make Neighbour Relation not per cell but per cell-pair, so that when limiting the neighbours with neighbour_mode, we don't get a cell that has a neighbour who does not have that cell as its neighbour
     - Make a visual editor for the closeness weighting function or make the viewing not a different mode but a window
     - dont mutate the states of a cell, instead store its states with a tag marking, when that state became invalid. thereby allowing us the backtrace the changes made without much work. we wouldn't need to reinit the grid all the time and could better search the space. !!!we need a non deterministic selection or we will always resample the same invalid path!!! we could also store the decision per each timestep and not pick random but the next most likely pick.
-    X limit sides to length of <= 1
-    X Clip/remove triangles outside of the region
 */
 
 Screen_Size :: v2i{1920, 1080}
@@ -123,6 +121,13 @@ generate_kind: Generate_Kind = .Shifted_Grid
 
 ////////////////////////////////////////////////
 
+Task :: enum {
+    setup_grid, 
+    extract_states, 
+    restart, 
+    update,
+}
+
 Frame :: struct {
     tasks: bit_set[Task],
     
@@ -133,13 +138,6 @@ Frame :: struct {
     // setup grid
     desired_dimension: v2i,
     desired_neighbour_mode: Neighbour_Mode,
-}
-
-Task :: enum {
-    setup_grid, 
-    extract_states, 
-    restart, 
-    update,
 }
 
 show_index: i32 = -1
@@ -241,6 +239,28 @@ main :: proc () {
                 collapse_reset(&collapse)
                 extract_states(&collapse, this_frame.pixels, this_frame.pixels_dimension.x, this_frame.pixels_dimension.y)
                 
+                // Extract color groups
+                for state in collapse.states {
+                    color_id := state.middle_value
+                    color := collapse.values[color_id]
+                    
+                    group: ^Color_Group
+                    for &it in color_groups {
+                        if it.color == color {
+                            group = &it
+                            break
+                        }
+                    }
+                    
+                    if group == nil {
+                        append(&color_groups, Color_Group { color = color })
+                        group = &color_groups[len(color_groups)-1]
+                        make(&group.ids, len(collapse.states))
+                    }
+                    
+                    group.ids[state.id] = true
+                }
+                
                 this_frame.tasks += { .restart }
                 if paused do break task_loop
             }
@@ -300,7 +320,7 @@ main :: proc () {
             
             if cell.collapsed {
                 state    := collapse.states[cell.collapsed_state]
-                color_id := state.values[N/4+N/4*N] // middle
+                color_id := state.middle_value
                 average.color = collapse.values[color_id]
                 average.states_count_when_computed = 1
             } else {
@@ -315,7 +335,7 @@ main :: proc () {
                             count: f32
                             for id in cell.states {
                                 state    := collapse.states[id]
-                                color_id := state.values[N/4+N/4*N] // middle
+                                color_id := state.middle_value
                                 color += rl_color_to_v4(collapse.values[color_id]) * state.frequency
                                 count += state.frequency
                             }
@@ -334,31 +354,17 @@ main :: proc () {
             for &cell, index in cells {
                 if show_index != -1 && show_index != auto_cast index do continue
                 
-                average := average_colors[index].color
-                
-                a := world_to_screen(cell.p)
-                for p_index in 0..<len(cell.points) {
-                    b := world_to_screen(cell.points[p_index])
-                    c := world_to_screen(cell.points[(p_index+1)%len(cell.points)])
-                    rl.DrawTriangle(a, b, c, average)
-                }
+                draw_cell(cell, average_colors[index].color)
             }
             
             if show_voronoi_cells {
                 for cell, index in cells {
                     if show_index != -1 && show_index != auto_cast index do continue
                     
-                    center := world_to_screen(cell.p)
-                    rl.DrawCircleV(center, 3, v4_to_rl_color(Blue))
-                    
                     color_wheel := color_wheel
                     color := v4_to_rl_color(color_wheel[(index) % len(color_wheel)])
-                    
-                    for p_index in 0..<len(cell.points) {
-                        begin := world_to_screen(cell.points[p_index])
-                        end   := world_to_screen(cell.points[(p_index+1)%len(cell.points)])
-                        rl.DrawLineV(begin, end, color)
-                    }
+                    rl.DrawCircleV(world_to_screen(cell.p), 1, color)
+                    draw_cell_outline(cell, color)
                 }
             }
             
@@ -375,13 +381,12 @@ main :: proc () {
                     }
                 }
             }
-            
+                        
             if highlight_changes {
-                // @todo(viktor): we would need the whole cell here
-                // for cell_p in collapse.changes {
-                //     rec := world_to_screen(rectangle_min_dimension(cell_p, 1))
-                //     rl.DrawRectangleRec(rec, rl.ColorAlpha(rl.YELLOW, 0.4))
-                // }
+                color := rl.ColorAlpha(rl.YELLOW, 0.4)
+                for change in collapse.changes[collapse.changes_cursor:] {
+                    draw_cell(change^, color)
+                }
             }
             
             for cell in collapse.to_be_collapsed {
@@ -634,6 +639,22 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
         append(points, v2d {.5, .5})
         
       case: unreachable()
+    }
+}
+
+draw_cell :: proc (cell: Cell, color: rl.Color) {
+    a := world_to_screen(cell.p)
+    for p_index in 0..<len(cell.points) {
+        b := cell.points[p_index]
+        c := cell.points[(p_index+1)%len(cell.points)]
+        rl.DrawTriangle(a, world_to_screen(b), world_to_screen(c), color)
+    }
+}
+draw_cell_outline :: proc (cell: Cell, color: rl.Color) {
+    for p_index in 0..<len(cell.points) {
+        begin := world_to_screen(cell.points[p_index])
+        end   := world_to_screen(cell.points[(p_index+1)%len(cell.points)])
+        rl.DrawLineV(begin, end, color)
     }
 }
 

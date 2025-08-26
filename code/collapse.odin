@@ -1,7 +1,5 @@
 package main
 
-import "base:builtin"
-
 import "core:time"
 
 import rl "vendor:raylib"
@@ -15,17 +13,27 @@ Collapse :: struct {
     supports: [/* center - State_Id */] [/* neighbour - State_Id */] Support,
     
     to_be_collapsed: [dynamic] ^Cell,
-    // @todo(viktor): its nice that its constant time lookup but the arbitrary order when iterating is worse
-    changes: map[v2] Change,
+    changes:         [dynamic] ^Cell,
+    changes_cursor:  int,
+    
+    // Restart
+    init_cell_index: int,
     
     // Extraction
-    is_defining_state:  b32,
-    temp_state_values:  [dynamic] Value_Id,
+    is_defining_state: b32,
+    temp_state_values: [dynamic] Value_Id,
 }
 
-Change :: struct {
-    cell: ^Cell,
-    removed_supports: [/* State_Id */] Support,
+Cell :: struct {
+    p:      v2, 
+    points: [dynamic] v2, // for rendering the voronoi cell
+    
+    collapsed:       bool,
+    collapsed_state: State_Id,
+    states:          [dynamic] State_Id,
+    neighbours:      [dynamic] Neighbour,
+    
+    entry: Entropy,
 }
 
 Support :: struct {
@@ -44,10 +52,14 @@ Search :: struct {
 Value_Id :: distinct u8
 State_Id :: distinct u32
 State    :: struct {
+    // @todo(viktor): we dont really need all of these fields together at the same time. maybe make a #soa out of it?
     id: State_Id,
-    // @todo(viktor): values could be extracted into a parallel array and later on move it out to make the collapse more agnostic to the data
-    values: [] Value_Id,
+    
+    middle_value: Value_Id,
+    _values:      [] Value_Id,
+    
     frequency: f32,
+    
     // @note(viktor): used in extraction, direction means of which subregion the hash is
     hashes: [Direction] u64,
 }
@@ -65,7 +77,6 @@ supports :: proc { supports_from, supports_from_to }
 supports_from :: proc (c: ^Collapse, from: State_Id) -> ([] Support) {
     return c.supports[from][:]
 }
-// @todo(viktor): this cant fail for now so maybe cleanup calling code sites
 supports_from_to :: proc (c: ^Collapse, from: State_Id, to: State_Id) -> (result: Support) {
     /*  these are the same as the supports relation is symmetric, for each from we could truncate to to only hold states above from and swap the arguments and the _direction array in Support_, to reduce memory usage at the cost of branch misses/ more cycles
         support := supports(c, from, id)
@@ -92,7 +103,7 @@ get_closeness :: proc (sampling_direction: v2) -> (result: [Direction] f32) {
     
     if view_mode == .Nearest {
         nearest: Direction
-        nearest_value := NegativeInfinity
+        nearest_value := -Infinity
         for value, direction in result {
             if nearest_value < value {
                 nearest_value = value
@@ -132,9 +143,8 @@ mark_to_be_collapsed :: proc (c: ^Collapse, cells: ..^Cell) {
 ////////////////////////////////////////////////
 
 collapse_reset :: proc (c: ^Collapse) {
-    // @todo(viktor): there should be an easier way
     // println("%", view_variable(size_of(Collapse))); assert(false)
-    #assert(size_of(Collapse) <= 216, "members have changed")
+    #assert(size_of(Collapse) == 240, "members have changed")
     
     collapse_restart(c)
     
@@ -148,12 +158,9 @@ collapse_reset :: proc (c: ^Collapse) {
 
 collapse_restart :: proc (c: ^Collapse) {
     clear(&c.to_be_collapsed)
- 
-    for _, change in c.changes {
-        delete(change.removed_supports)
-    }
-    
     clear(&c.changes)
+    c.changes_cursor = 0
+    c.init_cell_index = 0
 }
 
 ////////////////////////////////////////////////
@@ -168,7 +175,7 @@ begin_state :: proc (c: ^Collapse) {
     c.is_defining_state = true
 }
 
-append_state_value :: proc (c: ^Collapse, value: Value) {
+state_append_value :: proc (c: ^Collapse, value: Value) {
     assert(c.is_defining_state)
     
     id := Invalid_Value
@@ -195,7 +202,6 @@ end_state   :: proc (c: ^Collapse) {
     
     state := State { id = Invalid_State }
     {
-        // @todo(viktor): do the hashing iteratively instead of copy the values and then doing it. N is known at this point do we know.
         subsections := [Direction] Rectangle2i {
             .East  = { { 1, 0 }, {   N,   N } },
             .West  = { { 0, 0 }, { N-1,   N } },
@@ -235,8 +241,10 @@ end_state   :: proc (c: ^Collapse) {
     if state.id == Invalid_State {
         state.id = auto_cast len(c.states)
         state.frequency = 1
-        make(&state.values, len(c.temp_state_values))
-        copy(state.values, c.temp_state_values[:])
+        
+        make(&state._values, len(c.temp_state_values))
+        copy(state._values, c.temp_state_values[:])
+        state.middle_value = state._values[N/4+N/4*N]
         
         append(&c.states, state)
     } else {
@@ -247,18 +255,16 @@ end_state   :: proc (c: ^Collapse) {
     clear(&c.temp_state_values)
 }
 
-
 ////////////////////////////////////////////////
 
 init_search :: proc (search: ^Search, c: ^Collapse, metric: Search_Metric, allocator := context.allocator) {
-    search.lowest = PositiveInfinity
+    search.lowest = +Infinity
     
     search.c      = c
     search.metric = metric
     make(&search.cells, allocator)
 }
 
-// @todo(viktor): what information do we acutally need, is cell/wave function the minimal set?
 test_search_cell :: proc (search: ^Search, cell: ^Cell) {
     assert(len(cell.states) != 0)
     
@@ -308,18 +314,6 @@ N: i32 = 3
 
 cells: [dynamic] Cell
 
-Cell :: struct {
-    p: v2, 
-    points: [dynamic] v2,
-    
-    collapsed:       bool,
-    collapsed_state: State_Id,
-    states:          [dynamic] State_Id,
-    neighbours:      [dynamic] Neighbour,
-    
-    entry: Entropy,
-}
-
 Neighbour :: struct {
     cell:         ^Cell,
     support:      [/* State_Id */] f32,
@@ -336,8 +330,6 @@ Update_State :: enum {
     Done,
 }
 update_state: Update_State
-
-init_cell_index: int
 
 Wave_Support :: struct {
     id:     State_Id,
@@ -380,8 +372,8 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
       case .Initialize_Supports:
         spall_scope("Restart: initialize support")
         
-        if init_cell_index < len(cells) {
-            cell := &cells[init_cell_index]
+        if c.init_cell_index < len(cells) {
+            cell := &cells[c.init_cell_index]
             for &neighbour in cell.neighbours {
                 delete(neighbour.support)
                 make(&neighbour.support, len(c.states))
@@ -395,9 +387,9 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
                     }
                 }
             }
-            init_cell_index += 1
+            c.init_cell_index += 1
         } else {
-            init_cell_index = 0
+            c.init_cell_index = 0
             update_state = .Search_Cells
             print("Restart: Done\n")
         }
@@ -406,19 +398,27 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
         assert(len(c.to_be_collapsed) == 0)
         spall_scope("Find next cell to be collapsed")
         
-        found: [] ^Cell
-        reached_end := false
         search: Search
         init_search(&search, c, search_metric, context.temp_allocator)
         
-        loop: for &cell, index in cells {
-            if !cell.collapsed {
+        only_check_changes := len(c.changes) != 0
+        if only_check_changes {
+            for cell in c.changes {
+                if cell.collapsed do continue
+             
+                test_search_cell(&search, cell)
+            }
+            
+            clear(&c.changes)
+        } else {
+            for &cell in cells {
+                if cell.collapsed do continue
+                
                 test_search_cell(&search, &cell)
             }
         }
         
-        found = search.cells[:]
-        
+        found := search.cells[:]
         if len(found) > 0 {
             if len(found[0].states) == 1 {
                 spall_scope("Set All chosen cells to be collapse")
@@ -429,13 +429,17 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
             
             update_state = .Collapse_Cells
         } else {
-            update_state = .Done
+            if !only_check_changes {
+                update_state = .Done
+            }
         }
         
       case .Collapse_Cells:
         spall_scope("Collapse chosen cell")
         
         for cell in c.to_be_collapsed {
+            if cell.collapsed do continue // @todo(viktor): ensure no duplicates in this list
+            
             pick := Invalid_State
             if len(cell.states) == 1 {
                 pick = cell.states[0]
@@ -477,23 +481,18 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
       case .Propagate_Changes:
         spall_scope("Propagate changes")
         
-        if len(c.changes) == 0 {
+        if len(c.changes) == c.changes_cursor {
             update_state = .Search_Cells
+            c.changes_cursor = 0
         } else {
-            changed: Change
-            for k, v in c.changes {
-                changed = v
-                delete_key(&c.changes, k)
-                break
-            }
-            defer delete(changed.removed_supports)
-            assert(len(changed.removed_supports) > 0)
+            changed := c.changes[c.changes_cursor]
+            c.changes_cursor += 1
             
-            propagate_remove: for neighbour in changed.cell.neighbours {
+            propagate_remove: for neighbour in changed.neighbours {
                 assert(neighbour.cell != nil)
                 if neighbour.cell.collapsed do continue propagate_remove
                 
-                direction := neighbour.cell.p - changed.cell.p
+                direction := neighbour.cell.p - changed.p
                 closeness := get_closeness(direction)
                 #reverse for to, state_index in neighbour.cell.states {
                     should_remove: bool
@@ -513,10 +512,10 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
                         spall_scope("recalc states loop")
                         
                         states: [] State_Id
-                        if changed.cell.collapsed {
-                            states = { changed.cell.collapsed_state }
+                        if changed.collapsed {
+                            states = { changed.collapsed_state }
                         } else {
-                            states = changed.cell.states[:]
+                            states = changed.states[:]
                         }
                         
                         should_remove = true
@@ -549,32 +548,17 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
 remove_state :: proc (c: ^Collapse, cell: ^Cell, removed_state: State_Id) {
     spall_proc()
     
-    p := cell.p
-    change, ok := &c.changes[p]
-    if !ok {
-        c.changes[p] = { cell = cell }
-        change = &c.changes[p]
+    append(&c.changes, cell)
+    change: ^^Cell
+    for &it in c.changes[c.changes_cursor:] {
+        if it == cell {
+            change = &it
+            break
+        }
     }
     
-    if change.removed_supports == nil {
-        spall_scope("remove_state: make removed support")
-        make(&change.removed_supports, len(c.states))
-    }
-
-    when false do for neighbour in cell.neighbours {
-        if neighbour.cell.collapsed do continue
-        
-        direction_from_neighbour := -neighbour.to_neighbour
-        closeness := get_closeness(direction_from_neighbour)
-        
-        for support in supports(c, removed_state) {
-            removed_support := &change.removed_supports[support.id]
-            removed_support.id = support.id
-            
-            amount := get_support_amount_(support, closeness)
-            removed_support.amount[neighbour.to_neighbour_in_grid] += amount
-            unimplemented()
-        }
+    if change == nil {
+        change = &c.changes[len(c.changes) - 1]
     }
 }
 
@@ -598,7 +582,7 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
                     for dx in 0..<N {
                         x := (bx + dx) % width
                         y := (by + dy) % height
-                        append_state_value(c, pixels[x + (height-1-y) * width])
+                        state_append_value(c, pixels[x + (height-1-y) * width])
                     }
                 }
                 end_state(c)
@@ -635,30 +619,6 @@ extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
         }
         
         print("Extraction: Supports generation done: %       \n", view_time_duration(time.since(start), precision = 3))
-    }
-    
-    {
-        spall_scope("Extraction: Color Groups")
-        for state in c.states {
-            color_id := state.values[N/2 + N/2 * N] // middle
-            color := c.values[color_id]
-            
-            group: ^Color_Group
-            for &it in color_groups {
-                if it.color == color {
-                    group = &it
-                    break
-                }
-            }
-            
-            if group == nil {
-                append(&color_groups, Color_Group { color = color })
-                group = &color_groups[len(color_groups)-1]
-                make(&group.ids, len(c.states))
-            }
-            
-            group.ids[state.id] = true
-        }
     }
     
     print("Extraction: Done\n")
