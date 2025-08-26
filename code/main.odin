@@ -28,8 +28,6 @@ total_duration: time.Duration
 
 paused: b32
 
-wrapping: b32
-
 cell_size_on_screen: v2
 
 average_colors: [] Average_Color
@@ -60,8 +58,6 @@ File :: struct {
     texture: rl.Texture2D,
 }
 
-view_slices: i32 = 4
-view_slice_start: f32
 view_mode := View_Mode.Nearest
 View_Mode :: enum {
     Nearest,
@@ -127,15 +123,10 @@ generate_kind: Generate_Kind = .Shifted_Grid
 
 ////////////////////////////////////////////////
 
-this_frame := Frame {
-    desired_N         = N,
-    desired_dimension = dimension,
-}
 Frame :: struct {
     tasks: bit_set[Task],
     
     // extract states
-    desired_N:        i32,
     pixels:           [] rl.Color,
     pixels_dimension: v2i,
     
@@ -152,6 +143,7 @@ Task :: enum {
 }
 
 show_index: i32 = -1
+desired_N: i32 = N
 
 main :: proc () {
     unused(screen_to_world)
@@ -165,7 +157,7 @@ main :: proc () {
     arena: Arena
     init_arena(&arena, make([]u8, 128*Megabyte))
     
-    images: map[string]File
+    images: map[string] File
     image_dir := "./images"
     file_type := ".png"
     infos, err := os2.read_directory_by_path(image_dir, 0, context.temp_allocator)
@@ -193,7 +185,7 @@ main :: proc () {
 
     entropy := seed_random_series(7458)
     collapse: Collapse
-    setup_grid(&collapse, dimension, &entropy, &arena)
+    setup_grid(&collapse, &entropy, &arena)
     
     for !rl.WindowShouldClose() {
         spall_scope("Frame")
@@ -206,17 +198,21 @@ main :: proc () {
         ////////////////////////////////////////////////
         // UI
         
-        this_frame.desired_dimension = dimension
-        this_frame.pixels = nil
-        this_frame.pixels_dimension = {}
-        this_frame.desired_neighbour_mode = neighbour_mode
+        this_frame := Frame {
+            desired_dimension      = dimension,
+            pixels                 = nil,
+            pixels_dimension       = {},
+            desired_neighbour_mode = neighbour_mode,
+        }
         
-        ui(&collapse, images)
+        ui(&collapse, images, &this_frame)
         
-        if this_frame.desired_dimension != dimension {
+        if dimension != this_frame.desired_dimension {
+            dimension = this_frame.desired_dimension
             this_frame.tasks += { .setup_grid }
         }
-        if this_frame.desired_neighbour_mode != neighbour_mode {
+        if neighbour_mode != this_frame.desired_neighbour_mode {
+            neighbour_mode = this_frame.desired_neighbour_mode
             this_frame.tasks += { .setup_grid }
         }
         
@@ -230,7 +226,7 @@ main :: proc () {
             if .setup_grid in this_frame.tasks {
                 this_frame.tasks -= { .setup_grid }
                 
-                setup_grid(&collapse, this_frame.desired_dimension, &entropy, &arena)
+                setup_grid(&collapse, &entropy, &arena)
                 
                 this_frame.tasks += { .restart }
                 if paused do break task_loop
@@ -241,8 +237,8 @@ main :: proc () {
                 
                 assert(this_frame.pixels != nil)
                 
-                N = this_frame.desired_N
-                reset_collapse(&collapse)
+                N = desired_N
+                collapse_reset(&collapse)
                 extract_states(&collapse, this_frame.pixels, this_frame.pixels_dimension.x, this_frame.pixels_dimension.y)
                 
                 this_frame.tasks += { .restart }
@@ -252,7 +248,7 @@ main :: proc () {
             if .restart in this_frame.tasks {
                 this_frame.tasks -= { .restart }
                 
-                restart_collapse(&collapse)
+                collapse_restart(&collapse)
                 
                 update_state = .Initialize_States
                 total_duration = 0
@@ -263,28 +259,25 @@ main :: proc () {
             if .update in this_frame.tasks {
                 this_frame.tasks -= { .update }
                 
-                if update_start == {} do update_start = time.now()
-                
-                this_update_start := time.now()
-                state := update(&collapse, &entropy)
-                switch state {
-                  case .CollapseUninialized: // nothing
-                  case .AllCollapsed: 
+                if collapse.states != nil {
+                    if update_start == {} do update_start = time.now()
                     
-                  case .FoundContradiction:
-                    this_frame.tasks += { .restart }
-                    
-                  case .Continue:
-                    if update_state >= .Search_Cells {
-                        total_duration += time.since(this_update_start)
-                        if paused do break task_loop
-                    }
-                    
-                    if time.duration_seconds(time.since(update_start)) < TargetFrameTime * 0.95 {
-                        this_frame.tasks += { .update }
+                    this_update_start := time.now()
+                    if collapse_update(&collapse, &entropy) {
+                        if update_state != .Done {
+                            if update_state >= .Search_Cells {
+                                total_duration += time.since(this_update_start)
+                                if paused do break task_loop
+                            }
+                            
+                            if time.duration_seconds(time.since(update_start)) < TargetFrameTime * 0.95 {
+                                this_frame.tasks += { .update }
+                            }
+                        }
+                    } else {
+                        this_frame.tasks += { .restart }
                     }
                 }
-                
             }
         }
         spall_end()
@@ -323,8 +316,8 @@ main :: proc () {
                             for id in cell.states {
                                 state    := collapse.states[id]
                                 color_id := state.values[N/4+N/4*N] // middle
-                                color += rl_color_to_v4(collapse.values[color_id]) * cast(f32) state.frequency
-                                count += cast(f32) state.frequency
+                                color += rl_color_to_v4(collapse.values[color_id]) * state.frequency
+                                count += state.frequency
                             }
                             
                             color = safe_ratio_0(color, count)
@@ -349,7 +342,6 @@ main :: proc () {
                     c := world_to_screen(cell.points[(p_index+1)%len(cell.points)])
                     rl.DrawTriangle(a, b, c, average)
                 }
-                
             }
             
             if show_voronoi_cells {
@@ -378,7 +370,7 @@ main :: proc () {
                     center := world_to_screen(cell.p)
                     rl.DrawCircleV(center, 4, color)
                     for neighbour in cell.neighbours {
-                        end := world_to_screen(cell.p + neighbour.to_neighbour)
+                        end := world_to_screen(neighbour.cell.p)
                         rl.DrawLineEx(center, end, 2, color_alpha)
                     }
                 }
@@ -400,25 +392,23 @@ main :: proc () {
                     rl.DrawTriangle(a, b, c, rl.PURPLE)
                 }
             }
-        
         } else {
             spall_scope("View Neighbours")
             center := get_center(rectangle_min_dimension(v2i{}, dimension))
             p := world_to_screen(center)
             
-            size := min(cell_size_on_screen.x, cell_size_on_screen.y)
+            size := min(cell_size_on_screen.x, cell_size_on_screen.y) * 3
             center_size := size
+            ring_size := size
+            ring_padding := 0.2 * ring_size
+            view_slices :: 250
             for comparing_group, group_index in color_groups {
-                ring_size := size
-                ring_padding := 0.2 * ring_size
-                
+                total_supports := make([] f32, view_slices, context.temp_allocator)
                 max_support: f32
-                total_supports := make([dynamic] f32, view_slices, context.temp_allocator)
                 
                 turns := cast(f32) view_slices
                 for slice in 0..<view_slices {
                     turn := cast(f32) slice
-                    turn += view_slice_start
                     
                     sampling_direction := arm(turn * Tau / turns)
                     
@@ -433,7 +423,6 @@ main :: proc () {
                 
                 for slice in 0..<view_slices {
                     turn := cast(f32) slice
-                    turn += view_slice_start
                     
                     sampling_direction := arm(turn * Tau / turns)
                     
@@ -465,6 +454,98 @@ main :: proc () {
     }
 }
 
+setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
+    ratio := vec_cast(f32, Screen_Size-100) / vec_cast(f32, dimension)
+    if ratio.x < ratio.y {
+        cell_size_on_screen = ratio.x
+    } else {
+        cell_size_on_screen = ratio.y 
+    }
+    
+    clear(&cells)
+    
+    area := dimension.x * dimension.y
+    delete(average_colors)
+    make(&average_colors, area)
+    
+    points := make([dynamic] v2d)
+    defer delete(points)
+    
+    generate_points(&points, cast(u32) area)
+    
+    dt: Delauney_Triangulation
+    begin_triangulation(&dt, arena, points[:])
+    complete_triangulation(&dt)
+    voronoi_cells := end_triangulation_voronoi_cells(&dt)
+    
+    for it in voronoi_cells {
+        cell: Cell
+        cell.p = vec_cast(f32, it.center * vec_cast(f64, dimension))
+        cell.collapsed = false
+        
+        delete(cell.states)
+        make(&cell.states, len(c.states))
+        for &it, index in cell.states do it = cast(State_Id) index
+        
+        make(&cell.points, 0, len(it.points))
+        
+        for point in it.points {
+            p := vec_cast(f32, point * vec_cast(f64, dimension))
+            append(&cell.points, p)
+        }
+        
+        append(&cells, cell)
+    }
+    
+    for &cell, index in cells {
+        voronoi := voronoi_cells[index]
+        for neighbour_index in voronoi.neighbour_indices {
+            neighbour: Neighbour
+            neighbour.cell = &cells[neighbour_index]
+            
+            do_append := true
+            
+            if do_append && .Threshold in neighbour_mode.kind {
+                delta := neighbour.cell.p - cell.p
+                if length(delta) > neighbour_mode.threshold {
+                    do_append = false
+                }
+            }
+            
+            if do_append && .Closest_N in neighbour_mode.kind {
+                if neighbour_mode.amount <= auto_cast len(cell.neighbours) {
+                    to_neighbour := length_squared(neighbour.cell.p - cell.p)
+                    to_furthest: f32
+                    removed := false
+                    #reverse for &it, it_index in cell.neighbours {
+                        to_it := length_squared(it.cell.p - cell.p)
+                        if to_it > to_neighbour {
+                            remove := false
+                            if neighbour_mode.allow_multiple_at_same_distance {
+                                if to_it >= to_furthest {
+                                    remove = true
+                                }
+                            } else {
+                                if to_it > to_furthest {
+                                    remove = true
+                                }
+                            }
+                            
+                            if remove {
+                                unordered_remove(&cell.neighbours, it_index)
+                                removed = true
+                            }
+                        }
+                    }
+                    
+                    if !removed do do_append = false
+                }
+            }
+            
+            if do_append do append(&cell.neighbours, neighbour)
+        }
+    }
+}
 
 generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
     side := round(u32, square_root(cast(f32) count))
@@ -553,102 +634,6 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
         append(points, v2d {.5, .5})
         
       case: unreachable()
-    }
-}
-
-
-setup_grid :: proc (c: ^Collapse, new_dimension: v2i, entropy: ^RandomSeries, arena: ^Arena) {
-    dimension = new_dimension // @todo(viktor): this is a really stupid idea
-    
-    ratio := vec_cast(f32, Screen_Size-100) / vec_cast(f32, new_dimension)
-    if ratio.x < ratio.y {
-        cell_size_on_screen = ratio.x
-    } else {
-        cell_size_on_screen = ratio.y 
-    }
-    
-    clear(&cells)
-    
-    area := new_dimension.x * new_dimension.y
-    delete(average_colors)
-    make(&average_colors, area)
-    
-    points := make([dynamic] v2d)
-    defer delete(points)
-    
-    generate_points(&points, cast(u32) area)
-    
-    dt: Delauney_Triangulation
-    begin_triangulation(&dt, arena, points[:])
-    complete_triangulation(&dt)
-    voronoi_cells := end_triangulation_voronoi_cells(&dt)
-    
-    for it in voronoi_cells {
-        cell: Cell
-        cell.p = vec_cast(f32, it.center * vec_cast(f64, dimension))
-        cell.collapsed = false
-        
-        delete(cell.states)
-        make(&cell.states, len(c.states))
-        for &it, index in cell.states do it = cast(State_Id) index
-        
-        make(&cell.points, 0, len(it.points))
-        
-        for point in it.points {
-            p := vec_cast(f32, point * vec_cast(f64, dimension))
-            append(&cell.points, p)
-        }
-        
-        append(&cells, cell)
-    }
-    
-    for &cell, index in cells {
-        voronoi := voronoi_cells[index]
-        for neighbour_index in voronoi.neighbour_indices {
-            neighbour: Neighbour
-            neighbour.cell = &cells[neighbour_index]
-            neighbour.to_neighbour = neighbour.cell.p - cell.p
-            
-            do_append := true
-            
-            if do_append && .Threshold in neighbour_mode.kind {
-                if length(neighbour.to_neighbour) > neighbour_mode.threshold {
-                    do_append = false
-                }
-            }
-            
-            if do_append && .Closest_N in neighbour_mode.kind {
-                if neighbour_mode.amount <= auto_cast len(cell.neighbours) {
-                    to_neighbour := length_squared(neighbour.to_neighbour)
-                    to_furthest: f32
-                    removed := false
-                    #reverse for &it, it_index in cell.neighbours {
-                        to_it := length_squared(it.to_neighbour)
-                        if to_it > to_neighbour {
-                            remove := false
-                            if neighbour_mode.allow_multiple_at_same_distance {
-                                if to_it >= to_furthest {
-                                    remove = true
-                                }
-                            } else {
-                                if to_it > to_furthest {
-                                    remove = true
-                                }
-                            }
-                            
-                            if remove {
-                                unordered_remove(&cell.neighbours, it_index)
-                                removed = true
-                            }
-                        }
-                    }
-                    
-                    if !removed do do_append = false
-                }
-            }
-            
-            if do_append do append(&cell.neighbours, neighbour)
-        }
     }
 }
 

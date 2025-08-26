@@ -3,14 +3,15 @@ package main
 import rl "vendor:raylib"
 import imgui "../lib/odin-imgui/"
 
-ui :: proc (c: ^Collapse, images: map[string] File) {
+ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
     imgui.begin("Extract")
         imgui.text("Choose Input Image")
-        imgui.slider_int("Tile Size", &this_frame.desired_N, 1, 10)
+        imgui.slider_int("Tile Size", &desired_N, 1, 10)
         
         if len(c.states) == 0 {
             imgui.text("Select an input image")
         }
+        
         imgui.columns(4)
         for _, &image in images {
             imgui.push_id(&image)
@@ -105,9 +106,6 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
             imgui.next_column()
         }
         imgui.columns()
-        
-        imgui.slider_float("Start Angle", &view_slice_start, 0, Tau)
-        imgui.slider_int("Subdivision", &view_slices, 1, 500, flags = .Logarithmic)
         
         imgui.text("Directional Spread")
         view_modes := [View_Mode] string {
