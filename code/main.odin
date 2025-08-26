@@ -16,20 +16,6 @@ import rlimgui "../lib/odin-imgui/examples/raylib"
     X Clip/remove triangles outside of the region
 */
 
-Deltas := [Direction] v2i { 
-    .East  = { 1, 0},
-    .North = { 0, 1},
-    .West  = {-1, 0},
-    .South = { 0,-1},
-}
-
-Opposite := [Direction] Direction {
-    .East  = .West,
-    .North = .South,
-    .West  = .East,
-    .South = .North,
-}
-
 Screen_Size :: v2i{1920, 1080}
 
 TargetFps       :: 60
@@ -49,13 +35,13 @@ cell_size_on_screen: v2
 average_colors: [] Average_Color
 Average_Color :: struct {
     states_count_when_computed: u32,
-    color: rl.Color,
+    color:                      rl.Color,
 }
 
-show_neighbours := false
-show_voronoi_cells := true
+show_neighbours                := false
+show_voronoi_cells             := true
 render_wavefunction_as_average := true
-highlight_changes := true
+highlight_changes              := true
 
 viewing_group: ^Color_Group
 color_groups:  [dynamic] Color_Group
@@ -90,6 +76,20 @@ Direction :: enum {
     East, North, West, South,
 }
 
+Deltas := [Direction] v2i { 
+    .East  = { 1, 0},
+    .North = { 0, 1},
+    .West  = {-1, 0},
+    .South = { 0,-1},
+}
+
+Opposite := [Direction] Direction {
+    .East  = .West,
+    .North = .South,
+    .West  = .East,
+    .South = .North,
+}
+
 search_metric := Search_Metric.Entropy
 
 ////////////////////////////////////////////////
@@ -113,11 +113,24 @@ Neighbour_Mode :: struct {
     allow_multiple_at_same_distance: bool,    
 }
 
-Generate_Kind: i32 = -1
+Generate_Kind :: enum {
+    Shifted_Grid,
+    Grid,
+    Hex_Vertical,
+    Hex_Horizontal,
+    Spiral,
+    Random,
+    BlueNoise,
+    Test,
+}
+generate_kind: Generate_Kind = .Shifted_Grid
 
 ////////////////////////////////////////////////
 
-this_frame: Frame
+this_frame := Frame {
+    desired_N         = N,
+    desired_dimension = dimension,
+}
 Frame :: struct {
     tasks: bit_set[Task],
     
@@ -126,14 +139,13 @@ Frame :: struct {
     pixels:           [] rl.Color,
     pixels_dimension: v2i,
     
-    // resize grid
+    // setup grid
     desired_dimension: v2i,
-    old_dimension:     v2i,
-    old_grid:          [] Cell,
+    desired_neighbour_mode: Neighbour_Mode,
 }
 
 Task :: enum {
-    resize_grid, 
+    setup_grid, 
     extract_states, 
     restart, 
     update,
@@ -181,8 +193,7 @@ main :: proc () {
 
     entropy := seed_random_series(7458)
     collapse: Collapse
-    setup_grid(&collapse, dimension, dimension, &entropy, &arena)
-    this_frame.desired_N = N
+    setup_grid(&collapse, dimension, &entropy, &arena)
     
     for !rl.WindowShouldClose() {
         spall_scope("Frame")
@@ -198,9 +209,16 @@ main :: proc () {
         this_frame.desired_dimension = dimension
         this_frame.pixels = nil
         this_frame.pixels_dimension = {}
-        this_frame.old_grid = nil
+        this_frame.desired_neighbour_mode = neighbour_mode
         
         ui(&collapse, images)
+        
+        if this_frame.desired_dimension != dimension {
+            this_frame.tasks += { .setup_grid }
+        }
+        if this_frame.desired_neighbour_mode != neighbour_mode {
+            this_frame.tasks += { .setup_grid }
+        }
         
         ////////////////////////////////////////////////
         // Update 
@@ -209,12 +227,10 @@ main :: proc () {
         spall_begin("Update")
         task_loop: for this_frame.tasks != {} {
             // @todo(viktor): if drawing_initializing and do_restart: Tell the user that their drawing may be unsolvable
-            if .resize_grid in this_frame.tasks {
-                this_frame.tasks -= { .resize_grid }
+            if .setup_grid in this_frame.tasks {
+                this_frame.tasks -= { .setup_grid }
                 
-                this_frame.old_grid = cells[:]
-                this_frame.old_dimension = dimension
-                setup_grid(&collapse, dimension, this_frame.desired_dimension, &entropy, &arena)
+                setup_grid(&collapse, this_frame.desired_dimension, &entropy, &arena)
                 
                 this_frame.tasks += { .restart }
                 if paused do break task_loop
@@ -297,24 +313,23 @@ main :: proc () {
             } else {
                 if len(cell.states) == 0 {
                     average.color = { 0, 0, 0, 0 }
-                }
-                
-                if render_wavefunction_as_average {
-                    // @todo(viktor): also allow for most likely color
-                    if average.states_count_when_computed != auto_cast len(cell.states) {
-                        average.states_count_when_computed = auto_cast len(cell.states)
-                        
-                        color: v4
-                        count: f32
-                        for id in cell.states {
-                            state    := collapse.states[id]
-                            color_id := state.values[N/4+N/4*N] // middle
-                            color += rl_color_to_v4(collapse.values[color_id]) * cast(f32) state.frequency
-                            count += cast(f32) state.frequency
+                } else {
+                    if render_wavefunction_as_average {
+                        if average.states_count_when_computed != auto_cast len(cell.states) {
+                            average.states_count_when_computed = auto_cast len(cell.states)
+                            
+                            color: v4
+                            count: f32
+                            for id in cell.states {
+                                state    := collapse.states[id]
+                                color_id := state.values[N/4+N/4*N] // middle
+                                color += rl_color_to_v4(collapse.values[color_id]) * cast(f32) state.frequency
+                                count += cast(f32) state.frequency
+                            }
+                            
+                            color = safe_ratio_0(color, count)
+                            average.color = cast(rl.Color) v4_to_rgba(color * {1,1,1,0.3})
                         }
-                        
-                        color = safe_ratio_0(color, count)
-                        average.color = cast(rl.Color) v4_to_rgba(color * {1,1,1,0.3})
                     }
                 }
             }
@@ -324,7 +339,7 @@ main :: proc () {
         
         if viewing_group == nil {
             for &cell, index in cells {
-                if !(show_index < 0 || show_index == auto_cast index) do continue
+                if show_index != -1 && show_index != auto_cast index do continue
                 
                 average := average_colors[index].color
                 
@@ -336,9 +351,10 @@ main :: proc () {
                 }
                 
             }
+            
             if show_voronoi_cells {
                 for cell, index in cells {
-                    if !(show_index < 0 || show_index == auto_cast index) do continue
+                    if show_index != -1 && show_index != auto_cast index do continue
                     
                     center := world_to_screen(cell.p)
                     rl.DrawCircleV(center, 3, v4_to_rl_color(Blue))
@@ -441,15 +457,11 @@ main :: proc () {
             spall_end()
         }
         
-        spall_end() // frame
-        
-        spall_begin("Execute Render")
-        
         imgui.render()
         rlimgui.ImGui_ImplRaylib_Render(imgui.get_draw_data())
         rl.EndDrawing()
         
-        spall_end()
+        spall_end(/* Frame */)
     }
 }
 
@@ -457,8 +469,8 @@ main :: proc () {
 generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
     side := round(u32, square_root(cast(f32) count))
     entropy := seed_random_series(123456789)
-    switch Generate_Kind  {
-      case -1:
+    switch generate_kind  {
+      case .Shifted_Grid:
         for x in 0 ..< side {
             for y in 0 ..< side {
                 p := vec_cast(f64, x, y) / cast(f64) side
@@ -468,7 +480,7 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
             }
         }
         
-      case 0:
+      case .Grid:
         for x in 0 ..< side {
             for y in 0 ..< side {
                 percent := vec_cast(f64, x, y) / cast(f64) side
@@ -477,7 +489,7 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
             }
         }
         
-      case 1:
+      case .Hex_Vertical:
         for x in 0 ..< side {
             for y in 0 ..< side {
                 x := cast(f64) x
@@ -487,7 +499,7 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
             }
         }
         
-      case 2:
+      case .Hex_Horizontal:
         for x in 0 ..< side {
             for y in 0 ..< side {
                 y := cast(f64) y
@@ -497,7 +509,7 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
             }
         }
         
-      case 3:
+      case .Spiral:
         center :: 0.5
         for index in 0..<count {
             angle := 1.6180339887 * cast(f64) index
@@ -506,12 +518,12 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
             append(points, center + arm(angle) * radius)
         }
         
-      case 4:
+      case .Random:
         for _ in 0..<count {
             append(points, random_unilateral(&entropy, v2d))
         }
         
-      case 5:
+      case .BlueNoise:
         r := square_root(1.0 / (Pi * f64(count)))
         min_dist_squared := r * r
         
@@ -533,7 +545,7 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
             append(points, new_point)
         }
         
-      case 6:
+      case .Test:
         append(points, v2d {.2, .2})
         append(points, v2d {.3, .7})
         append(points, v2d {.7, .3})
@@ -545,7 +557,7 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
 }
 
 
-setup_grid :: proc (c: ^Collapse, old_dimension, new_dimension: v2i, entropy: ^RandomSeries, arena: ^Arena) {
+setup_grid :: proc (c: ^Collapse, new_dimension: v2i, entropy: ^RandomSeries, arena: ^Arena) {
     dimension = new_dimension // @todo(viktor): this is a really stupid idea
     
     ratio := vec_cast(f32, Screen_Size-100) / vec_cast(f32, new_dimension)
