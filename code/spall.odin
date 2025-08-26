@@ -11,7 +11,7 @@ spall_ctx: spall.Context
 
 @(deferred_none = delete_spall)
 init_spall :: proc (location := #caller_location) {
-    spall_ctx = spall.context_create("trace_test.spall", 10 * time.Millisecond)
+    spall_ctx = spall.context_create("trace.spall", 10 * time.Millisecond)
     make(&buffer_backing, 10 * Megabyte)
     spall_buffer = spall.buffer_create(buffer_backing, auto_cast context.user_index)
 }
@@ -61,4 +61,8 @@ spall_begin :: proc (name: string, location := #caller_location) {
 
 spall_end :: proc () {
 	spall._buffer_end(&spall_ctx, &spall_buffer)
+}
+
+spall_flush :: proc () {
+    spall.buffer_flush(&spall_ctx, &spall_buffer)
 }

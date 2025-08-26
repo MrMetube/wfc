@@ -30,7 +30,8 @@ print_to_allocator :: proc (allocator: runtime.Allocator, format: string, args: 
 
 ////////////////////////////////////////////////
 
-              print :: proc { print_to_console, print_to_allocator }
+print  :: print_to_console
+aprint :: print_to_allocator
 @(printlike) tprint :: proc (format: string, args: ..any, flags: Format_Context_Flags = {}, allocator := context.temp_allocator) -> (result: string) { return print_to_allocator(allocator = allocator, format = format, args = args, flags = flags) }
 @(printlike) sprint :: proc (format: string, args: ..any, flags: Format_Context_Flags = {}, allocator := context.allocator)      -> (result: string) { return print_to_allocator(allocator = allocator, format = format, args = args, flags = flags) }
 
@@ -370,7 +371,9 @@ Format_Context :: struct {
 
 ////////////////////////////////////////////////
 
+// @todo(viktor): can we avoid copying twice/thrice, once into temp and once to the print buffer itself and once into the target(console or allocated buffer)? Can we write directly into the final buffer?
 @(private="file") temp_buffer:            [1024] u8
+
 @(private="file") temp_view_buffer:       [1024] View
 @(private="file") temp_view_inside_block: b32
 @(private="file") temp_view_start_index:  u32
@@ -528,12 +531,14 @@ format_view :: proc (ctx: ^Format_Context, view: View) {
     if       !view.pad_right_side && view.width != 0 do for _ in 0..<padding do append(&ctx.dest, ' ')
     defer if  view.pad_right_side && view.width != 0 do for _ in 0..<padding do append(&ctx.dest, ' ')
     
+    // @todo(viktor): Can we avoid this copy?
     append(&ctx.dest, to_string(temp))
 }
 
 ////////////////////////////////////////////////
 
 format_any :: proc (ctx: ^Format_Context, arg: any) {
+    spall_proc()
     if ctx.max_depth <= 0 do return
     
     switch value in arg {

@@ -58,13 +58,8 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
     imgui.text(tprint("%", update_state))
     
     if len(c.states) != 0 {
-        if update_state == .Initialize_Supports {
-            percent := view_percentage(c.init_cell_index, len(cells))
-            imgui.text_unformatted(tprint("Restart: % %%", percent))
-        } else {
-            if imgui.button("Restart") {
-                this_frame.tasks += { .restart }
-            }
+        if imgui.button("Restart") {
+            this_frame.tasks += { .restart }
         }
     }
         
@@ -165,7 +160,6 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
             imgui.slider_int("Amount", &this_frame.desired_neighbour_mode.amount, 0, 10)
             imgui.checkbox("allow multiple at same distance", &this_frame.desired_neighbour_mode.allow_multiple_at_same_distance)
         }
-        
         
     imgui.end()
 }

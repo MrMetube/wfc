@@ -152,6 +152,9 @@ main :: proc () {
     
     init_spall()
     
+    imgui.set_current_context(imgui.create_context(nil))
+    rlimgui.ImGui_ImplRaylib_Init()
+    
     arena: Arena
     init_arena(&arena, make([]u8, 128*Megabyte))
     
@@ -178,9 +181,6 @@ main :: proc () {
         }
     }
     
-    imgui.set_current_context(imgui.create_context(nil))
-    rlimgui.ImGui_ImplRaylib_Init()
-
     entropy := seed_random_series(7458)
     collapse: Collapse
     setup_grid(&collapse, &entropy, &arena)
@@ -270,7 +270,14 @@ main :: proc () {
                 
                 collapse_restart(&collapse)
                 
-                update_state = .Initialize_States
+                assert(len(collapse.changes) == 0)
+                assert(len(collapse.to_be_collapsed) == 0)
+                for &cell in cells {
+                    cell.state = .Collapsed
+                    cell_next_state(&collapse, &cell)
+                }
+                update_state = .Search_Cells
+                
                 total_duration = 0
                 zero(average_colors[:])
                 if paused do break task_loop
@@ -318,12 +325,9 @@ main :: proc () {
         for cell, index in cells {
             average := &average_colors[index]
             
-            if cell.collapsed {
-                state    := collapse.states[cell.collapsed_state]
-                color_id := state.middle_value
-                average.color = collapse.values[color_id]
-                average.states_count_when_computed = 1
-            } else {
+            switch cell.state {
+              case .Uninitialized:
+              case .Collapsing:
                 if len(cell.states) == 0 {
                     average.color = { 0, 0, 0, 0 }
                 } else {
@@ -345,6 +349,12 @@ main :: proc () {
                         }
                     }
                 }
+                
+              case .Collapsed:
+                state    := collapse.states[cell.collapsed_state]
+                color_id := state.middle_value
+                average.color = collapse.values[color_id]
+                average.states_count_when_computed = 1
             }
         }
         
@@ -376,16 +386,16 @@ main :: proc () {
                     center := world_to_screen(cell.p)
                     rl.DrawCircleV(center, 4, color)
                     for neighbour in cell.neighbours {
-                        end := world_to_screen(neighbour.cell.p)
+                        end := world_to_screen(neighbour.p)
                         rl.DrawLineEx(center, end, 2, color_alpha)
                     }
                 }
             }
                         
             if highlight_changes {
-                color := rl.ColorAlpha(rl.YELLOW, 0.4)
+                color := rl.YELLOW
                 for change in collapse.changes[collapse.changes_cursor:] {
-                    draw_cell(change^, color)
+                    draw_cell_outline(change^, color)
                 }
             }
             
@@ -455,7 +465,7 @@ main :: proc () {
         rlimgui.ImGui_ImplRaylib_Render(imgui.get_draw_data())
         rl.EndDrawing()
         
-        spall_end(/* Frame */)
+        spall_end(/* Render */)
     }
 }
 
@@ -486,32 +496,27 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
     for it in voronoi_cells {
         cell: Cell
         cell.p = vec_cast(f32, it.center * vec_cast(f64, dimension))
-        cell.collapsed = false
-        
-        delete(cell.states)
-        make(&cell.states, len(c.states))
-        for &it, index in cell.states do it = cast(State_Id) index
         
         make(&cell.points, 0, len(it.points))
-        
         for point in it.points {
             p := vec_cast(f32, point * vec_cast(f64, dimension))
             append(&cell.points, p)
         }
         
+        cell.state = .Uninitialized 
         append(&cells, cell)
     }
     
     for &cell, index in cells {
         voronoi := voronoi_cells[index]
         for neighbour_index in voronoi.neighbour_indices {
-            neighbour: Neighbour
-            neighbour.cell = &cells[neighbour_index]
+            neighbour: ^Cell
+            neighbour = &cells[neighbour_index]
             
             do_append := true
             
             if do_append && .Threshold in neighbour_mode.kind {
-                delta := neighbour.cell.p - cell.p
+                delta := neighbour.p - cell.p
                 if length(delta) > neighbour_mode.threshold {
                     do_append = false
                 }
@@ -519,11 +524,11 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
             
             if do_append && .Closest_N in neighbour_mode.kind {
                 if neighbour_mode.amount <= auto_cast len(cell.neighbours) {
-                    to_neighbour := length_squared(neighbour.cell.p - cell.p)
+                    to_neighbour := length_squared(neighbour.p - cell.p)
                     to_furthest: f32
                     removed := false
                     #reverse for &it, it_index in cell.neighbours {
-                        to_it := length_squared(it.cell.p - cell.p)
+                        to_it := length_squared(it.p - cell.p)
                         if to_it > to_neighbour {
                             remove := false
                             if neighbour_mode.allow_multiple_at_same_distance {
