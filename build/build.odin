@@ -8,12 +8,12 @@ import "core:strings"
 import "core:time"
 import win "core:sys/windows"
 
-optimizations := false ? `-o:speed` : `-o:none`
+Optimizations :: false
 Pedantic      :: false
+Windows       :: !true
 
 debug    :: `-debug`
 flags    := [] string {`-error-pos-style:unix`,`-vet-cast`,`-vet-shadowing`,`-ignore-vs-search`,`-use-single-module`,`-microarch:native`,`-target:windows_amd64`}
-windows  := !true ? `-subsystem:windows` : `-subsystem:console`
 pedantic := [] string {
     `-warnings-as-errors`,`-vet-unused-imports`,`-vet-semicolon`,`-vet-unused-variables`,`-vet-style`,
     `-vet-packages:main`,`-vet-unused-procedures`
@@ -70,6 +70,7 @@ main :: proc() {
     assert(err == nil)
     
     if !check_printlikes(code_dir) do os.exit(1)
+    
     cmd: Cmd
     if .debugger in tasks {
         if ok, pid := is_running(raddbg); ok {
@@ -89,6 +90,9 @@ main :: proc() {
         }
         
         if build {
+            windows := Windows ? `-subsystem:windows` : `-subsystem:console`
+            optimizations := Optimizations ? `-o:speed` : `-o:none`
+            
             odin_build(&cmd, code_dir, debug_exe_path)
             append(&cmd, ..flags)
             append(&cmd, debug)
@@ -96,7 +100,7 @@ main :: proc() {
             append(&cmd, check)
             append(&cmd, windows)
             append(&cmd, optimizations)
-            if Pedantic do append(&cmd, ..pedantic)
+            when Pedantic do append(&cmd, ..pedantic)
             
             run_command(&cmd)
         }
@@ -244,10 +248,8 @@ odin_build :: proc(cmd: ^[dynamic]string, dir: string, out: string) {
 
 
 
-
-Error :: union { os2.Error, os.Error }
-
 go_rebuild_yourself :: proc() {
+    Error :: union { os2.Error, os.Error }
     error: Error
     old_build_exe_path := fmt.tprintf("%vold-%v", build_src_path, build_exe_name)
     build_exe_path := fmt.tprintf("%v%v", build_src_path, build_exe_name)
@@ -383,9 +385,9 @@ is_running :: proc(exe_name: string) -> (running: b32, pid: u32) {
     snapshot := win.CreateToolhelp32Snapshot(win.TH32CS_SNAPALL, 0)
     assert(snapshot != win.INVALID_HANDLE_VALUE, "could not take a snapshot of the running programms")
     defer win.CloseHandle(snapshot)
-
+    
     process_entry := win.PROCESSENTRY32W{ dwSize = size_of(win.PROCESSENTRY32W)}
-
+    
     if win.Process32FirstW(snapshot, &process_entry) {
         for {
             test_name, err := win.utf16_to_utf8(process_entry.szExeFile[:])
@@ -398,7 +400,7 @@ is_running :: proc(exe_name: string) -> (running: b32, pid: u32) {
             }
         }
     }
-
+    
     return false, 0
 }
 
