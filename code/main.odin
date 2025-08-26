@@ -9,9 +9,11 @@ import imgui "../lib/odin-imgui/"
 import rlimgui "../lib/odin-imgui/examples/raylib"
 
 /* @todo(viktor): 
-    - Clip/remove triangles outside of the region
     - Make Neighbour Relation not per cell but per cell-pair, so that when limiting the neighbours with neighbour_mode, we don't get a cell that has a neighbour who does not have that cell as its neighbour
+    - Make a visual editor for the closeness weighting function or make the viewing not a different mode but a window
+    - dont mutate the states of a cell, instead store its states with a tag marking, when that state became invalid. thereby allowing us the backtrace the changes made without much work. we wouldn't need to reinit the grid all the time and could better search the space. !!!we need a non deterministic selection or we will always resample the same invalid path!!! we could also store the decision per each timestep and not pick random but the next most likely pick.
     X limit sides to length of <= 1
+    X Clip/remove triangles outside of the region
 */
 
 Deltas := [Direction] v2i { 
@@ -64,7 +66,7 @@ Color_Group :: struct {
 
 grid_background_color := DarkGreen
 
-dimension: v2i = {5, 5}
+dimension: v2i = {50, 50}
 
 File :: struct {
     data:    [] u8,
@@ -74,9 +76,12 @@ File :: struct {
 
 view_slices: i32 = 4
 view_slice_start: f32
-view_mode := View_Mode.AcosCos
+view_mode := View_Mode.Nearest
 View_Mode :: enum {
-    Cos, AcosCos, AcosAcosCos,
+    Nearest,
+    Cos, 
+    AcosCos, 
+    AcosAcosCos,
 }
 
 ////////////////////////////////////////////////
@@ -90,7 +95,8 @@ search_metric := Search_Metric.Entropy
 ////////////////////////////////////////////////
 
 neighbour_mode := Neighbour_Mode {
-    // kind = {.Closest_N},
+    kind = {.Threshold},
+    threshold = 1.2,
     // amount = 4,
     // allow_multiple_at_same_distance = true,
 }
@@ -107,7 +113,7 @@ Neighbour_Mode :: struct {
     allow_multiple_at_same_distance: bool,    
 }
 
-Generate_Kind: i32 = 1
+Generate_Kind: i32 = -1
 
 ////////////////////////////////////////////////
 
@@ -385,9 +391,9 @@ main :: proc () {
             p := world_to_screen(center)
             
             size := min(cell_size_on_screen.x, cell_size_on_screen.y)
-            center_size := size * 3
+            center_size := size
             for comparing_group, group_index in color_groups {
-                ring_size := size * 3
+                ring_size := size
                 ring_padding := 0.2 * ring_size
                 
                 max_support: f32
@@ -434,6 +440,8 @@ main :: proc () {
             rl.DrawCircleV(p, center_size, viewing_group.color)
             spall_end()
         }
+        
+        spall_end() // frame
         
         spall_begin("Execute Render")
         

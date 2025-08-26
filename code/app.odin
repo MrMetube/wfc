@@ -154,6 +154,7 @@ ui :: proc (c: ^Collapse, images: map[string] File) {
         
         imgui.text("Directional Spread")
         view_modes := [View_Mode] string {
+            .Nearest     = "Nearest",
             .Cos         = "Gradual",
             .AcosCos     = "Linear",
             .AcosAcosCos = "Steep",

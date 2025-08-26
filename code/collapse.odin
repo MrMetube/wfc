@@ -80,12 +80,29 @@ get_closeness :: proc (sampling_direction: v2) -> (result: [Direction] f32) {
     for &closeness, other in result {
         other_dir := normalize(vec_cast(f32, Deltas[other]))
         switch view_mode {
+          case .Nearest:     closeness = dot(sampling_direction, other_dir)
           case .Cos:         closeness = dot(sampling_direction, other_dir)
           case .AcosCos:     closeness = 1 - acos(dot(sampling_direction, other_dir))
           case .AcosAcosCos: closeness = acos(acos(dot(sampling_direction, other_dir)))
         }
         closeness = clamp(closeness, 0, 1)
     }
+    
+    if view_mode == .Nearest {
+        nearest: Direction
+        nearest_value := NegativeInfinity
+        for value, direction in result {
+            if nearest_value < value {
+                nearest_value = value
+                nearest = direction
+            }
+        }
+        
+        for &value, direction in result {
+            value = direction != nearest ? 0 : 1
+        }
+    }
+    
     return result
 }
 
