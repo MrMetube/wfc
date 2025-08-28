@@ -9,9 +9,9 @@ import imgui "../lib/odin-imgui/"
 import rlimgui "../lib/odin-imgui/examples/raylib"
 
 /* @todo(viktor): 
-    - Make Neighbour Relation not per cell but per cell-pair, so that when limiting the neighbours with neighbour_mode, we don't get a cell that has a neighbour who does not have that cell as its neighbour
+    - If we keep using Neighbour_Mode to filter connections: Make Neighbour Relation not per cell but per cell-pair, so that when limiting the neighbours with neighbour_mode, we don't get a cell that has a neighbour who does not have that cell as its neighbour
     - Make a visual editor for the closeness weighting function or make the viewing not a different mode but a window
-    - dont mutate the states of a cell, instead store its states with a tag marking, when that state became invalid. thereby allowing us the backtrace the changes made without much work. we wouldn't need to reinit the grid all the time and could better search the space. !!!we need a non deterministic selection or we will always resample the same invalid path!!! we could also store the decision per each timestep and not pick random but the next most likely pick.
+    - dont mutate the states of a cell, instead store its states with a tag marking, when that state became invalid. thereby allowing us the backtrack the changes made without much work. we wouldn't need to reinit the grid all the time and could better search the space. !!!we need a non deterministic selection or we will always resample the same invalid path!!! we could also store the decision per each timestep and not pick random but the next most likely pick.
 */
 
 Screen_Size :: v2i{1920, 1080}
@@ -564,9 +564,10 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
       case .Shifted_Grid:
         for x in 0 ..< side {
             for y in 0 ..< side {
-                p := vec_cast(f64, x, y) / cast(f64) side
-                p += random_bilateral(&entropy, v2d) * (0.05 / cast(f64) side)
-                p = clamp(p, 0.01, 0.98)
+                p := (vec_cast(f64, x, y) + 0.5) / cast(f64) side
+                offset := random_unilateral(&entropy, v2d) * (0.05 / cast(f64) side) + 0.001
+                p += next_random_u32(&entropy) % 2 == 0 ? offset : - offset
+                p = clamp(p, 0, 1)
                 append(points, p)
             }
         }
@@ -574,9 +575,8 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
       case .Grid:
         for x in 0 ..< side {
             for y in 0 ..< side {
-                percent := vec_cast(f64, x, y) / cast(f64) side
-                pad := 0.01
-                append(points, pad + percent * (1-pad*2))
+                p := (vec_cast(f64, x, y) + 0.5) / cast(f64) side
+                append(points, p)
             }
         }
         
@@ -586,7 +586,7 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
                 x := cast(f64) x
                 if y % 2 == 0 do x += 0.5
                 y := cast(f64) y
-                append(points, v2d{x, y} / cast(f64) side)
+                append(points, (v2d{x, y} + 0.25) / cast(f64) side)
             }
         }
         
@@ -596,7 +596,7 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
                 y := cast(f64) y
                 if x % 2 == 0 do y += 0.5
                 x := cast(f64) x
-                append(points, v2d{x, y} / cast(f64) side)
+                append(points, (v2d{x, y} + 0.25) / cast(f64) side)
             }
         }
         

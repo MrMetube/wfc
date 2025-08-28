@@ -311,8 +311,9 @@ end_triangulation_voronoi_cells :: proc(dt: ^Delauney_Triangulation) -> (result:
         }
     }
     
+    foos := make([dynamic] Foo(f64, v2d), context.temp_allocator)
     for &voronoi in result {
-        sort_points_counterclockwise_around_center(&voronoi.center, voronoi.points[:])
+        sort_points_counterclockwise_around_center(&voronoi.center, voronoi.points[:], &foos)
     }
     
     for &voronoi in result {
@@ -336,23 +337,21 @@ end_triangulation_voronoi_cells :: proc(dt: ^Delauney_Triangulation) -> (result:
                 if n_ok do append(&voronoi.points, n)
                 point_index = 0
                 
-                sort_points_counterclockwise_around_center(&voronoi.center, voronoi.points[:])
+                sort_points_counterclockwise_around_center(&voronoi.center, voronoi.points[:], &foos)
             }
         }
     }
     
     for &voronoi in result {
-        sort_points_counterclockwise_around_center(&voronoi.center, voronoi.points[:])
+        sort_points_counterclockwise_around_center(&voronoi.center, voronoi.points[:], &foos)
     }
     
     return result
 }
 
-sort_points_counterclockwise_around_center :: proc (center: ^$V/[2]$E, points: [] V) {
-    Foo :: struct { angle: E, point: V}
-    foos := make([dynamic] Foo, 0, len(points), context.temp_allocator)
-    defer delete(foos)
-    
+Foo :: struct ($E: typeid, $V: typeid) { angle: E, point: V}
+sort_points_counterclockwise_around_center :: proc (center: ^$V/[2]$E, points: [] V, foos: ^[dynamic] Foo(E, V)) {
+    clear(foos)
     center ^= 0
     for point in points {
         center^ += point
@@ -360,10 +359,10 @@ sort_points_counterclockwise_around_center :: proc (center: ^$V/[2]$E, points: [
     center^ /= auto_cast len(points)
     
     for point in points {
-        append(&foos, Foo { angle = atan2(point - center^), point = point })
+        append(foos, Foo(E,V) { angle = atan2(point - center^), point = point })
     }
     
-    slices.sort_by(foos[:], proc(a: Foo, b: Foo) -> (result: bool) { return a.angle < b.angle })
+    slices.sort_by(foos[:], proc(a: Foo(E,V), b: Foo(E,V)) -> (result: bool) { return a.angle < b.angle })
     
     for it, it_index in foos {
         points[it_index] = it.point

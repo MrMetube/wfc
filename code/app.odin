@@ -133,7 +133,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
                 this_frame.tasks += { .setup_grid }
             }
         }
-        imgui.slider_int2("Size", &this_frame.desired_dimension, 3, 500)
+        imgui.slider_int2("Size", &this_frame.desired_dimension, 3, 100, flags = .Logarithmic)
         
         imgui.slider_int("Show index", &show_index, -1, auto_cast len(cells))
         imgui.checkbox("Show Neighbours", &show_neighbours)
