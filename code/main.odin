@@ -19,7 +19,7 @@ import rlimgui "../lib/odin-imgui/examples/raylib"
     - dont mutate the states of a cell, instead store its states with a tag marking, when that state became invalid. thereby allowing us the backtrack the changes made without much work. we wouldn't need to reinit the grid all the time and could better search the space. !!!we need a non deterministic selection or we will always resample the same invalid path!!! we could also store the decision per each timestep and not pick random but the next most likely pick.
 */
 
-Screen_Size :: v2i{1920, 1080}
+Screen_Size :: v2i{1600, 900}
 
 TargetFps       :: 60
 TargetFrameTime :: 1./TargetFps

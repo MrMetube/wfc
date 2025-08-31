@@ -289,7 +289,7 @@ go_rebuild_yourself :: proc() {
         if !run_command(&cmd, or_exit = false) {
             fmt.println("ERROR: failed to to rebuild: ", error)
             error = os.rename(old_build_exe_path, build_exe_path)
-            if error != nil {
+            if error != nil && error.(os.Error) != .Not_Exist {
                 fmt.println("ERROR: failed to rename old build back: ", error)
             }
         }
