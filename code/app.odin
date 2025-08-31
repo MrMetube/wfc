@@ -4,6 +4,8 @@ import rl "vendor:raylib"
 import imgui "../lib/odin-imgui/"
 
 ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
+    spall_proc()
+    
     imgui.begin("Extract")
         imgui.text("Choose Input Image")
         imgui.slider_int("Tile Size", &desired_N, 1, 10)
@@ -47,7 +49,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
 
     if paused {
         if imgui.button("Unpause") do paused = false
-        if imgui.button("Step")    {
+        if imgui.button("Step") {
             this_frame.tasks += { .update }
         }
         // @todo(viktor): step until next phase
@@ -110,26 +112,28 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
             .AcosAcosCos = "Steep",
         }
         for text, mode in view_modes {
-            if imgui.button(tprint("% %", text, mode == view_mode ? "*" : "")) do view_mode = mode
+            selected := mode == view_mode
+            if imgui.radio_button(text, &view_mode, mode) {
+                this_frame.tasks += { .restart }
+            }
         }
         
     imgui.end()
     
     imgui.begin("Cells")
         generates := [Generate_Kind] string {
-            .Shifted_Grid = "Wonky Grid",
-            .Grid = "Grid",
-            .Hex_Vertical = "Hex Rows",
+            .Shifted_Grid   = "Wonky Grid",
+            .Grid           = "Grid",
+            .Hex_Vertical   = "Hex Rows",
             .Hex_Horizontal = "Hex Columns",
-            .Spiral = "Spiral",
-            .Random = "White Noise",
-            .BlueNoise = "Blue Noise",
-            .Test = "Test",
+            .Spiral         = "Spiral",
+            .Random         = "White Noise",
+            .BlueNoise      = "Blue Noise",
+            .Test           = "Test",
         }
         imgui.text("Generate Kind")
         for text, kind in generates {
-            if imgui.radio_button(text, kind == generate_kind) {
-                generate_kind = kind
+            if imgui.radio_button(text, &generate_kind, kind) {
                 this_frame.tasks += { .setup_grid }
             }
         }

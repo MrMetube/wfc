@@ -9,7 +9,9 @@ import imgui "../lib/odin-imgui/"
 import rlimgui "../lib/odin-imgui/examples/raylib"
 
 /* @todo(viktor): 
-    - If we keep using Neighbour_Mode to filter connections: Make Neighbour Relation not per cell but per cell-pair, so that when limiting the neighbours with neighbour_mode, we don't get a cell that has a neighbour who does not have that cell as its neighbour
+    - If we keep using Neighbour_Mode:
+        - to filter connections: Make Neighbour Relation not per cell but per cell-pair, so that when limiting the neighbours with neighbour_mode, we don't get a cell that has a neighbour who does not have that cell as its neighbour
+        - dont remove neighbours, just disable them, that way we dont ne do regenerate the whole grid again
     - Make a visual editor for the closeness weighting function or make the viewing not a different mode but a window
     - dont mutate the states of a cell, instead store its states with a tag marking, when that state became invalid. thereby allowing us the backtrack the changes made without much work. we wouldn't need to reinit the grid all the time and could better search the space. !!!we need a non deterministic selection or we will always resample the same invalid path!!! we could also store the decision per each timestep and not pick random but the next most likely pick.
 */
@@ -89,7 +91,7 @@ search_metric := Search_Metric.Entropy
 ////////////////////////////////////////////////
 
 neighbour_mode := Neighbour_Mode {
-    kind = {.Threshold},
+    kind = { .Threshold },
     threshold = 1.2,
     // amount = 4,
     // allow_multiple_at_same_distance = true,
@@ -136,12 +138,12 @@ Frame :: struct {
     pixels_dimension: v2i,
     
     // setup grid
-    desired_dimension: v2i,
+    desired_dimension:      v2i,
     desired_neighbour_mode: Neighbour_Mode,
 }
 
 show_index: i32 = -1
-desired_N: i32 = N
+desired_N:  i32 = N
 
 main :: proc () {
     unused(screen_to_world)
@@ -395,6 +397,7 @@ main :: proc () {
             if highlight_changes {
                 color := rl.YELLOW
                 for change in collapse.changes[collapse.changes_cursor:] {
+                    if change == nil do continue
                     draw_cell_outline(change^, color)
                 }
             }
@@ -408,7 +411,6 @@ main :: proc () {
                 }
             }
         } else {
-            spall_scope("View Neighbours")
             center := get_center(rectangle_min_dimension(v2i{}, dimension))
             p := world_to_screen(center)
             
@@ -458,7 +460,6 @@ main :: proc () {
             }
             
             rl.DrawCircleV(p, center_size, viewing_group.color)
-            spall_end()
         }
         
         imgui.render()

@@ -317,29 +317,23 @@ test_search_cell :: proc (search: ^Search, cell: ^Cell) {
     assert(cell.state != .Collapsed)
     
     value: f32
-    switch search.metric {
-      case .States:
-        switch cell.state {
-          case .Collapsed: unreachable()
-          
-          case .Uninitialized:
-            value = cast(f32) len(search.c.states)
-            
-          case .Collapsing:
-            value = cast(f32) len(cell.states)
-        }
+    switch cell.state {
+      case .Collapsed: unreachable()
         
-      case .Entropy: 
-        switch cell.state {
-          case .Collapsed: unreachable()
-          
-          case .Uninitialized:
+      case .Uninitialized:
+        switch search.metric {
+          case .States:
+            value = cast(f32) len(search.c.states)
+          case .Entropy: 
             value = log2(cast(f32) len(search.c.states))
+        }
             
-          case .Collapsing:
-            // @todo(viktor): only do this for cells that have changed
-            calculate_entropy(search.c, cell)
+      case .Collapsing:
+        switch search.metric {
+          case .States:
             value = cell.entropy
+          case .Entropy: 
+            value = cast(f32) len(cell.states)
         }
     }
     
@@ -392,20 +386,10 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
         
         only_check_changes := len(c.changes) != 0
         if only_check_changes {
-            spall_begin("deduplicate changes")
-            // @todo(viktor): ensure no duplicates in c.changes
-            seen := make(map[^Cell] b8, context.temp_allocator)
-            #reverse for cell, index in c.changes {
-                if cell.state == .Collapsed || cell in seen {
-                    unordered_remove(&c.changes, index)
-                }
-                seen[cell] = true
-            }
-            spall_end()
-            
             for cell in c.changes {
+                if cell == nil || cell.state == .Collapsed do continue
                 assert(cell.state != .Collapsed)
-                calculate_entropy(c, cell)
+                if search.metric == .Entropy do calculate_entropy(c, cell)
                 test_search_cell(&search, cell)
             }
             
@@ -413,6 +397,7 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
         } else {
             for &cell in cells {
                 if cell.state == .Collapsed do continue
+                if search.metric == .Entropy do calculate_entropy(c, &cell)
                 test_search_cell(&search, &cell)
             }
         }
@@ -491,10 +476,13 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
         } else {
             changed := c.changes[c.changes_cursor]
             c.changes_cursor += 1
+            for changed == nil {
+                changed = c.changes[c.changes_cursor]
+                c.changes_cursor += 1
+            }
             
             propagate_remove: for neighbour in changed.neighbours {
                 assert(neighbour != nil)
-                // @todo(viktor): can we assert here?
                 if neighbour.state == .Collapsed do continue propagate_remove
                 if neighbour.state == .Uninitialized {
                     cell_next_state(c, neighbour)
@@ -545,18 +533,13 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
 remove_state :: proc (c: ^Collapse, cell: ^Cell, removed_state: State_Id) {
     spall_proc()
     
-    change: ^^Cell
-    for &it in c.changes[c.changes_cursor:] {
+    for &it in c.changes {
         if it == cell {
-            change = &it
-            break
+            it = nil
         }
     }
     
-    if change == nil {
-        append(&c.changes, cell)
-        change = &c.changes[len(c.changes) - 1]
-    }
+    append(&c.changes, cell)
 }
 
 extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
