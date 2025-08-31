@@ -292,7 +292,7 @@ end_triangulation_voronoi_cells :: proc(dt: ^Delauney_Triangulation) -> (result:
     }
     
     append_unique_v2 :: proc (array: ^[dynamic] v2d, value: v2d) {
-        for it in array do if length(it - value) < 0.01 do return
+        for it in array do if length(it - value) < 0.0001 do return
         append(array, value)
     }
     
