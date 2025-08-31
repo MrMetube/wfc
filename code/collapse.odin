@@ -27,7 +27,8 @@ Collapse :: struct {
 Cell :: struct {
     p:          v2, 
     points:     [dynamic] v2, // for rendering the voronoi cell
-    neighbours: [dynamic] ^Cell,
+    all_neighbours: [dynamic] ^Cell,
+    neighbours:     [dynamic] ^Cell,
     
     state: Cell_State,
     
@@ -125,27 +126,11 @@ get_closeness :: proc (sampling_direction: v2) -> (result: [Direction] f32) {
     for &closeness, other in result {
         other_dir := vec_cast(f32, Deltas[other])
         switch view_mode {
-          case .Nearest:     closeness = dot(sampling_direction, other_dir)
           case .Cos:         closeness = dot(sampling_direction, other_dir)
           case .AcosCos:     closeness = 1 - acos(dot(sampling_direction, other_dir))
           case .AcosAcosCos: closeness = acos(acos(dot(sampling_direction, other_dir)))
         }
         closeness = clamp(closeness, 0, 1)
-    }
-    
-    if view_mode == .Nearest {
-        nearest: Direction
-        nearest_value := -Infinity
-        for value, direction in result {
-            if nearest_value < value {
-                nearest_value = value
-                nearest = direction
-            }
-        }
-        
-        for &value, direction in result {
-            value = direction != nearest ? 0 : 1
-        }
     }
     
     return result
@@ -492,9 +477,9 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
                 direction := neighbour.p - changed.p
                 closeness := get_closeness(direction)
                 did_change := false
+                spall_scope("recalc states loop")
                 #reverse for to, state_index in neighbour.states {
                     should_remove: bool
-                    spall_scope("recalc states loop")
                     
                     states: [] State_Id
                     if changed.state == .Collapsed {
@@ -504,15 +489,15 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
                     }
                     
                     should_remove = true
+                    total_amount: f32
                     f: for from in states {
                         amount := get_support_amount(c, from, to, closeness)
-                        should_remove = amount <= 0
-                        if !should_remove do break f
+                        total_amount += amount
                     }
+                    should_remove = total_amount <= 0
                     
                     if should_remove {
                         did_change = true
-                        remove_state(c, neighbour, to)
                         
                         unordered_remove(&neighbour.states, state_index)
                         if len(neighbour.states) == 0 {
@@ -520,6 +505,11 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
                             break propagate_remove
                         }
                     }
+                }
+                
+                if did_change {
+                    // @note(viktor): as we dont currently track the removed states anymore this is simpler
+                    remove_state(c, neighbour, 0)
                 }
             }
         }

@@ -52,7 +52,21 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         if imgui.button("Step") {
             this_frame.tasks += { .update }
         }
-        // @todo(viktor): step until next phase
+        if update_state != .Done {
+            if imgui.button("Step until next") {
+                this_frame.tasks += { .update }
+                switch update_state {
+                  case .Done: unreachable()
+                  
+                  case .Search_Cells:
+                    desired_update_state = .Collapse_Cells
+                  case .Collapse_Cells:
+                    desired_update_state = .Propagate_Changes
+                  case .Propagate_Changes:    
+                    desired_update_state = .Search_Cells
+                }
+            }
+        }
     } else {
         if imgui.button("Pause") do paused = true
         this_frame.tasks += { .update }
@@ -106,7 +120,6 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         
         imgui.text("Directional Spread")
         view_modes := [View_Mode] string {
-            .Nearest     = "Nearest",
             .Cos         = "Gradual",
             .AcosCos     = "Linear",
             .AcosAcosCos = "Steep",
@@ -122,8 +135,9 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
     
     imgui.begin("Cells")
         generates := [Generate_Kind] string {
-            .Shifted_Grid   = "Wonky Grid",
             .Grid           = "Grid",
+            .Shifted_Grid   = "Wonky Grid",
+            .Diamond_Grid   = "Diamond Grid",
             .Hex_Vertical   = "Hex Rows",
             .Hex_Horizontal = "Hex Columns",
             .Spiral         = "Spiral",

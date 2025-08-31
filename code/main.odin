@@ -9,9 +9,12 @@ import imgui "../lib/odin-imgui/"
 import rlimgui "../lib/odin-imgui/examples/raylib"
 
 /* @todo(viktor): 
-    - If we keep using Neighbour_Mode:
-        - to filter connections: Make Neighbour Relation not per cell but per cell-pair, so that when limiting the neighbours with neighbour_mode, we don't get a cell that has a neighbour who does not have that cell as its neighbour
-        - dont remove neighbours, just disable them, that way we dont ne do regenerate the whole grid again
+    - Maybe dont collapse into a concrete state immediatly but just into a set with all the same color / "middle value"
+    Decide on how to handle visual center vs. actual center for voronoi cells on the edge
+    Neighbour_Mode
+    - to filter connections: Make Neighbour Relation not per cell but per cell-pair, so that when limiting the neighbours with neighbour_mode, we don't get a cell that has a neighbour who does not have that cell as its neighbour
+    - dont remove neighbours, just disable them, that way we dont ne do regenerate the whole grid again
+    
     - Make a visual editor for the closeness weighting function or make the viewing not a different mode but a window
     - dont mutate the states of a cell, instead store its states with a tag marking, when that state became invalid. thereby allowing us the backtrack the changes made without much work. we wouldn't need to reinit the grid all the time and could better search the space. !!!we need a non deterministic selection or we will always resample the same invalid path!!! we could also store the decision per each timestep and not pick random but the next most likely pick.
 */
@@ -26,7 +29,9 @@ TargetFrameTime :: 1./TargetFps
 
 total_duration: time.Duration
 
+// @todo(viktor): rethink Update_State.Done with pausing and step until desired state
 paused: b32
+desired_update_state: Maybe(Update_State)
 
 cell_size_on_screen: v2
 
@@ -50,7 +55,7 @@ Color_Group :: struct {
 
 grid_background_color := DarkGreen
 
-dimension: v2i = {50, 50}
+dimension: v2i = {20, 20}
 
 File :: struct {
     data:    [] u8,
@@ -58,9 +63,8 @@ File :: struct {
     texture: rl.Texture2D,
 }
 
-view_mode := View_Mode.Nearest
+view_mode := View_Mode.Cos
 View_Mode :: enum {
-    Nearest,
     Cos, 
     AcosCos, 
     AcosAcosCos,
@@ -110,8 +114,9 @@ Neighbour_Mode :: struct {
 }
 
 Generate_Kind :: enum {
-    Shifted_Grid,
     Grid,
+    Shifted_Grid,
+    Diamond_Grid,
     Hex_Vertical,
     Hex_Horizontal,
     Spiral,
@@ -125,6 +130,7 @@ generate_kind: Generate_Kind = .Shifted_Grid
 
 Task :: enum {
     setup_grid, 
+    setup_neighbours,
     extract_states, 
     restart, 
     update,
@@ -186,6 +192,7 @@ main :: proc () {
     entropy := seed_random_series(7458)
     collapse: Collapse
     setup_grid(&collapse, &entropy, &arena)
+    setup_neighbours()
     
     for !rl.WindowShouldClose() {
         spall_scope("Frame")
@@ -213,7 +220,7 @@ main :: proc () {
         }
         if neighbour_mode != this_frame.desired_neighbour_mode {
             neighbour_mode = this_frame.desired_neighbour_mode
-            this_frame.tasks += { .setup_grid }
+            this_frame.tasks += { .setup_neighbours }
         }
         
         ////////////////////////////////////////////////
@@ -222,11 +229,18 @@ main :: proc () {
         
         spall_begin("Update")
         task_loop: for this_frame.tasks != {} {
-            // @todo(viktor): if drawing_initializing and do_restart: Tell the user that their drawing may be unsolvable
             if .setup_grid in this_frame.tasks {
                 this_frame.tasks -= { .setup_grid }
                 
                 setup_grid(&collapse, &entropy, &arena)
+                
+                this_frame.tasks += { .setup_neighbours, .restart }
+            }
+            
+            if .setup_neighbours in this_frame.tasks {
+                this_frame.tasks -= { .setup_neighbours }
+                
+                setup_neighbours()
                 
                 this_frame.tasks += { .restart }
                 if paused do break task_loop
@@ -296,7 +310,17 @@ main :: proc () {
                         if update_state != .Done {
                             if update_state >= .Search_Cells {
                                 total_duration += time.since(this_update_start)
-                                if paused do break task_loop
+                                if paused {
+                                    if desired_update_state != nil {
+                                        if desired_update_state != update_state {
+                                            this_frame.tasks += { .update }
+                                        } else {
+                                            desired_update_state = nil
+                                        }
+                                    } else {
+                                        break task_loop
+                                    }
+                                }
                             }
                             
                             if time.duration_seconds(time.since(update_start)) < TargetFrameTime * 0.95 {
@@ -366,7 +390,17 @@ main :: proc () {
             for &cell, index in cells {
                 if show_index != -1 && show_index != auto_cast index do continue
                 
-                draw_cell(cell, average_colors[index].color)
+                color: rl.Color
+                if render_wavefunction_as_average {
+                    color = average_colors[index].color
+                } else {
+                    if cell.state == .Collapsed {
+                        color = collapse.values[collapse.states[cell.collapsed_state].middle_value]
+                    } else {
+                        color = 0
+                    }
+                }
+                draw_cell(cell, color)
             }
             
             if show_voronoi_cells {
@@ -387,6 +421,10 @@ main :: proc () {
                 for cell in cells {
                     center := world_to_screen(cell.p)
                     rl.DrawCircleV(center, 4, color)
+                    for neighbour in cell.all_neighbours {
+                        end := world_to_screen(neighbour.p)
+                        rl.DrawLineEx(center, end, 1, rl.GRAY)
+                    }
                     for neighbour in cell.neighbours {
                         end := world_to_screen(neighbour.p)
                         rl.DrawLineEx(center, end, 2, color_alpha)
@@ -511,11 +549,19 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
     for &cell, index in cells {
         voronoi := voronoi_cells[index]
         for neighbour_index in voronoi.neighbour_indices {
-            neighbour: ^Cell
-            neighbour = &cells[neighbour_index]
+            neighbour := &cells[neighbour_index]
             
+            append(&cell.all_neighbours, neighbour)
+        }
+    }
+}
+
+setup_neighbours :: proc () {
+    for &cell in cells {
+        clear(&cell.neighbours)
+        
+        for neighbour in cell.all_neighbours {
             do_append := true
-            
             if do_append && .Threshold in neighbour_mode.kind {
                 delta := neighbour.p - cell.p
                 if length(delta) > neighbour_mode.threshold {
@@ -559,6 +605,7 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
 }
 
 generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
+    // @note(viktor): We get numerical instability if points are perfectly vertically or horizontally aligned
     side := round(u32, square_root(cast(f32) count))
     entropy := seed_random_series(123456789)
     switch generate_kind  {
@@ -577,7 +624,19 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
         for x in 0 ..< side {
             for y in 0 ..< side {
                 p := (vec_cast(f64, x, y) + 0.5) / cast(f64) side
+                p += random_bilateral(&entropy, v2d) * 0.00001
                 append(points, p)
+            }
+        }
+        
+      case .Diamond_Grid:
+        for x in 0 ..< side {
+            for y in 0 ..< side {
+                if (x + y) % 2 == 0 {
+                    p := (vec_cast(f64, x, y) + 0.5) / cast(f64) side
+                    p += random_bilateral(&entropy, v2d) * 0.00001
+                    append(points, p)
+                }
             }
         }
         
@@ -587,7 +646,9 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
                 x := cast(f64) x
                 if y % 2 == 0 do x += 0.5
                 y := cast(f64) y
-                append(points, (v2d{x, y} + 0.25) / cast(f64) side)
+                p := (v2d{x, y} + 0.25) / cast(f64) side
+                p += random_bilateral(&entropy, v2d) * 0.00001
+                append(points, p)
             }
         }
         
@@ -597,7 +658,9 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
                 y := cast(f64) y
                 if x % 2 == 0 do y += 0.5
                 x := cast(f64) x
-                append(points, (v2d{x, y} + 0.25) / cast(f64) side)
+                p := (v2d{x, y} + 0.25) / cast(f64) side
+                p += random_bilateral(&entropy, v2d) * 0.00001
+                append(points, p)
             }
         }
         
@@ -606,7 +669,7 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
         for index in 0..<count {
             angle := 1.6180339887 * cast(f64) index
             t := cast(f64) index / cast(f64) count
-            radius := linear_blend(f64(0.01), 0.5, square_root(t))
+            radius := 0.5 - linear_blend(f64(0.05), 0.5, square(t))
             append(points, center + arm(angle) * radius)
         }
         
