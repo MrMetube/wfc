@@ -294,18 +294,14 @@ test_search_cell :: proc (search: ^Search, cell: ^Cell) {
         
       case .Uninitialized:
         switch search.metric {
-          case .States:
-            value = cast(f32) len(search.c.states)
-          case .Entropy: 
-            value = log2(cast(f32) len(search.c.states))
+          case .States:  value = cast(f32) len(search.c.states)
+          case .Entropy: value = log2(cast(f32) len(search.c.states))
         }
             
       case .Collapsing:
         switch search.metric {
-          case .States:
-            value = cell.entropy
-          case .Entropy: 
-            value = cast(f32) len(cell.states)
+          case .States:  value = cast(f32) len(cell.states)
+          case .Entropy: value = cell.entropy
         }
     }
     
