@@ -13,7 +13,6 @@ import rlimgui "../lib/odin-imgui/examples/raylib"
     Decide on how to handle visual center vs. actual center for voronoi cells on the edge
     Neighbour_Mode
     - to filter connections: Make Neighbour Relation not per cell but per cell-pair, so that when limiting the neighbours with neighbour_mode, we don't get a cell that has a neighbour who does not have that cell as its neighbour
-    - dont remove neighbours, just disable them, that way we dont ne do regenerate the whole grid again
     
     - Make a visual editor for the closeness weighting function or make the viewing not a different mode but a window
     - dont mutate the states of a cell, instead store its states with a tag marking, when that state became invalid. thereby allowing us the backtrack the changes made without much work. we wouldn't need to reinit the grid all the time and could better search the space. !!!we need a non deterministic selection or we will always resample the same invalid path!!! we could also store the decision per each timestep and not pick random but the next most likely pick.
@@ -42,6 +41,7 @@ Average_Color :: struct {
 }
 
 show_neighbours                := false
+show_all_neighbours            := false
 show_voronoi_cells             := true
 render_wavefunction_as_average := true
 highlight_changes              := true
@@ -97,20 +97,14 @@ search_metric := Search_Metric.Entropy
 neighbour_mode := Neighbour_Mode {
     kind = { .Threshold },
     threshold = 1.2,
-    // amount = 4,
-    // allow_multiple_at_same_distance = true,
 }
 Neighbour_Kind :: enum {
     Threshold,
-    Closest_N,
 }
 Neighbour_Mode :: struct {
     kind: bit_set[Neighbour_Kind],
-
-    threshold: f32,
     
-    amount: i32,
-    allow_multiple_at_same_distance: bool,    
+    threshold: f32,
 }
 
 Generate_Kind :: enum {
@@ -421,13 +415,23 @@ main :: proc () {
                 for cell in cells {
                     center := world_to_screen(cell.p)
                     rl.DrawCircleV(center, 4, color)
-                    for neighbour in cell.all_neighbours {
-                        end := world_to_screen(neighbour.p)
-                        rl.DrawLineEx(center, end, 1, rl.GRAY)
-                    }
                     for neighbour in cell.neighbours {
                         end := world_to_screen(neighbour.p)
                         rl.DrawLineEx(center, end, 2, color_alpha)
+                    }
+                }
+            }
+            
+            if show_all_neighbours {
+                color := v4_to_rl_color(Blue) 
+                color_alpha := v4_to_rl_color(Blue * {1,1,1,0.5}) 
+                
+                for cell in cells {
+                    center := world_to_screen(cell.p)
+                    rl.DrawCircleV(center, 4, color)
+                    for neighbour in cell.all_neighbours {
+                        end := world_to_screen(neighbour.p)
+                        rl.DrawLineEx(center, end, 1, color_alpha)
                     }
                 }
             }
@@ -453,6 +457,7 @@ main :: proc () {
             p := world_to_screen(center)
             
             size := min(cell_size_on_screen.x, cell_size_on_screen.y) * 3
+            size = min(size, 20)
             center_size := size
             ring_size := size
             ring_padding := 0.2 * ring_size
@@ -479,7 +484,7 @@ main :: proc () {
                 for slice in 0..<view_slices {
                     turn := cast(f32) slice
                     
-                    sampling_direction := arm(turn * Tau / turns)
+                    sampling_direction := -arm(turn * Tau / turns)
                     
                     total_support := total_supports[slice]
                     alpha := safe_ratio_0(total_support, max_support)
@@ -566,36 +571,6 @@ setup_neighbours :: proc () {
                 delta := neighbour.p - cell.p
                 if length(delta) > neighbour_mode.threshold {
                     do_append = false
-                }
-            }
-            
-            if do_append && .Closest_N in neighbour_mode.kind {
-                if neighbour_mode.amount <= auto_cast len(cell.neighbours) {
-                    to_neighbour := length_squared(neighbour.p - cell.p)
-                    to_furthest: f32
-                    removed := false
-                    #reverse for &it, it_index in cell.neighbours {
-                        to_it := length_squared(it.p - cell.p)
-                        if to_it > to_neighbour {
-                            remove := false
-                            if neighbour_mode.allow_multiple_at_same_distance {
-                                if to_it >= to_furthest {
-                                    remove = true
-                                }
-                            } else {
-                                if to_it > to_furthest {
-                                    remove = true
-                                }
-                            }
-                            
-                            if remove {
-                                unordered_remove(&cell.neighbours, it_index)
-                                removed = true
-                            }
-                        }
-                    }
-                    
-                    if !removed do do_append = false
                 }
             }
             

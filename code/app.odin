@@ -155,14 +155,13 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         
         imgui.slider_int("Show index", &show_index, -1, auto_cast len(cells))
         imgui.checkbox("Show Neighbours", &show_neighbours)
+        imgui.checkbox("Show All Neighbours", &show_all_neighbours)
         imgui.checkbox("Show Voronoi Cells", &show_voronoi_cells)
         
+        imgui.text("Neighbour Mode")
         neighbours := [Neighbour_Kind] string {
-            .Closest_N = "Closest N neighbours",
             .Threshold = "Distance Threshold",
         }
-        imgui.text("Neighbour Mode")
-        
         for text, mode in neighbours {
             b := mode in neighbour_mode.kind
             if imgui.checkbox(text, &b) {
@@ -173,10 +172,6 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         
         if .Threshold in neighbour_mode.kind {
             imgui.slider_float("Threshold", &this_frame.desired_neighbour_mode.threshold, 0.5, 2)
-        }
-        if .Closest_N in neighbour_mode.kind {
-            imgui.slider_int("Amount", &this_frame.desired_neighbour_mode.amount, 0, 10)
-            imgui.checkbox("allow multiple at same distance", &this_frame.desired_neighbour_mode.allow_multiple_at_same_distance)
         }
         
     imgui.end()
