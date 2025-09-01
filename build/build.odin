@@ -8,9 +8,10 @@ import "core:strings"
 import "core:time"
 import win "core:sys/windows"
 
-Optimizations :: false
+
+optimizations := false ? `-o:speed` : `-o:none`
 Pedantic      :: false
-Windows       :: !true
+windows       := !true ? `-subsystem:windows` : `-subsystem:console`
 
 debug    :: `-debug`
 flags    := [] string {`-error-pos-style:unix`,`-vet-cast`,`-vet-shadowing`,`-ignore-vs-search`,`-use-single-module`,`-microarch:native`,`-target:windows_amd64`}
@@ -90,9 +91,6 @@ main :: proc() {
         }
         
         if build {
-            windows := Windows ? `-subsystem:windows` : `-subsystem:console`
-            optimizations := Optimizations ? `-o:speed` : `-o:none`
-            
             odin_build(&cmd, code_dir, debug_exe_path)
             append(&cmd, ..flags)
             append(&cmd, debug)

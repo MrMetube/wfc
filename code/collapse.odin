@@ -4,12 +4,9 @@ import "core:time"
 
 import rl "vendor:raylib"
 
-// @todo(viktor): dont rely on the user type, just use ids
-Value :: rl.Color
-
 Collapse :: struct {
     states:   [dynamic] State,
-    values:   [dynamic] Value,
+    values:   [dynamic] rl.Color,
     supports: [/* center - State_Id */] [/* neighbour - State_Id */] Support,
     
     to_be_collapsed: [dynamic] ^Cell,
@@ -182,7 +179,7 @@ begin_state :: proc (c: ^Collapse) {
     c.is_defining_state = true
 }
 
-state_append_value :: proc (c: ^Collapse, value: Value) {
+state_append_value :: proc (c: ^Collapse, value: rl.Color) {
     assert(c.is_defining_state)
     
     id := Invalid_Value
@@ -443,8 +440,7 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
             
             assert(pick != Invalid_State)
             {
-                // See @note below
-                remove_state(c, cell, 0)
+                mark_as_changed(c, cell)
                 
                 cell_next_state(c, cell)
                 clear(&cell.states)
@@ -477,8 +473,7 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
                 }
                 assert(neighbour.state != .Uninitialized)
                 
-                direction := neighbour.p - changed.p
-                closeness := get_closeness(direction)
+                closeness := get_closeness(neighbour.p - changed.p)
                 did_change := false
                 spall_scope("recalc states loop")
                 #reverse for to, state_index in neighbour.states {
@@ -504,8 +499,7 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
                 }
                 
                 if did_change {
-                    // @note(viktor): as we dont currently track the removed states anymore this is simpler
-                    remove_state(c, neighbour, 0)
+                    mark_as_changed(c, neighbour)
                 }
             }
         }
@@ -516,7 +510,7 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
     return ok
 }
 
-remove_state :: proc (c: ^Collapse, cell: ^Cell, removed_state: State_Id) {
+mark_as_changed :: proc (c: ^Collapse, cell: ^Cell) {
     spall_proc()
     
     for &it in c.changes {
@@ -528,7 +522,7 @@ remove_state :: proc (c: ^Collapse, cell: ^Cell, removed_state: State_Id) {
     append(&c.changes, cell)
 }
 
-extract_states :: proc (c: ^Collapse, pixels: [] Value, width, height: i32) {
+extract_states :: proc (c: ^Collapse, pixels: [] rl.Color, width, height: i32) {
     spall_proc()
     
     for &group in color_groups {
