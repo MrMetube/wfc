@@ -111,7 +111,7 @@ Generate_Kind :: enum {
     BlueNoise,
     Test,
 }
-generate_kind: Generate_Kind = .Shifted_Grid
+generate_kind: Generate_Kind = .Grid
 
 ////////////////////////////////////////////////
 
