@@ -67,7 +67,7 @@ View :: struct {
         bytes: []u8,
     },
     size: u8,
-    kind: View_Kind,
+    kind: Format_View_Kind,
     
     settings: bit_set[ enum {Width, Basis, Precision}],
     // General
@@ -121,7 +121,7 @@ View :: struct {
     */
 }
 
-View_Kind :: enum u8 {
+Format_View_Kind :: enum u8 {
     Bytes,
     
     String, Character, 
@@ -340,7 +340,7 @@ view_columns :: proc (value: $T) { unimplemented() }
 
 ////////////////////////////////////////////////
 
-view_set_data :: proc(view: ^View, value: $T, kind: View_Kind) {
+view_set_data :: proc(view: ^View, value: $T, kind: Format_View_Kind) {
     view.data = value
     view.kind = kind
 }
@@ -719,7 +719,7 @@ format_any :: proc (ctx: ^Format_Context, arg: any) {
 ////////////////////////////////////////////////
 ////////////////////////////////////////////////
 
-format_multiline_formatting :: proc (ctx: ^Format_Context, kind: View_Kind) {
+format_multiline_formatting :: proc (ctx: ^Format_Context, kind: Format_View_Kind) {
     if ctx.max_depth <= 0 do return
     
     if .Multiline in ctx.flags {

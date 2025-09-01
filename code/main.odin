@@ -11,9 +11,6 @@ import rlimgui "../lib/odin-imgui/examples/raylib"
 /* @todo(viktor): 
     - Maybe dont collapse into a concrete state immediatly but just into a set with all the same color / "middle value"
     Decide on how to handle visual center vs. actual center for voronoi cells on the edge
-    Neighbour_Mode
-    - to filter connections: Make Neighbour Relation not per cell but per cell-pair, so that when limiting the neighbours with neighbour_mode, we don't get a cell that has a neighbour who does not have that cell as its neighbour
-    
     - Make a visual editor for the closeness weighting function or make the viewing not a different mode but a window
     - dont mutate the states of a cell, instead store its states with a tag marking, when that state became invalid. thereby allowing us the backtrack the changes made without much work. we wouldn't need to reinit the grid all the time and could better search the space. !!!we need a non deterministic selection or we will always resample the same invalid path!!! we could also store the decision per each timestep and not pick random but the next most likely pick.
 */
@@ -63,11 +60,12 @@ File :: struct {
     texture: rl.Texture2D,
 }
 
-view_mode := View_Mode.Cos
-View_Mode :: enum {
-    Cos, 
-    AcosCos, 
-    AcosAcosCos,
+view_mode_t: f32
+
+
+View_Kind :: enum {
+    Cosine, 
+    Linear, 
 }
 
 ////////////////////////////////////////////////
@@ -185,8 +183,7 @@ main :: proc () {
     
     entropy := seed_random_series(7458)
     collapse: Collapse
-    setup_grid(&collapse, &entropy, &arena)
-    setup_neighbours()
+    do_tasks_in_order({ tasks = { .setup_grid } }, &collapse, &entropy, &arena)
     
     for !rl.WindowShouldClose() {
         spall_scope("Frame")
@@ -219,116 +216,8 @@ main :: proc () {
         
         ////////////////////////////////////////////////
         // Update 
-        update_start: time.Time
         
-        spall_begin("Update")
-        task_loop: for this_frame.tasks != {} {
-            if .setup_grid in this_frame.tasks {
-                this_frame.tasks -= { .setup_grid }
-                
-                setup_grid(&collapse, &entropy, &arena)
-                
-                this_frame.tasks += { .setup_neighbours, .restart }
-            }
-            
-            if .setup_neighbours in this_frame.tasks {
-                this_frame.tasks -= { .setup_neighbours }
-                
-                setup_neighbours()
-                
-                this_frame.tasks += { .restart }
-                if paused do break task_loop
-            }
-            
-            if .extract_states in this_frame.tasks {
-                this_frame.tasks -= { .extract_states }
-                
-                assert(this_frame.pixels != nil)
-                
-                N = desired_N
-                collapse_reset(&collapse)
-                extract_states(&collapse, this_frame.pixels, this_frame.pixels_dimension.x, this_frame.pixels_dimension.y)
-                
-                // Extract color groups
-                for state in collapse.states {
-                    color_id := state.middle_value
-                    color := collapse.values[color_id]
-                    
-                    group: ^Color_Group
-                    for &it in color_groups {
-                        if it.color == color {
-                            group = &it
-                            break
-                        }
-                    }
-                    
-                    if group == nil {
-                        append(&color_groups, Color_Group { color = color })
-                        group = &color_groups[len(color_groups)-1]
-                        make(&group.ids, len(collapse.states))
-                    }
-                    
-                    group.ids[state.id] = true
-                }
-                
-                this_frame.tasks += { .restart }
-                if paused do break task_loop
-            }
-            
-            if .restart in this_frame.tasks {
-                this_frame.tasks -= { .restart }
-                
-                collapse_restart(&collapse)
-                
-                assert(len(collapse.changes) == 0)
-                assert(len(collapse.to_be_collapsed) == 0)
-                for &cell in cells {
-                    cell.state = .Collapsed
-                    cell_next_state(&collapse, &cell)
-                }
-                update_state = .Search_Cells
-                
-                total_duration = 0
-                zero(average_colors[:])
-                if paused do break task_loop
-            }
-            
-            if .update in this_frame.tasks {
-                this_frame.tasks -= { .update }
-                
-                if collapse.states != nil {
-                    if update_start == {} do update_start = time.now()
-                    
-                    this_update_start := time.now()
-                    if collapse_update(&collapse, &entropy) {
-                        if update_state != .Done {
-                            if update_state >= .Search_Cells {
-                                total_duration += time.since(this_update_start)
-                                if paused {
-                                    if desired_update_state != nil {
-                                        if desired_update_state != update_state {
-                                            this_frame.tasks += { .update }
-                                        } else {
-                                            desired_update_state = nil
-                                        }
-                                    } else {
-                                        break task_loop
-                                    }
-                                }
-                            }
-                            
-                            if time.duration_seconds(time.since(update_start)) < TargetFrameTime * 0.95 {
-                                this_frame.tasks += { .update }
-                            }
-                        }
-                    } else {
-                        this_frame.tasks += { .restart }
-                    }
-                }
-            }
-        }
-        spall_end()
-        
+        do_tasks_in_order(this_frame, &collapse, &entropy, &arena)
         
         ////////////////////////////////////////////////
         // Render
@@ -357,8 +246,8 @@ main :: proc () {
                             
                             color: v4
                             count: f32
-                            for id in cell.states {
-                                state    := collapse.states[id]
+                            for state in cell.states {
+                                state    := collapse.states[state.id]
                                 color_id := state.middle_value
                                 color += rl_color_to_v4(collapse.values[color_id]) * state.frequency
                                 count += state.frequency
@@ -371,7 +260,7 @@ main :: proc () {
                 }
                 
               case .Collapsed:
-                state    := collapse.states[cell.collapsed_state]
+                state    := collapse.states[cell.states[0].id]
                 color_id := state.middle_value
                 average.color = collapse.values[color_id]
                 average.states_count_when_computed = 1
@@ -389,7 +278,7 @@ main :: proc () {
                     color = average_colors[index].color
                 } else {
                     if cell.state == .Collapsed {
-                        color = collapse.values[collapse.states[cell.collapsed_state].middle_value]
+                        color = collapse.values[collapse.states[cell.states[0].id].middle_value]
                     } else {
                         color = 0
                     }
@@ -513,6 +402,117 @@ main :: proc () {
     }
 }
 
+do_tasks_in_order :: proc (this_frame: Frame, collapse: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
+    spall_scope("Update")
+    this_frame := this_frame
+    
+    update_start: time.Time
+    task_loop: for this_frame.tasks != {} {
+        if .setup_grid in this_frame.tasks {
+            this_frame.tasks -= { .setup_grid }
+            
+            setup_grid(collapse, entropy, arena)
+            
+            this_frame.tasks += { .setup_neighbours, .restart }
+        }
+        
+        if .setup_neighbours in this_frame.tasks {
+            this_frame.tasks -= { .setup_neighbours }
+            
+            setup_neighbours()
+            
+            this_frame.tasks += { .restart }
+            if paused do break task_loop
+        }
+        
+        if .extract_states in this_frame.tasks {
+            this_frame.tasks -= { .extract_states }
+            
+            assert(this_frame.pixels != nil)
+            
+            N = desired_N
+            collapse_reset(collapse)
+            extract_states(collapse, this_frame.pixels, this_frame.pixels_dimension.x, this_frame.pixels_dimension.y)
+            
+            // Extract color groups
+            for state in collapse.states {
+                color_id := state.middle_value
+                color := collapse.values[color_id]
+                
+                group: ^Color_Group
+                for &it in color_groups {
+                    if it.color == color {
+                        group = &it
+                        break
+                    }
+                }
+                
+                if group == nil {
+                    append(&color_groups, Color_Group { color = color })
+                    group = &color_groups[len(color_groups)-1]
+                    make(&group.ids, len(collapse.states))
+                }
+                
+                group.ids[state.id] = true
+            }
+            
+            this_frame.tasks += { .restart }
+            if paused do break task_loop
+        }
+        
+        if .restart in this_frame.tasks {
+            this_frame.tasks -= { .restart }
+            
+            collapse_restart(collapse)
+            
+            assert(len(collapse.changes) == 0)
+            assert(len(collapse.to_be_collapsed) == 0)
+            for &cell in cells {
+                cell.state = .Collapsed
+                cell_next_state(collapse, &cell)
+            }
+            update_state = .Search_Cells
+            
+            total_duration = 0
+            zero(average_colors[:])
+            if paused do break task_loop
+        }
+        
+        if .update in this_frame.tasks {
+            this_frame.tasks -= { .update }
+            
+            if collapse.states != nil {
+                if update_start == {} do update_start = time.now()
+                
+                this_update_start := time.now()
+                if collapse_update(collapse, entropy) {
+                    if update_state != .Done {
+                        total_duration += time.since(this_update_start)
+                        
+                        if paused {
+                            if desired_update_state != nil {
+                                if desired_update_state != update_state {
+                                    this_frame.tasks += { .update }
+                                } else {
+                                    desired_update_state = nil
+                                }
+                            } else {
+                                break task_loop
+                            }
+                        }
+                        
+                        if time.duration_seconds(time.since(update_start)) < TargetFrameTime * 0.95 {
+                            this_frame.tasks += { .update }
+                        }
+                    }
+                } else {
+                    this_frame.tasks += { .restart }
+                }
+            }
+        }
+    }
+}
+
 setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
     ratio := vec_cast(f32, Screen_Size-100) / vec_cast(f32, dimension)
     if ratio.x < ratio.y {
@@ -588,7 +588,7 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
         for x in 0 ..< side {
             for y in 0 ..< side {
                 p := (vec_cast(f64, x, y) + 0.5) / cast(f64) side
-                offset := random_unilateral(&entropy, v2d) * (0.05 / cast(f64) side) + 0.001
+                offset := random_unilateral(&entropy, v2d) * (0.02 / cast(f64) side)
                 p += next_random_u32(&entropy) % 2 == 0 ? offset : - offset
                 p = clamp(p, 0, 1)
                 append(points, p)

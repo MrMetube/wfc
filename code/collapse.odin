@@ -25,21 +25,20 @@ Collapse :: struct {
 }
 
 Cell :: struct {
-    p:          v2, 
-    points:     [dynamic] v2, // for rendering the voronoi cell
+    p:              v2, 
+    points:         [dynamic] v2, // for rendering the voronoi cell
     all_neighbours: [dynamic] ^Cell,
     neighbours:     [dynamic] ^Cell,
     
     state: Cell_State,
     
-    // Uninitialized
-    
-    // Collapsing
-    states: [dynamic] State_Id,
+    states: [dynamic] Cell_Foo,
     entropy: f32,
-    
-    // Collapsed
-    collapsed_state: State_Id,
+}
+
+Cell_Foo :: struct {
+    id:     State_Id,
+    amount: f32,
 }
 
 Cell_State :: enum {
@@ -98,12 +97,6 @@ Wave_Support :: struct {
     amount: i32,
 }
 
-Update_Result :: enum {
-    Continue,
-    FoundContradiction,
-    AllCollapsed,
-}
-
 ////////////////////////////////////////////////
 
 supports :: proc { supports_from, supports_from_to }
@@ -125,12 +118,10 @@ get_closeness :: proc (sampling_direction: v2) -> (result: [Direction] f32) {
     
     for &closeness, other in result {
         other_dir := vec_cast(f32, Deltas[other])
-        switch view_mode {
-          case .Cos:         closeness = dot(sampling_direction, other_dir)
-          case .AcosCos:     closeness = 1 - acos(dot(sampling_direction, other_dir))
-          case .AcosAcosCos: closeness = acos(acos(dot(sampling_direction, other_dir)))
-        }
-        closeness = clamp(closeness, 0, 1)
+        cosine_closeness := dot(sampling_direction, other_dir)
+        linear_closeness := 1 - acos(cosine_closeness)
+        closeness = linear_blend(cosine_closeness, linear_closeness, view_mode_t)
+        closeness = max(closeness, 0)
     }
     
     return result
@@ -149,12 +140,6 @@ get_support_amount :: proc (c: ^Collapse, from: State_Id, to: State_Id, closenes
     support := supports(c, from, to)
     result = get_support_amount_(support, closeness)
     return result
-}
-
-////////////////////////////////////////////////
-
-mark_to_be_collapsed :: proc (c: ^Collapse, cells: ..^Cell) {
-    append(&c.to_be_collapsed, ..cells)
 }
 
 ////////////////////////////////////////////////
@@ -286,12 +271,12 @@ calculate_entropy :: proc (c: ^Collapse, cell: ^Cell) {
     // @speed this could be done iteratively if needed, but its fast enough for now
     total_frequency: f32
     cell.entropy = 0
-    for id in cell.states {
-        total_frequency += c.states[id].frequency
+    for state in cell.states {
+        total_frequency += c.states[state.id].frequency
     }
     
-    for id in cell.states {
-        frequency := c.states[id].frequency
+    for state in cell.states {
+        frequency := c.states[state.id].frequency
         probability := frequency / total_frequency
         
         cell.entropy -= probability * log2(probability)
@@ -342,7 +327,7 @@ cell_next_state :: proc (c: ^Collapse, cell: ^Cell) {
     switch cell.state {
       case .Uninitialized:
         make(&cell.states, len(c.states))
-        for &id, index in cell.states do id = cast(State_Id) index
+        for &state, index in cell.states do state.id = cast(State_Id) index
         cell.state = .Collapsing
         
       case .Collapsing:
@@ -391,9 +376,9 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
         if len(found) > 0 {
             if len(found[0].states) == 1 {
                 spall_scope("Set All chosen cells to be collapse")
-                mark_to_be_collapsed(c, ..found)
+                append(&c.to_be_collapsed, ..found)
             } else {
-                mark_to_be_collapsed(c, random_value(entropy, found))
+                    append(&c.to_be_collapsed, random_value(entropy, found))
             }
             
             update_state = .Collapse_Cells
@@ -417,19 +402,34 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
             
             pick := Invalid_State
             if len(cell.states) == 1 {
-                pick = cell.states[0]
+                pick = cell.states[0].id
             } else {
-                // Random
-                total_frequency: i32
-                for id in cell.states {
-                    total_frequency += round(i32, c.states[id].frequency)
+                total: f32
+                for state in cell.states {
+                    total += c.states[state.id].frequency
                 }
                 
-                target := random_between(entropy, i32, 0, total_frequency)
-                picking: for id in cell.states {
-                    target -= round(i32, c.states[id].frequency)
+                weights := make([] f32, len(cell.states), context.temp_allocator)
+                
+                for neighbour in cell.neighbours {
+                    closeness := get_closeness(neighbour.p - cell.p)
+                    // @important @speed cache this
+                    for from, from_index in cell.states {
+                        for to in neighbour.states {
+                            amount := get_support_amount(c, from.id, to.id, closeness)
+                            weights[from_index] += amount
+                        }
+                    }
+                }
+                
+                for weight in weights do total += weight
+                
+                target := random_unilateral(entropy, f32) * total
+                picking: for state, index in cell.states {
+                    target -= c.states[state.id].frequency
+                    target -= weights[index]
                     if target <= 0 {
-                        pick = id
+                        pick = state.id
                         break picking
                     }
                 }
@@ -438,14 +438,12 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
             
             assert(pick != Invalid_State)
             {
-                for id in cell.states {
-                    if pick != id {
-                        remove_state(c, cell, id)
-                    }
-                }
+                // See @note below
+                remove_state(c, cell, 0)
                 
                 cell_next_state(c, cell)
-                cell.collapsed_state = pick
+                clear(&cell.states)
+                append(&cell.states, Cell_Foo { pick, 100 })
             }
         }
         
@@ -481,17 +479,10 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
                 #reverse for to, state_index in neighbour.states {
                     should_remove: bool
                     
-                    states: [] State_Id
-                    if changed.state == .Collapsed {
-                        states = { changed.collapsed_state }
-                    } else {
-                        states = changed.states[:]
-                    }
-                    
                     should_remove = true
                     total_amount: f32
-                    f: for from in states {
-                        amount := get_support_amount(c, from, to, closeness)
+                    f: for from in changed.states {
+                        amount := get_support_amount(c, from.id, to.id, closeness)
                         total_amount += amount
                     }
                     should_remove = total_amount <= 0

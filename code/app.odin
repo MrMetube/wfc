@@ -119,16 +119,9 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         imgui.columns()
         
         imgui.text("Directional Spread")
-        view_modes := [View_Mode] string {
-            .Cos         = "Gradual",
-            .AcosCos     = "Linear",
-            .AcosAcosCos = "Steep",
-        }
-        for text, mode in view_modes {
-            selected := mode == view_mode
-            if imgui.radio_button(text, &view_mode, mode) {
-                this_frame.tasks += { .restart }
-            }
+        imgui.text("Gradual - Linear")
+        if imgui.slider_float("Blend Factor", &view_mode_t, 0, 2) {
+            this_frame.tasks += { .restart }
         }
         
     imgui.end()
