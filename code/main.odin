@@ -39,7 +39,7 @@ Average_Color :: struct {
 
 show_neighbours                := false
 show_all_neighbours            := false
-show_voronoi_cells             := true
+show_voronoi_cells             := false
 render_wavefunction_as_average := true
 highlight_changes              := true
 
@@ -52,7 +52,7 @@ Color_Group :: struct {
 
 grid_background_color := DarkGreen
 
-dimension: v2i = {20, 20}
+dimension: v2i = {25, 25}
 
 File :: struct {
     data:    [] u8,
@@ -60,13 +60,8 @@ File :: struct {
     texture: rl.Texture2D,
 }
 
-view_mode_t: f32
-
-
-View_Kind :: enum {
-    Cosine, 
-    Linear, 
-}
+// -1 Constant 0 Cosine 1 Linear
+view_mode_t: f32 = 1
 
 ////////////////////////////////////////////////
 

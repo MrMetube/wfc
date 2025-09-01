@@ -104,6 +104,32 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
             }
         }
         
+        imgui.text("Directional Spread")
+        if imgui.slider_float("Blend Factor %.1f", &view_mode_t, -1, 1) {
+            if abs(view_mode_t-(-1)) < 0.1 {
+                view_mode_t = -1
+            } 
+            if abs(view_mode_t-0) < 0.1 {
+                view_mode_t = 0
+            } 
+            if abs(view_mode_t-1) < 0.1 {
+                view_mode_t = 1
+            } 
+            this_frame.tasks += { .restart }
+        }
+        
+        region: v2
+        imgui.get_content_region_avail(&region)
+        if view_mode_t < 0 {
+            imgui.progress_bar(-view_mode_t, {region.x, 0}, overlay="Constant")
+            imgui.progress_bar(1+view_mode_t, {region.x, 0}, overlay="Cosine")
+            imgui.progress_bar(0, {region.x, 0}, overlay="Linear")
+        } else {
+            imgui.progress_bar(0, {region.x, 0}, overlay="Constant")
+            imgui.progress_bar(1-view_mode_t, {region.x, 0}, overlay="Cosine")
+            imgui.progress_bar(view_mode_t, {region.x, 0}, overlay="Linear")
+        }
+        
         imgui.columns(2)
         for &group, index in color_groups {
             selected := &group == viewing_group
@@ -117,13 +143,6 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
             imgui.next_column()
         }
         imgui.columns()
-        
-        imgui.text("Directional Spread")
-        imgui.text("Gradual - Linear")
-        if imgui.slider_float("Blend Factor", &view_mode_t, 0, 2) {
-            this_frame.tasks += { .restart }
-        }
-        
     imgui.end()
     
     imgui.begin("Cells")

@@ -119,8 +119,13 @@ get_closeness :: proc (sampling_direction: v2) -> (result: [Direction] f32) {
     for &closeness, other in result {
         other_dir := vec_cast(f32, Deltas[other])
         cosine_closeness := dot(sampling_direction, other_dir)
-        linear_closeness := 1 - acos(cosine_closeness)
-        closeness = linear_blend(cosine_closeness, linear_closeness, view_mode_t)
+        if view_mode_t < 0 {
+            constant_closeness: f32 = 1
+            closeness = linear_blend(constant_closeness, cosine_closeness, view_mode_t - (-1))
+        } else {
+            linear_closeness := 1 - acos(cosine_closeness)
+            closeness = linear_blend(cosine_closeness, linear_closeness, view_mode_t)
+        }
         closeness = max(closeness, 0)
     }
     
