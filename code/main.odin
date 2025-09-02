@@ -5,8 +5,6 @@ import "core:strings"
 import "core:time"
 
 import rl "vendor:raylib"
-import imgui "../lib/odin-imgui/"
-import rlimgui "../lib/odin-imgui/examples/raylib"
 
 /* @todo(viktor): 
     - Maybe dont collapse into a concrete state immediatly but just into a set with all the same color / "middle value"
@@ -148,8 +146,7 @@ main :: proc () {
     
     init_spall()
     
-    imgui.set_current_context(imgui.create_context(nil))
-    rlimgui.ImGui_ImplRaylib_Init()
+    rl_imgui_init()
     
     arena: Arena
     init_arena(&arena, make([]u8, 128*Megabyte))
@@ -185,9 +182,7 @@ main :: proc () {
         spall_scope("Frame")
         free_all(context.temp_allocator)
         
-        rlimgui.ImGui_ImplRaylib_NewFrame()
-        rlimgui.ImGui_ImplRaylib_ProcessEvent()
-        imgui.new_frame()
+        rl_imgui_new_frame()
         
         ////////////////////////////////////////////////
         // UI
@@ -390,8 +385,8 @@ main :: proc () {
             rl.DrawCircleV(p, center_size, viewing_group.color)
         }
         
-        imgui.render()
-        rlimgui.ImGui_ImplRaylib_Render(imgui.get_draw_data())
+        rl_imgui_render()
+        
         rl.EndDrawing()
         
         spall_end(/* Render */)

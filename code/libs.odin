@@ -3,7 +3,8 @@
 package main
 
 import rl "vendor:raylib"
-import imgui "../lib/odin-imgui/"
+import "lib:imgui"
+import rlimgui "lib:imgui/impl/raylib"
 
 to_rl_rectangle :: proc (rect: Rectangle2) -> (result: rl.Rectangle) {
     dim := get_dimension(rect)
@@ -24,3 +25,22 @@ v4_to_rl_color :: proc (color: v4) -> (result: rl.Color) {
 }
 
 color_edit_flags_just_display: imgui.Color_Edit_Flags = .NoPicker | .NoOptions | .NoSmallPreview | .NoInputs | .NoTooltip | .NoSidePreview | .NoDragDrop
+
+// Call this at startup
+rl_imgui_init :: proc () {
+    imgui.set_current_context(imgui.create_context(nil))
+    rlimgui.ImGui_ImplRaylib_Init()
+}
+
+// Call this once per frame at the beginning
+rl_imgui_new_frame :: proc () {
+    rlimgui.ImGui_ImplRaylib_NewFrame()
+    rlimgui.ImGui_ImplRaylib_ProcessEvent()
+    imgui.new_frame()
+}
+
+// Call this once per frame at the end
+rl_imgui_render :: proc () {
+    imgui.render()
+    rlimgui.ImGui_ImplRaylib_Render(imgui.get_draw_data())
+}

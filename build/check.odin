@@ -100,16 +100,16 @@ visit_and_collect_printlikes_and_procedures :: proc(visitor: ^ast.Visitor, node:
                     found: b32
                     for param, index in procedure.type.params.list {
                         if len(param.names) < 1 do continue // when would this not apply
-                        name := read_pos_or_fail(param.names[0].pos, param.names[0].end)
+                        param_name := read_pos_or_fail(param.names[0].pos, param.names[0].end)
                         
                         if !found {
                             type := read_pos_or_fail(param.type.pos, param.type.end)
                             
-                            if type == "string" && name == "format" {
+                            if type == "string" && param_name == "format" {
                                 printlike.format_index = index
                             }
                             
-                            if type == "any" && name == "args" {
+                            if type == "any" && param_name == "args" {
                                 printlike.args_index = index
                                 found = true
                                 break
@@ -161,7 +161,7 @@ visit_and_check_printlikes :: proc(visitor: ^ast.Visitor, node: ^ast.Node) -> ^a
                 args := call.args[printlike.args_index]
                 if _, set_parameter_by_name := args.derived_expr.(^ast.Field_Value); set_parameter_by_name do return visitor
                 
-                outer: for arg, index in call.args[printlike.args_index:] {
+                outer: for arg in call.args[printlike.args_index:] {
                     arg_text := read_pos_or_fail(arg.pos, arg.end)
                     
                     if _, set_parameter_by_name := arg.derived_expr.(^ast.Field_Value); set_parameter_by_name do continue
@@ -170,8 +170,8 @@ visit_and_check_printlikes :: proc(visitor: ^ast.Visitor, node: ^ast.Node) -> ^a
                     #partial switch value in arg.derived_expr {
                       case ^ast.Call_Expr:
                         arg_text = arg_text
-                        name := read_pos_or_fail(value.expr.pos, value.expr.end)
-                        if procedure, ok := procedures[name]; ok {
+                        expr_name := read_pos_or_fail(value.expr.pos, value.expr.end)
+                        if procedure, proc_ok := procedures[expr_name]; proc_ok {
                             actual += procedure.return_count
                             handled = true
                         } else {

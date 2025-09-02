@@ -1,7 +1,7 @@
 package main
 
 import rl "vendor:raylib"
-import imgui "../lib/odin-imgui/"
+import "lib:imgui"
 
 ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
     spall_proc()

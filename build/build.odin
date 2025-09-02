@@ -8,19 +8,23 @@ import "core:strings"
 import "core:time"
 import win "core:sys/windows"
 
-
 optimizations := false ? `-o:speed` : `-o:none`
 Pedantic      :: false
 windows       := !true ? `-subsystem:windows` : `-subsystem:console`
 
 debug    :: `-debug`
-flags    := [] string {`-error-pos-style:unix`,`-vet-cast`,`-vet-shadowing`,`-ignore-vs-search`,`-use-single-module`,`-microarch:native`,`-target:windows_amd64`}
+check    :: `-custom-attribute:printlike`
+
+flags    := [] string {`-error-pos-style:unix`,`-vet-cast`,`-vet-shadowing`,`-microarch:native`,`-target:windows_amd64`}
 pedantic := [] string {
     `-warnings-as-errors`,`-vet-unused-imports`,`-vet-semicolon`,`-vet-unused-variables`,`-vet-style`,
     `-vet-packages:main`,`-vet-unused-procedures`
 }
-check    :: `-custom-attribute:printlike`
+
+lib             :: `-collection:lib=../lib/`
 flags_for_imgui :: `-extra-linker-flags:/NODEFAULTLIB:LIBCMTD`
+
+////////////////////////////////////////////////
 
 build_src_path :: `.\build\`   
 build_exe_name :: `build.exe`
@@ -33,6 +37,8 @@ raddbg_path :: `C:\tools\raddbg\`+ raddbg
 
 debug_exe :: `debug.exe`
 debug_exe_path :: `.\`+debug_exe
+
+////////////////////////////////////////////////
 
 Task :: enum {
     help,
@@ -61,10 +67,8 @@ main :: proc() {
     
     if .help in tasks {
         usage()
-        os.exit(0)
+        os.exit(1)
     }
-    
-    go_rebuild_yourself()
     
     make_directory_if_not_exists(data_dir)
     err := os.set_current_directory(build_dir)
@@ -96,6 +100,7 @@ main :: proc() {
             append(&cmd, debug)
             append(&cmd, flags_for_imgui)
             append(&cmd, check)
+            append(&cmd, lib)
             append(&cmd, windows)
             append(&cmd, optimizations)
             when Pedantic do append(&cmd, ..pedantic)
@@ -171,7 +176,11 @@ Options:
         .run       = "Run the program.",
         .renderdoc = "Run the program with renderdoc attached and launch renderdoc with the capture after the program closes.",
     }
-    for text, task in infos do fmt.printf("  %v  \t%v\n", task, text)
+    // Ughh..
+    width: int
+    for task in Task do width = max(len(fmt.tprint(task)), width)
+    format := fmt.tprintf("  %%-%vv - %%v\n", width)
+    for text, task in infos do fmt.printf(format, task, text)
 }
 
 Procs :: [dynamic] os2.Process
@@ -203,7 +212,9 @@ Handle_Running_Exe :: enum {
 }
 
 handle_running_exe_gracefully :: proc(exe_name: string, handling: Handle_Running_Exe) -> (ok: b32) {
-    if ok, pid := is_running(exe_name); ok {
+    pid: u32
+    ok, pid = is_running(exe_name)
+    if ok {
         switch handling {
           case .Skip:
             fmt.printfln("INFO: Tried to build '%v', but the program is already running. Skipping build.", exe_name)
@@ -246,69 +257,6 @@ odin_build :: proc(cmd: ^[dynamic]string, dir: string, out: string) {
 
 
 
-go_rebuild_yourself :: proc() {
-    Error :: union { os2.Error, os.Error }
-    error: Error
-    old_build_exe_path := fmt.tprintf("%vold-%v", build_src_path, build_exe_name)
-    build_exe_path := fmt.tprintf("%v%v", build_src_path, build_exe_name)
-    
-    remove_if_exists(old_build_exe_path)
-    
-    if did_change(build_exe_path, build_src_path) {
-        tasks += { .rebuild }
-    }
-    
-    gitignore := fmt.tprintf(`%v\.gitignore`, build_dir)
-    if !os.exists(gitignore) {
-        contents := "*\n!*.odin"
-        os.write_entire_file(gitignore, transmute([]u8) contents)
-    }
-    
-    if .rebuild in tasks {
-        fmt.println("INFO: Rebuilding")
-        
-        pdb_path, _ := strings.replace_all(build_exe_path, ".exe", ".pdb")
-        rdi_path, _ := strings.replace_all(build_exe_path, ".exe", ".rdi")
-        remove_if_exists(pdb_path)
-        remove_if_exists(rdi_path)
-        if os.exists(build_exe_path) {
-            error = os.rename(build_exe_path, old_build_exe_path)
-            if error.(os.Error) != nil {
-                fmt.printfln("ERROR: failed to rename current build '%v' to '%v': %v", build_exe_path, old_build_exe_path, error)
-            }
-        }
-        
-        cmd: [dynamic]string
-        odin_build(&cmd, build_src_path, build_exe_path)
-        append(&cmd, debug)
-        append(&cmd, ..flags)
-        append(&cmd, ..pedantic)
-        
-        if !run_command(&cmd, or_exit = false) {
-            fmt.println("ERROR: failed to to rebuild: ", error)
-            error = os.rename(old_build_exe_path, build_exe_path)
-            if error != nil && error.(os.Error) != .Not_Exist {
-                fmt.println("ERROR: failed to rename old build back: ", error)
-            }
-        }
-        
-        fmt.println("INFO: Rebuild done.\n") 
-        for arg in os.args {
-            if arg != "rebuild" do append(&cmd, arg)
-        }
-        
-        if !run_command(&cmd) {
-            fmt.println("ERROR: failed rerun build: ", error)
-            error = os.rename(old_build_exe_path, build_exe_path)
-            if error != nil {
-                fmt.println("ERROR: failed to rename old build back: ", error)
-            }
-        }
-        
-        os.exit(0)
-    }
-}
-
 did_change :: proc (output_path: string, inputs: .. string, extension: string = ".odin") -> (result: bool) {
     output_info, err := os.stat(output_path)
     if err != nil {
@@ -324,9 +272,9 @@ did_change :: proc (output_path: string, inputs: .. string, extension: string = 
                     break search
                 }
             } else {
-                file, error := os2.stat(input, context.allocator)
+                file, stat_error := os2.stat(input, context.allocator)
                 files = { file }
-                if error != nil {
+                if stat_error != nil {
                     fmt.printfln("ERROR: failed to read file '%v' when checking for changes", input, error)
                     break search
                 }
@@ -432,6 +380,8 @@ run_command :: proc (cmd: ^Cmd, or_exit := true, keep := false, stdout: ^string 
         if error != nil {
             if stderr != nil do stderr ^= string(error)
             else do fmt.println(string(error))
+            
+            if or_exit do os.exit(state.exit_code)
         }
         
         if or_exit && !state.success do os.exit(state.exit_code)
