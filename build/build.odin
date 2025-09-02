@@ -8,7 +8,7 @@ import "core:strings"
 import "core:time"
 import win "core:sys/windows"
 
-optimizations := false ? `-o:speed` : `-o:none`
+optimizations := !false ? `-o:speed` : `-o:none`
 Pedantic      :: false
 windows       := !true ? `-subsystem:windows` : `-subsystem:console`
 
@@ -42,7 +42,6 @@ debug_exe_path :: `.\`+debug_exe
 
 Task :: enum {
     help,
-    rebuild,
     debugger,
     run,
     renderdoc,
@@ -56,7 +55,6 @@ main :: proc() {
 
     for arg, index in os.args[1:] {
         switch arg {
-          case "rebuild":   tasks += { .rebuild }
           case "run":       tasks += { .run }
           case "debugger":  tasks += { .debugger }
           case "help":      tasks += { .help }
@@ -171,7 +169,6 @@ Options:
 `, os.args[0])
     infos := [Task] string {
         .help      = "Print this usage information.",
-        .rebuild   = "Rebuild this build script and rerun it.",
         .debugger  = "Start/Restart the debugger.",
         .run       = "Run the program.",
         .renderdoc = "Run the program with renderdoc attached and launch renderdoc with the capture after the program closes.",

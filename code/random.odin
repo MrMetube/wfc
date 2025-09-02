@@ -78,6 +78,11 @@ random_value :: proc(series: ^RandomSeries, data: []$T) -> (result: T) {
     result = data[index]
     return result
 }
+random_index :: proc(series: ^RandomSeries, data: []$T) -> (result: i32) {
+    assert(len(data) != 0)
+    result = random_between(series, i32, 0, cast(i32) len(data)-1)
+    return result
+}
 
 random_between :: proc(series: ^RandomSeries, $T: typeid, min, max: T) -> (result: T) {
     assert(min <= max)

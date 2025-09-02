@@ -8,7 +8,11 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
     
     imgui.begin("Extract")
         imgui.text("Choose Input Image")
+        region: v2
+        imgui.get_content_region_avail(&region)
+        imgui.push_item_width(region.x/2)
         imgui.slider_int("Tile Size", &desired_N, 1, 10)
+        imgui.pop_item_width()
         
         if len(c.states) == 0 {
             imgui.text("Select an input image")
@@ -42,7 +46,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
     imgui.end()
     
     imgui.text("Stats")
-    imgui.color_edit4("Background", &grid_background_color, flags = .NoInputs | .NoTooltip | .Float)
+    imgui.color_edit4("Background", &cells_background_color, flags = .NoInputs | .NoTooltip | .Float)
     
     tile_count := len(c.states)
     imgui.text_colored(tile_count > 200 ? Red : White, tprint("Tile count %", tile_count))
@@ -52,7 +56,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         
         if imgui.button("Step") {
             this_frame.tasks += { .update }
-            desired_update_state = update_state + auto_cast 1
+            desired_update_state = cast(Update_State) ((cast(int) c.update_state + 1) % len(Update_State))
         }
         
         if imgui.button("Rewind")  do this_frame.tasks += { .rewind  }
@@ -63,11 +67,11 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         this_frame.tasks += { .update }
     }
     
-    imgui.text(tprint("Current Step / Total: %/%", cast(int) c.current_step, c.total_steps))
-    choice_count := len(c.steps_with_choice)
-    imgui.text(tprint("Choices since start: %", choice_count))
+    imgui.text(tprint("Current Step: %", cast(int) c.current_step))
+    choices_count := len(c.steps_with_choices)
+    imgui.text(tprint("Choices since start: %", choices_count))
     
-    imgui.text(tprint("%", update_state))
+    imgui.text(tprint("%", c.update_state))
     if imgui.button("Restart") do this_frame.tasks += { .restart }
     
     imgui.checkbox("Average Color", &render_wavefunction_as_average)
@@ -84,9 +88,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         }
     }
     
-    if update_state >= .Search_Cells {
-        imgui.text(tprint("Total time %",  view_time_duration(total_duration, precision = 3)))
-    }
+    imgui.text(tprint("Total time %",  view_time_duration(total_duration, precision = 3)))
     
     imgui.begin("Viewing")
         if viewing_group != nil {
@@ -96,6 +98,8 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         }
         
         imgui.text("Directional Spread")
+        imgui.get_content_region_avail(&region)
+        imgui.push_item_width(region.x/2)
         if imgui.slider_float("Blend Factor %.1f", &view_mode_t, -1, 1) {
             if abs(view_mode_t-(-1)) < 0.1 {
                 view_mode_t = -1
@@ -108,8 +112,8 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
             } 
             this_frame.tasks += { .restart }
         }
+        imgui.pop_item_width()
         
-        region: v2
         imgui.get_content_region_avail(&region)
         if view_mode_t < 0 {
             imgui.progress_bar(-view_mode_t, {region.x, 0}, overlay="Constant")
@@ -154,9 +158,11 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
                 this_frame.tasks += { .setup_grid }
             }
         }
-        imgui.slider_int2("Size", &this_frame.desired_dimension, 3, 100, flags = .Logarithmic)
-        
+        imgui.slider_int2("Size", &this_frame.desired_dimension, 3, 300, flags = .Logarithmic)
+        imgui.get_content_region_avail(&region)
+        imgui.push_item_width(region.x/2)
         imgui.slider_int("Show index", &show_index, -1, auto_cast len(cells))
+        imgui.pop_item_width()
         imgui.checkbox("Show Neighbours", &show_neighbours)
         imgui.checkbox("Show All Neighbours", &show_all_neighbours)
         imgui.checkbox("Show Voronoi Cells", &show_voronoi_cells)

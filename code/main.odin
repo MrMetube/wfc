@@ -1,5 +1,6 @@
 package main
 
+import "core:mem"
 import "core:os/os2"
 import "core:strings"
 import "core:time"
@@ -31,8 +32,7 @@ cell_size_on_screen: v2
 
 average_colors: [] Average_Color
 Average_Color :: struct {
-    states_count_when_computed: u32,
-    color:                      rl.Color,
+    color: rl.Color,
 }
 
 show_neighbours                := false
@@ -48,7 +48,8 @@ Color_Group :: struct {
     ids:   [/* State_Id */] b32,
 }
 
-grid_background_color := DarkGreen
+cells_background_color := Salmon
+cells_background_color_t: f32
 
 dimension: v2i = {25, 25}
 
@@ -59,7 +60,7 @@ File :: struct {
 }
 
 // -1 Constant 0 Cosine 1 Linear
-view_mode_t: f32 = 1
+view_mode_t: f32 = 0
 
 ////////////////////////////////////////////////
 
@@ -141,6 +142,15 @@ show_index: i32 = -1
 desired_N:  i32 = N
 
 main :: proc () {
+    // track: mem.Tracking_Allocator
+    // mem.tracking_allocator_init(&track, context.allocator)
+    // defer mem.tracking_allocator_destroy(&track)
+    // context.allocator = mem.tracking_allocator(&track)
+
+    // defer for _, leak in track.allocation_map {
+    //     print("% leaked %\n", leak.location, view_memory_size(cast(umm) leak.size))
+    // }
+    
     unused(screen_to_world)
     
     rl.SetTraceLogLevel(.WARNING)
@@ -152,9 +162,15 @@ main :: proc () {
     rl_imgui_init()
     
     arena: Arena
-    init_arena(&arena, make([]u8, 128*Megabyte))
+    init_arena(&arena, make([]u8, 512*Megabyte))
+    defer delete(arena.storage)
     
     images: map[string] File
+    defer {
+        for _, file in images do delete(file.data)
+        delete(images)
+    }
+    
     image_dir := "./images"
     file_type := ".png"
     infos, err := os2.read_directory_by_path(image_dir, 0, context.temp_allocator)
@@ -165,9 +181,7 @@ main :: proc () {
                 data, ferr := os2.read_entire_file(info.fullpath, context.allocator)
                 if ferr != nil do print("Error reading file %:%\n", info.name, ferr)
                 
-                temp := begin_temporary_memory(&arena)
-                defer end_temporary_memory(temp)
-                cstr := copy_cstring(temp.arena, file_type)
+                cstr := cast(cstring) raw_data(tprint("%\u0000", file_type))
                 
                 image := File { data = data }
                 image.image   = rl.LoadImageFromMemory(cstr, raw_data(image.data), auto_cast len(image.data))
@@ -177,9 +191,29 @@ main :: proc () {
         }
     }
     
+    
     entropy := seed_random_series(7458)
     collapse: Collapse
     do_tasks_in_order({ tasks = { .setup_grid } }, &collapse, &entropy, &arena)
+    
+    defer {
+        // @todo(viktor): @leak this and more leaks
+        collapse_reset(&collapse)
+        delete(collapse.changes)
+        delete(collapse.to_be_collapsed)
+        
+        for group in color_groups do delete(group.ids)
+        delete(color_groups)
+        
+        for cell in cells {
+            delete(cell.points)
+            delete(cell.all_neighbours)
+            delete(cell.neighbours)
+            delete(cell.states)
+        }
+        delete(cells)
+        delete(average_colors)
+    }
     
     for !rl.WindowShouldClose() {
         spall_scope("Frame")
@@ -225,43 +259,54 @@ main :: proc () {
             make(&average_colors, len(cells))
         }
         
-        for cell, index in cells {
+        for cell in collapse.changes {
+            if cell == nil do continue
+            
+            index := (cast(umm) cell - cast(umm) raw_data(cells)) / size_of(Cell)
+            average := &average_colors[index]
+            spall_scope("average color")
+            
+            color: v4
+            count: f32
+            for state in cell.states {
+                if state.removed_at <= collapse.current_step do continue
+                
+                state    := collapse.states[state.id]
+                color_id := state.middle_value
+                color += rl_color_to_v4(collapse.values[color_id]) * state.frequency
+                count += state.frequency
+            }
+            
+            color = safe_ratio_0(color, count)
+            average.color = cast(rl.Color) v4_to_rgba(color * {1,1,1,0.3})
+        }
+        
+        for &cell, index in cells {
+            if cell.collapsed_at > collapse.current_step do cell.collapsed_at = Invalid_Collapse_Step
+            for &state in cell.states {
+                if state.picked_at  > collapse.current_step do state.picked_at  = Invalid_Collapse_Step
+                if state.removed_at > collapse.current_step do state.removed_at = Invalid_Collapse_Step
+            }
             average := &average_colors[index]
             
-            switch cell.state {
-              case .Uninitialized:
-              case .Collapsing:
-                if len(cell.states) == 0 {
-                    average.color = { 0, 0, 0, 0 }
-                } else {
-                    if render_wavefunction_as_average {
-                        if average.states_count_when_computed != auto_cast len(cell.states) {
-                            average.states_count_when_computed = auto_cast len(cell.states)
-                            
-                            color: v4
-                            count: f32
-                            for state in cell.states {
-                                state    := collapse.states[state.id]
-                                color_id := state.middle_value
-                                color += rl_color_to_v4(collapse.values[color_id]) * state.frequency
-                                count += state.frequency
-                            }
-                            
-                            color = safe_ratio_0(color, count)
-                            average.color = cast(rl.Color) v4_to_rgba(color * {1,1,1,0.3})
-                        }
-                    }
-                }
-                
-              case .Collapsed:
-                state    := collapse.states[cell.states[0].id]
-                color_id := state.middle_value
+            if cell.state == .Collapsed {
+                state_entry  := slow__get_collapsed_state(&collapse, cell)
+                state        := collapse.states[state_entry.id]
+                color_id     := state.middle_value
                 average.color = collapse.values[color_id]
-                average.states_count_when_computed = 1
             }
         }
         
-        rl.DrawRectangleRec(world_to_screen(rectangle_min_dimension(v2{}, vec_cast(f32, dimension))), v4_to_rl_color(grid_background_color))
+        {
+            cells_background_color_t += rl.GetFrameTime()
+            if cells_background_color_t >= Tau do cells_background_color_t -= Tau
+            
+            alpha := linear_blend(cast(f32) .1, .8, clamp_01_to_range(f32(-1), sin(cells_background_color_t), 1))
+            color := cells_background_color
+            color.a *= alpha
+            background := rectangle_min_dimension(v2{}, vec_cast(f32, dimension))
+            rl.DrawRectangleRec(world_to_screen(background), v4_to_rl_color(color))
+        }
         
         if viewing_group == nil {
             for &cell, index in cells {
@@ -272,7 +317,8 @@ main :: proc () {
                     color = average_colors[index].color
                 } else {
                     if cell.state == .Collapsed {
-                        color = collapse.values[collapse.states[cell.states[0].id].middle_value]
+                        state := slow__get_collapsed_state(&collapse, cell)
+                        color = collapse.values[collapse.states[state.id].middle_value]
                     } else {
                         color = 0
                     }
@@ -324,6 +370,15 @@ main :: proc () {
                 for change in collapse.changes[collapse.changes_cursor:] {
                     if change == nil do continue
                     draw_cell_outline(change^, color)
+                }
+                
+                for &cell in cells {
+                    if cell.state == .Collapsed {
+                        state_entry  := slow__get_collapsed_state(&collapse, cell)
+                        if state_entry.picked_at == collapse.current_step {
+                            draw_cell_outline(cell, rl.RED)
+                        }
+                    }
                 }
             }
             
@@ -467,18 +522,31 @@ do_tasks_in_order :: proc (this_frame: Frame, c: ^Collapse, entropy: ^RandomSeri
             
             collapse_rewind(c)
             
-            update_state = .Search_Cells
-            zero(average_colors[:])
-            
             switch this_frame.rewind_to {
-              case .Previous_Choice: c.current_step = pop_safe(&c.steps_with_choice) or_else 0
-              case .Start:           c.current_step = 0
+              case .Previous_Choice: 
+                if len(c.steps_with_choices) > 0 {
+                    // @leak
+                    // if c.current_step.search.found != nil {
+                    //     delete(c.current_step.search.found)
+                    //     c.current_step.search.found = nil
+                    // }
+                    c.current_step = pop(&c.steps_with_choices)
+                } else {
+                    c.current_step = {}
+                }
+                
+              case .Start: 
+                c.current_step = {}
             }
             
+            c.update_state = .Search
+            
             if c.current_step == 0 {
-                clear(&c.steps_with_choice)
+                zero(average_colors[:])
+                // @leak
+                // for &step in c.steps_with_choices { delete(step.search.found); step.search.found = nil }
+                clear(&c.steps_with_choices)
                 total_duration = 0
-                c.total_steps = 0
                 
                 for &cell in cells {
                     cell.state = .Collapsed
@@ -489,13 +557,14 @@ do_tasks_in_order :: proc (this_frame: Frame, c: ^Collapse, entropy: ^RandomSeri
                     if cell.state == .Uninitialized do continue
                     
                     changed := false
-                    for &step, index in cell.states_removed_at {
-                        if step != 0 && step >= c.current_step {
-                            step = 0
+                    for &state in cell.states {
+                        if state.removed_at != Invalid_Collapse_Step && state.removed_at >= c.current_step {
+                            state.removed_at = Invalid_Collapse_Step
                             changed = true
-                            
-                            id := cast(State_Id) index
-                            append(&cell.states, Cell_Foo { id, 0 })
+                        }
+                        
+                        if state.picked_at != Invalid_Collapse_Step && state.picked_at != c.current_step {
+                            state.picked_at = Invalid_Collapse_Step
                         }
                     }
                     
@@ -508,8 +577,6 @@ do_tasks_in_order :: proc (this_frame: Frame, c: ^Collapse, entropy: ^RandomSeri
             
             if paused do break task_loop
         }
-        
-        
         
         if .update in this_frame.tasks {
             this_frame.tasks -= { .update }
@@ -529,7 +596,7 @@ do_tasks_in_order :: proc (this_frame: Frame, c: ^Collapse, entropy: ^RandomSeri
                         
                     if paused {
                         if desired_update_state != nil {
-                            if desired_update_state != update_state {
+                            if desired_update_state != c.update_state {
                                 this_frame.tasks += { .update }
                             } else {
                                 desired_update_state = nil
@@ -543,6 +610,8 @@ do_tasks_in_order :: proc (this_frame: Frame, c: ^Collapse, entropy: ^RandomSeri
                         this_frame.tasks += { .update }
                     }
                 }
+                
+                c.current_step = auto_cast len(c.steps_with_choices)
             }
         }
     }
@@ -563,14 +632,20 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
     make(&average_colors, area)
     
     points := make([dynamic] v2d)
-    defer delete(points)
-    
     generate_points(&points, cast(u32) area)
     
     dt: Delauney_Triangulation
     begin_triangulation(&dt, arena, points[:])
     complete_triangulation(&dt)
     voronoi_cells := end_triangulation_voronoi_cells(&dt)
+    defer {
+        // @todo(viktor): @leak
+        delete(voronoi_cells)
+        delete(dt.all_bad_edges)
+        delete(dt.bad_triangles)
+        delete(dt.polygon)
+        delete(points)
+    }
     
     for it in voronoi_cells {
         cell: Cell
@@ -593,6 +668,11 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
             
             append(&cell.all_neighbours, neighbour)
         }
+    }
+    
+    for cell in voronoi_cells {
+        delete(cell.points)
+        delete(cell.neighbour_indices)
     }
 }
 
