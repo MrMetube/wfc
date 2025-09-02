@@ -119,6 +119,7 @@ Task :: enum {
     setup_grid, 
     setup_neighbours,
     extract_states, 
+    rewind, 
     restart, 
     update,
 }
@@ -455,23 +456,68 @@ do_tasks_in_order :: proc (this_frame: Frame, collapse: ^Collapse, entropy: ^Ran
             if paused do break task_loop
         }
         
+        if .rewind in this_frame.tasks {
+            spall_scope("Rewind")
+            this_frame.tasks -= { .rewind }
+            
+            clear(&collapse.to_be_collapsed)
+            clear(&collapse.changes)
+            collapse.changes_cursor = 0
+            update_state = .Search_Cells
+            zero(average_colors[:])
+            
+            if len(collapse.steps_with_choice) == 0 {
+                // @todo(viktor): did this not just effectivly restart the collapse?
+                this_frame.tasks += { .restart }
+            } else {
+                collapse.current_step -= pop(&collapse.steps_with_choice)
+                for &cell in cells {
+                    for step, index in cell.states_removed_at {
+                        if step >= collapse.current_step {
+                            id := cast(State_Id) index
+                            support: f32
+                            for neighbour in cell.neighbours {
+                                closeness := get_closeness(cell.p - neighbour.p)
+                                if neighbour.state == .Uninitialized {
+                                    for from in collapse.states {
+                                        amount := get_support_amount(collapse, from.id, id, closeness)
+                                        support += amount
+                                    }
+                                } else {
+                                    support += get_support_for_state(collapse, neighbour.states[:], id, closeness)
+                                }
+                            }
+                            append(&cell.states, Cell_Foo { id, support })
+                         
+                            if cell.state == .Collapsed {
+                                cell.state = .Collapsing
+                            }
+                        }
+                    }
+                }
+            }
+            
+            if paused do break task_loop
+        }
+        
         if .restart in this_frame.tasks {
             this_frame.tasks -= { .restart }
             
             collapse_restart(collapse)
+            update_state = .Search_Cells
+            zero(average_colors[:])
+
+            total_duration = 0
             
-            assert(len(collapse.changes) == 0)
-            assert(len(collapse.to_be_collapsed) == 0)
             for &cell in cells {
                 cell.state = .Collapsed
                 cell_next_state(collapse, &cell)
             }
-            update_state = .Search_Cells
             
-            total_duration = 0
-            zero(average_colors[:])
             if paused do break task_loop
         }
+        
+        
         
         if .update in this_frame.tasks {
             this_frame.tasks -= { .update }
@@ -501,7 +547,7 @@ do_tasks_in_order :: proc (this_frame: Frame, collapse: ^Collapse, entropy: ^Ran
                         }
                     }
                 } else {
-                    this_frame.tasks += { .restart }
+                    this_frame.tasks += { .rewind }
                 }
             }
         }
