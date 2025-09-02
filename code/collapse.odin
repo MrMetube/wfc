@@ -12,6 +12,7 @@ Collapse :: struct {
     current_step_had_choice: bool,
     steps_with_choice: [dynamic] Collapse_Step,
     current_step: Collapse_Step,
+    total_steps: int,
     
     to_be_collapsed: [dynamic] ^Cell,
     changes:         [dynamic] ^Cell,
@@ -57,7 +58,7 @@ Search :: struct {
     
     metric: Search_Metric,
     lowest: f32,
-    cells:  [dynamic] ^Cell,
+    found:  [dynamic] ^Cell,
 }
 
 Value_Id :: distinct u8
@@ -87,8 +88,6 @@ Update_State :: enum {
     Search_Cells,
     Collapse_Cells,
     Propagate_Changes,
-    
-    Done,
 }
 update_state: Update_State
 
@@ -151,9 +150,11 @@ get_support_amount :: proc (c: ^Collapse, from: State_Id, to: State_Id, closenes
 
 collapse_reset :: proc (c: ^Collapse) {
     // println("%", view_variable(size_of(Collapse))); assert(false)
-    #assert(size_of(Collapse) == 288, "members have changed")
+    #assert(size_of(Collapse) == 296, "members have changed")
     
-    collapse_restart(c)
+    collapse_rewind(c)
+    c.current_step = 0
+    c.total_steps = 0
     
     delete(c.states)
     delete(c.temp_state_values)
@@ -163,11 +164,10 @@ collapse_reset :: proc (c: ^Collapse) {
     c ^= {}
 }
 
-collapse_restart :: proc (c: ^Collapse) {
+collapse_rewind :: proc (c: ^Collapse) {
     clear(&c.to_be_collapsed)
     clear(&c.changes)
     c.changes_cursor = 0
-    c.current_step = 0
 }
 
 ////////////////////////////////////////////////
@@ -269,7 +269,7 @@ init_search :: proc (search: ^Search, c: ^Collapse, metric: Search_Metric, alloc
     
     search.c      = c
     search.metric = metric
-    make(&search.cells, allocator)
+    make(&search.found, allocator)
 }
 
 calculate_entropy :: proc (c: ^Collapse, cell: ^Cell) {
@@ -310,11 +310,11 @@ test_search_cell :: proc (search: ^Search, cell: ^Cell) {
     
     if search.lowest > value {
         search.lowest = value
-        clear(&search.cells)
+        clear(&search.found)
     }
     
     if search.lowest == value {
-        append(&search.cells, cell)
+        append(&search.found, cell)
     }
 }
 
@@ -322,12 +322,28 @@ test_search_cell :: proc (search: ^Search, cell: ^Cell) {
 ////////////////////////////////////////////////
 ////////////////////////////////////////////////
 
+calc_cell_states_support :: proc (c: ^Collapse, cell: ^Cell) {
+    for neighbour in cell.neighbours {
+        closeness := get_closeness(cell.p - neighbour.p)
+        
+        for &state, index in cell.states {
+            if neighbour.state == .Uninitialized {
+                for from in c.states {
+                    amount := get_support_amount(c, from.id, state.id, closeness)
+                    state.amount += amount
+                }
+            } else {
+                state.amount += get_support_for_state(c, neighbour.states[:], state.id, closeness)
+            }
+        }
+    }
+}
+
 cell_next_state :: proc (c: ^Collapse, cell: ^Cell) {
     spall_proc()
     
     switch cell.state {
       case .Uninitialized:
-        delete(cell.states_removed_at)
         make(&cell.states_removed_at, len(c.states))
         make(&cell.states, len(c.states))
         
@@ -335,19 +351,7 @@ cell_next_state :: proc (c: ^Collapse, cell: ^Cell) {
             state.id = cast(State_Id) index
         }
         
-        for neighbour in cell.neighbours {
-            for &state, index in cell.states {
-                closeness := get_closeness(cell.p - neighbour.p)
-                if neighbour.state == .Uninitialized {
-                    for from in c.states {
-                        amount := get_support_amount(c, from.id, state.id, closeness)
-                        state.amount += amount
-                    }
-                } else {
-                    state.amount += get_support_for_state(c, neighbour.states[:], state.id, closeness)
-                }
-            }
-        }
+        calc_cell_states_support(c, cell)
         cell.state = .Collapsing
         
       case .Collapsing:
@@ -355,16 +359,19 @@ cell_next_state :: proc (c: ^Collapse, cell: ^Cell) {
         
       case .Collapsed:
         delete(cell.states)
+        delete(cell.states_removed_at)
+        
+        cell.states_removed_at = nil
         cell.states = nil
         cell.state = .Uninitialized
     }
 }
 
-collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
+collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: enum { Ok, Rewind, Done }) {
     spall_proc()
     assert(c.states != nil)
     
-    ok = true
+    result = .Ok
     
     switch update_state {
       case .Search_Cells:
@@ -374,8 +381,8 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
         search: Search
         init_search(&search, c, search_metric, context.temp_allocator)
         
-        only_check_changes := len(c.changes) != 0
-        if only_check_changes {
+        check_changes := len(c.changes) != 0
+        if check_changes {
             for cell in c.changes {
                 if cell == nil || cell.state == .Collapsed do continue
                 assert(cell.state != .Collapsed)
@@ -384,7 +391,9 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
             }
             
             clear(&c.changes)
-        } else {
+        }
+        
+        if len(search.found) == 0 {
             for &cell in cells {
                 if cell.state == .Collapsed do continue
                 if search.metric == .Entropy do calculate_entropy(c, &cell)
@@ -392,25 +401,24 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
             }
         }
         
-        found := search.cells[:]
-        if len(found) > 0 {
+        if len(search.found) > 0 {
             if c.current_step_had_choice {
                 append(&c.steps_with_choice, c.current_step)
             }
             c.current_step += 1
+            c.total_steps  += 1
             
-            if len(found[0].states) == 1 {
-                spall_scope("Set All chosen cells to be collapse")
-                append(&c.to_be_collapsed, ..found)
+            if len(search.found[0].states) == 1 {
+                append(&c.to_be_collapsed, ..search.found[:])
             } else {
                 c.current_step_had_choice = true
-                append(&c.to_be_collapsed, random_value(entropy, found))
+                append(&c.to_be_collapsed, random_value(entropy, search.found[:]))
             }
             
             update_state = .Collapse_Cells
         } else {
-            if !only_check_changes {
-                update_state = .Done
+            if !check_changes {
+                result = .Done
             }
         }
         
@@ -420,6 +428,7 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
         for cell in c.to_be_collapsed {
             assert(cell.state != .Collapsed)
             
+            assert(cell.state == .Uninitialized || len(cell.states) > 0)
             if cell.state == .Uninitialized {
                 // @todo(viktor): special case this to reduce unnecesary work
                 cell_next_state(c, cell)
@@ -427,6 +436,7 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
             
             
             pick := Invalid_State
+            assert(len(cell.states) > 0)
             if len(cell.states) == 1 {
                 pick = cell.states[0].id
             } else {
@@ -532,7 +542,7 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
                         neighbour.states_removed_at[to.id] = c.current_step
                         unordered_remove(&neighbour.states, state_index)
                         if len(neighbour.states) == 0 {
-                            ok = false
+                            result = .Rewind
                             break propagate_remove
                         }
                     }
@@ -543,11 +553,9 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (ok: bool) {
                 }
             }
         }
-        
-      case .Done: // nothing
     }
     
-    return ok
+    return result
 }
 
 get_support_for_state :: proc (c: ^Collapse, from_states: [] Cell_Foo, to: State_Id, closeness: [Direction] f32) -> (result: f32) {

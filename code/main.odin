@@ -125,13 +125,16 @@ Task :: enum {
 Frame :: struct {
     tasks: bit_set[Task],
     
+    // setup grid
+    desired_dimension:      v2i,
+    desired_neighbour_mode: Neighbour_Mode,
+        
     // extract states
     pixels:           [] rl.Color,
     pixels_dimension: v2i,
     
-    // setup grid
-    desired_dimension:      v2i,
-    desired_neighbour_mode: Neighbour_Mode,
+    // rewind
+    rewind_to: enum { Previous_Choice, Start },
 }
 
 show_index: i32 = -1
@@ -393,7 +396,7 @@ main :: proc () {
     }
 }
 
-do_tasks_in_order :: proc (this_frame: Frame, collapse: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
+do_tasks_in_order :: proc (this_frame: Frame, c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
     spall_scope("Update")
     this_frame := this_frame
     
@@ -402,7 +405,7 @@ do_tasks_in_order :: proc (this_frame: Frame, collapse: ^Collapse, entropy: ^Ran
         if .setup_grid in this_frame.tasks {
             this_frame.tasks -= { .setup_grid }
             
-            setup_grid(collapse, entropy, arena)
+            setup_grid(c, entropy, arena)
             
             this_frame.tasks += { .setup_neighbours, .restart }
         }
@@ -422,13 +425,13 @@ do_tasks_in_order :: proc (this_frame: Frame, collapse: ^Collapse, entropy: ^Ran
             assert(this_frame.pixels != nil)
             
             N = desired_N
-            collapse_reset(collapse)
-            extract_states(collapse, this_frame.pixels, this_frame.pixels_dimension.x, this_frame.pixels_dimension.y)
+            collapse_reset(c)
+            extract_states(c, this_frame.pixels, this_frame.pixels_dimension.x, this_frame.pixels_dimension.y)
             
             // Extract color groups
-            for state in collapse.states {
+            for state in c.states {
                 color_id := state.middle_value
-                color := collapse.values[color_id]
+                color := c.values[color_id]
                 
                 group: ^Color_Group
                 for &it in color_groups {
@@ -441,7 +444,7 @@ do_tasks_in_order :: proc (this_frame: Frame, collapse: ^Collapse, entropy: ^Ran
                 if group == nil {
                     append(&color_groups, Color_Group { color = color })
                     group = &color_groups[len(color_groups)-1]
-                    make(&group.ids, len(collapse.states))
+                    make(&group.ids, len(c.states))
                 }
                 
                 group.ids[state.id] = true
@@ -451,62 +454,56 @@ do_tasks_in_order :: proc (this_frame: Frame, collapse: ^Collapse, entropy: ^Ran
             if paused do break task_loop
         }
         
+        if .restart in this_frame.tasks {
+            this_frame.tasks -= { .restart }
+            
+            this_frame.tasks += { .rewind }
+            this_frame.rewind_to = .Start
+        }
+        
         if .rewind in this_frame.tasks {
             spall_scope("Rewind")
             this_frame.tasks -= { .rewind }
             
-            clear(&collapse.to_be_collapsed)
-            clear(&collapse.changes)
-            collapse.changes_cursor = 0
+            collapse_rewind(c)
+            
             update_state = .Search_Cells
             zero(average_colors[:])
             
-            if len(collapse.steps_with_choice) == 0 {
-                // @todo(viktor): did this not just effectivly restart the collapse?
-                this_frame.tasks += { .restart }
-            } else {
-                collapse.current_step -= pop(&collapse.steps_with_choice)
-                for &cell in cells {
-                    for step, index in cell.states_removed_at {
-                        if step >= collapse.current_step {
-                            id := cast(State_Id) index
-                            support: f32
-                            for neighbour in cell.neighbours {
-                                closeness := get_closeness(cell.p - neighbour.p)
-                                if neighbour.state == .Uninitialized {
-                                    for from in collapse.states {
-                                        amount := get_support_amount(collapse, from.id, id, closeness)
-                                        support += amount
-                                    }
-                                } else {
-                                    support += get_support_for_state(collapse, neighbour.states[:], id, closeness)
-                                }
-                            }
-                            append(&cell.states, Cell_Foo { id, support })
-                         
-                            if cell.state == .Collapsed {
-                                cell.state = .Collapsing
-                            }
-                        }
-                    }
-                }
+            switch this_frame.rewind_to {
+              case .Previous_Choice: c.current_step = pop_safe(&c.steps_with_choice) or_else 0
+              case .Start:           c.current_step = 0
             }
             
-            if paused do break task_loop
-        }
-        
-        if .restart in this_frame.tasks {
-            this_frame.tasks -= { .restart }
-            
-            collapse_restart(collapse)
-            update_state = .Search_Cells
-            zero(average_colors[:])
-
-            total_duration = 0
-            
-            for &cell in cells {
-                cell.state = .Collapsed
-                cell_next_state(collapse, &cell)
+            if c.current_step == 0 {
+                clear(&c.steps_with_choice)
+                total_duration = 0
+                c.total_steps = 0
+                
+                for &cell in cells {
+                    cell.state = .Collapsed
+                    cell_next_state(c, &cell)
+                }
+            } else {
+                for &cell in cells {
+                    if cell.state == .Uninitialized do continue
+                    
+                    changed := false
+                    for &step, index in cell.states_removed_at {
+                        if step != 0 && step >= c.current_step {
+                            step = 0
+                            changed = true
+                            
+                            id := cast(State_Id) index
+                            append(&cell.states, Cell_Foo { id, 0 })
+                        }
+                    }
+                    
+                    if changed {
+                        cell.state = .Collapsing
+                        calc_cell_states_support(c, &cell)
+                    }
+                }
             }
             
             if paused do break task_loop
@@ -517,32 +514,34 @@ do_tasks_in_order :: proc (this_frame: Frame, collapse: ^Collapse, entropy: ^Ran
         if .update in this_frame.tasks {
             this_frame.tasks -= { .update }
             
-            if collapse.states != nil {
+            if c.states != nil {
                 if update_start == {} do update_start = time.now()
                 
                 this_update_start := time.now()
-                if collapse_update(collapse, entropy) {
-                    if update_state != .Done {
-                        total_duration += time.since(this_update_start)
+                switch collapse_update(c, entropy) {
+                  case .Done:
+                  case .Rewind:
+                    total_duration += time.since(this_update_start)
+                    this_frame.tasks += { .rewind }
+                    
+                  case .Ok:
+                    total_duration += time.since(this_update_start)
                         
-                        if paused {
-                            if desired_update_state != nil {
-                                if desired_update_state != update_state {
-                                    this_frame.tasks += { .update }
-                                } else {
-                                    desired_update_state = nil
-                                }
+                    if paused {
+                        if desired_update_state != nil {
+                            if desired_update_state != update_state {
+                                this_frame.tasks += { .update }
                             } else {
-                                break task_loop
+                                desired_update_state = nil
                             }
-                        }
-                        
-                        if time.duration_seconds(time.since(update_start)) < TargetFrameTime * 0.95 {
-                            this_frame.tasks += { .update }
+                        } else {
+                            break task_loop
                         }
                     }
-                } else {
-                    this_frame.tasks += { .rewind }
+                    
+                    if time.duration_seconds(time.since(update_start)) < TargetFrameTime * 0.95 {
+                        this_frame.tasks += { .update }
+                    }
                 }
             }
         }

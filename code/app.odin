@@ -49,36 +49,27 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
 
     if paused {
         if imgui.button("Unpause") do paused = false
+        
         if imgui.button("Step") {
             this_frame.tasks += { .update }
+            desired_update_state = update_state + auto_cast 1
         }
-        if update_state != .Done {
-            if imgui.button("Step until next") {
-                this_frame.tasks += { .update }
-                switch update_state {
-                  case .Done: unreachable()
-                  
-                  case .Search_Cells:
-                    desired_update_state = .Collapse_Cells
-                  case .Collapse_Cells:
-                    desired_update_state = .Propagate_Changes
-                  case .Propagate_Changes:    
-                    desired_update_state = .Search_Cells
-                }
-            }
-        }
+        
+        if imgui.button("Rewind")  do this_frame.tasks += { .rewind  }
+        
+        if imgui.button("Update once") do this_frame.tasks += { .update }
     } else {
         if imgui.button("Pause") do paused = true
         this_frame.tasks += { .update }
     }
-    imgui.text(tprint("%", update_state))
     
-    if len(c.states) != 0 {
-        if imgui.button("Restart") {
-            this_frame.tasks += { .restart }
-        }
-    }
-        
+    imgui.text(tprint("Current Step / Total: %/%", cast(int) c.current_step, c.total_steps))
+    choice_count := len(c.steps_with_choice)
+    imgui.text(tprint("Choices since start: %", choice_count))
+    
+    imgui.text(tprint("%", update_state))
+    if imgui.button("Restart") do this_frame.tasks += { .restart }
+    
     imgui.checkbox("Average Color", &render_wavefunction_as_average)
     imgui.checkbox("Highlight changing cells", &highlight_changes)
     
