@@ -68,7 +68,6 @@ Support :: struct {
 Value_Id :: distinct u8
 State_Id :: distinct u32
 State    :: struct {
-    // @todo(viktor): we dont really need all of these fields together at the same time. maybe make a #soa out of it?
     id: State_Id,
     
     middle_value: Value_Id,
@@ -164,6 +163,7 @@ collapse_reset :: proc (c: ^Collapse) {
         
     for state in c.states do delete(state._values)
     clear(&c.states)
+    for step in c.steps do delete_step(step)
     clear(&c.steps)
     
     clear(&c.values)
@@ -459,12 +459,7 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Updat
             result = .Rewind
         } else {
             cell := current.to_be_collapsed
-            assert(cell.state != .Collapsed)
-            
-            if cell.state == .Uninitialized {
-                // @todo(viktor): special case this to reduce unnecesary work
-                cell_next_state(c, cell)
-            }
+            assert(cell.state == .Collapsing)
             
             pick := Invalid_State
             total: f32
@@ -475,6 +470,7 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Updat
             
             DoWeights :: true
             when DoWeights {
+                // @todo(viktor): Figure out if this is even needed or has any effect on the result
                 // @todo(viktor): precompute this weighting per neighbour based on direction
                 weights := make([] f32, len(cell.states), context.temp_allocator)
                 
@@ -548,7 +544,6 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Updat
                 assert(changed_index != -1)
                 
                 closeness := get_closeness(neighbour.p - changed.p)
-                closeness_reversed := get_closeness(changed.p - neighbour.p)
                 did_change := false
                 // @todo(viktor): dont recalculate the total amount everytime, do it at init and then update it according to the removed states in changed, i.e. the support of those states
                 states_count := 0
@@ -566,7 +561,6 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Updat
                         current_support += amount
                     }
                     
-                    previous_support := to.support_from_neighbours[changed_index]
                     to.support_from_neighbours[changed_index] = current_support
                     should_remove = current_support <= 0
                     

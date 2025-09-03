@@ -69,7 +69,7 @@ make_array :: proc(arena: ^Arena, $T: typeid, #any_int len: i32, params := Defau
 }
 
 peek :: proc (a: [dynamic] $T) -> (result: ^T) { 
-    assert(len(a) != 0);
+    assert(len(a) != 0)
     #no_bounds_check result = &a[len(a)-1]
     return result
 }

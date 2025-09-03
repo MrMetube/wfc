@@ -26,7 +26,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
             if imgui.image_button(auto_cast &image.texture.id, 30) {
                 if image.image.format == .UNCOMPRESSED_R8G8B8 {
                     make(&this_frame.pixels, image.image.width * image.image.height, context.temp_allocator)
-                    // @leak
+                    
                     raw := slice_from_parts([3]u8, image.image.data, image.image.width * image.image.height)
                     for &pixel, index in this_frame.pixels {
                         pixel.rgb = raw[index]

@@ -11,7 +11,6 @@ import rl "vendor:raylib"
     - Maybe dont collapse into a concrete state immediatly but just into a set with all the same color / "middle value"
     Decide on how to handle visual center vs. actual center for voronoi cells on the edge
     - Make a visual editor for the closeness weighting function or make the viewing not a different mode but a window
-    - dont mutate the states of a cell, instead store its states with a tag marking, when that state became invalid. thereby allowing us the backtrack the changes made without much work. we wouldn't need to reinit the grid all the time and could better search the space. !!!we need a non deterministic selection or we will always resample the same invalid path!!! we could also store the decision per each timestep and not pick random but the next most likely pick.
 */
 
 Screen_Size :: v2i{1600, 900}
@@ -24,7 +23,6 @@ TargetFrameTime :: 1./TargetFps
 
 total_duration: time.Duration
 
-// @todo(viktor): rethink Update_State.Done with pausing and step until desired state
 paused: b32
 desired_update_state: Maybe(Update_State)
 
@@ -136,14 +134,14 @@ Frame :: struct {
 desired_N:  i32 = N
 
 main :: proc () {
-    // track: mem.Tracking_Allocator
-    // mem.tracking_allocator_init(&track, context.allocator)
-    // defer mem.tracking_allocator_destroy(&track)
-    // context.allocator = mem.tracking_allocator(&track)
+    track: mem.Tracking_Allocator
+    mem.tracking_allocator_init(&track, context.allocator)
+    defer mem.tracking_allocator_destroy(&track)
+    context.allocator = mem.tracking_allocator(&track)
 
-    // defer for _, leak in track.allocation_map {
-    //     print("% leaked %\n", leak.location, view_memory_size(cast(umm) leak.size))
-    // }
+    defer for _, leak in track.allocation_map {
+        print("% leaked %\n", leak.location, view_memory_size(cast(umm) leak.size))
+    }
     
     unused(screen_to_world)
     
@@ -191,8 +189,13 @@ main :: proc () {
     do_tasks_in_order({ tasks = { .setup_grid } }, &collapse, &entropy, &arena)
     
     defer {
-        // @todo(viktor): @leak this and more leaks
         collapse_reset(&collapse)
+        delete(collapse.values)
+        delete(collapse.steps)
+        delete(collapse.states)
+        delete(collapse.temp_state_values)
+        
+        delete(step_depth)
         
         for group in color_groups do delete(group.ids)
         delete(color_groups)
@@ -201,6 +204,9 @@ main :: proc () {
             delete(cell.points)
             delete(cell.all_neighbours)
             delete(cell.neighbours)
+            for state in cell.states {
+                delete(state.support_from_neighbours)
+            }
             delete(cell.states)
         }
         delete(cells)
@@ -246,16 +252,8 @@ main :: proc () {
         rl.BeginDrawing()
         rl.ClearBackground({0x54, 0x57, 0x66, 0xFF})
         
+        // @todo(viktor): handle empty steps, when paused and selecting an input
         current := peek(collapse.steps)
-        for &cell, index in cells {
-            // @todo(viktor): Is this cleanup still necessary?
-            for &state in cell.states {
-                if state.removed_at > current.step do state.removed_at = Invalid_Collapse_Step
-            }
-            
-            
-        }
-        
         spall_begin("Prepare Render")
         {
             cells_background_hue_t += rl.GetFrameTime() * DegreesPerRadian
@@ -271,7 +269,7 @@ main :: proc () {
         
         if viewing_group == nil {
             spall_begin("render cells")
-            for &cell, index in cells {
+            for &cell in cells {
                 color: rl.Color
                 
                 if render_wavefunction_as_average {
@@ -550,6 +548,7 @@ do_tasks_in_order :: proc (this_frame: Frame, c: ^Collapse, entropy: ^RandomSeri
                 
                 switch result {
                   case .Done:
+                    break task_loop
                   case .Rewind:
                     this_frame.tasks += { .rewind }
                   case .Ok:
@@ -593,7 +592,6 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
     complete_triangulation(&dt)
     voronoi_cells := end_triangulation_voronoi_cells(&dt)
     defer {
-        // @todo(viktor): @leak
         delete(voronoi_cells)
         delete(dt.all_bad_edges)
         delete(dt.bad_triangles)
@@ -756,24 +754,27 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
 }
 
 draw_cell :: proc (cell: Cell, color: rl.Color) {
-    @(static) draw_cell_buffer: [dynamic] v2
-    clear(&draw_cell_buffer)
+    @(static) buffer: [dynamic] v2 // @leak
+    clear(&buffer)
     
-    append(&draw_cell_buffer, world_to_screen(cell.p))
+    append(&buffer, world_to_screen(cell.p))
     for point in cell.points {
-        append(&draw_cell_buffer, world_to_screen(point))
+        append(&buffer, world_to_screen(point))
     }
-    append(&draw_cell_buffer, draw_cell_buffer[1])
+    append(&buffer, buffer[1])
     
-    rl.DrawTriangleFan(raw_data(draw_cell_buffer), auto_cast len(draw_cell_buffer), color)
+    rl.DrawTriangleFan(raw_data(buffer), auto_cast len(buffer), color)
 }
 draw_cell_outline :: proc (cell: Cell, color: rl.Color) {
-    for p_index in 0..<len(cell.points) {
-        begin := world_to_screen(cell.points[p_index])
-        end   := world_to_screen(cell.points[(p_index+1)%len(cell.points)])
-        rl.DrawLineV(begin, end, color)
-        // @todo(viktor): rl.DrawLineStrip
+    @(static) buffer: [dynamic] v2 // @leak
+    clear(&buffer)
+    
+    for point in cell.points {
+        append(&buffer, world_to_screen(point))
     }
+    append(&buffer, buffer[0])
+    
+    rl.DrawLineStrip(raw_data(buffer), auto_cast len(buffer), color)
 }
 
 world_to_screen :: proc { world_to_screen_rec, world_to_screen_vec, world_to_screen_v2i }
