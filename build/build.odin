@@ -8,7 +8,7 @@ import "core:strings"
 import "core:time"
 import win "core:sys/windows"
 
-optimizations := !false ? `-o:speed` : `-o:none`
+optimizations := false ? `-o:speed` : `-o:none`
 Pedantic      :: false
 windows       := !true ? `-subsystem:windows` : `-subsystem:console`
 
@@ -42,7 +42,7 @@ debug_exe_path :: `.\`+debug_exe
 
 Task :: enum {
     help,
-    debugger,
+    debugger, 
     run,
     renderdoc,
 }

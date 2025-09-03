@@ -68,6 +68,12 @@ make_array :: proc(arena: ^Arena, $T: typeid, #any_int len: i32, params := Defau
     return result
 }
 
+peek :: proc (a: [dynamic] $T) -> (result: ^T) { 
+    assert(len(a) != 0);
+    #no_bounds_check result = &a[len(a)-1]
+    return result
+}
+
 slice :: proc{ slice_fixed_array, slice_array, slice_array_pointer }
 slice_fixed_array :: proc(array: ^FixedArray($N, $T)) -> []T {
     return array.data[:array.count]

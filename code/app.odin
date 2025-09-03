@@ -3,6 +3,8 @@ package main
 import rl "vendor:raylib"
 import "lib:imgui"
 
+step_depth: [dynamic] f32
+
 ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
     spall_proc()
     
@@ -10,7 +12,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         imgui.text("Choose Input Image")
         region: v2
         imgui.get_content_region_avail(&region)
-        imgui.push_item_width(region.x/2)
+        imgui.push_item_width(region.x*2/3)
         imgui.slider_int("Tile Size", &desired_N, 1, 10)
         imgui.pop_item_width()
         
@@ -46,7 +48,12 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
     imgui.end()
     
     imgui.text("Stats")
-    imgui.color_edit4("Background", &cells_background_color, flags = .NoInputs | .NoTooltip | .Float)
+    
+    current := peek(c.steps)
+    append(&step_depth, cast(f32) current.step)
+    imgui.plot_lines_float_ptr("Depth", raw_data(step_depth), auto_cast len(step_depth), graph_size = {0, 100})
+    
+    imgui.color_edit4("Background", &cells_background_color, flags = .NoInputs | .NoTooltip | .Float | .DisplayHsv )
     
     tile_count := len(c.states)
     imgui.text_colored(tile_count > 200 ? Red : White, tprint("Tile count %", tile_count))
@@ -56,7 +63,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         
         if imgui.button("Step") {
             this_frame.tasks += { .update }
-            desired_update_state = cast(Update_State) ((cast(int) c.update_state + 1) % len(Update_State))
+            desired_update_state = cast(Update_State) ((cast(int) current.update_state + 1) % len(Update_State))
         }
         
         if imgui.button("Rewind")  do this_frame.tasks += { .rewind  }
@@ -67,15 +74,15 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         this_frame.tasks += { .update }
     }
     
-    imgui.text(tprint("Current Step: %", cast(int) c.current_step))
-    choices_count := len(c.steps_with_choices)
+    imgui.text(tprint("Current Step: %", cast(int) current.step))
+    choices_count := len(c.steps)
     imgui.text(tprint("Choices since start: %", choices_count))
     
-    imgui.text(tprint("%", c.update_state))
+    imgui.text(tprint("%", current.update_state))
     if imgui.button("Restart") do this_frame.tasks += { .restart }
     
     imgui.checkbox("Average Color", &render_wavefunction_as_average)
-    imgui.checkbox("Highlight changing cells", &highlight_changes)
+    imgui.checkbox("Highlight step", &highlight_step)
     
     metrics := [Search_Metric] string {
         .States  = "fewest possible states",
@@ -99,7 +106,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         
         imgui.text("Directional Spread")
         imgui.get_content_region_avail(&region)
-        imgui.push_item_width(region.x/2)
+        imgui.push_item_width(region.x*2/3)
         if imgui.slider_float("Blend Factor %.1f", &view_mode_t, -1, 1) {
             if abs(view_mode_t-(-1)) < 0.1 {
                 view_mode_t = -1
@@ -159,10 +166,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
             }
         }
         imgui.slider_int2("Size", &this_frame.desired_dimension, 3, 300, flags = .Logarithmic)
-        imgui.get_content_region_avail(&region)
-        imgui.push_item_width(region.x/2)
-        imgui.slider_int("Show index", &show_index, -1, auto_cast len(cells))
-        imgui.pop_item_width()
+        
         imgui.checkbox("Show Neighbours", &show_neighbours)
         imgui.checkbox("Show All Neighbours", &show_all_neighbours)
         imgui.checkbox("Show Voronoi Cells", &show_voronoi_cells)
@@ -180,7 +184,10 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         }
         
         if .Threshold in neighbour_mode.kind {
+            imgui.get_content_region_avail(&region)
+            imgui.push_item_width(region.x*2/3)
             imgui.slider_float("Threshold", &this_frame.desired_neighbour_mode.threshold, 0.5, 2)
+            imgui.pop_item_width()
         }
         
     imgui.end()

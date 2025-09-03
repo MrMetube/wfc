@@ -9,42 +9,49 @@ Collapse :: struct {
     values:   [dynamic] rl.Color,
     supports: [/* center - State_Id */] [/* neighbour - State_Id */] Support,
     
-    update_state: Update_State,
-    
-    current_step: Collapse_Step,
-    steps_with_choices: [dynamic] Collapse_Step,
-    
-    to_be_collapsed: [dynamic] ^Cell,
-    changes:         [dynamic] ^Cell,
-    changes_cursor:  int,
+    steps: [dynamic] Step,
     
     // Extraction
     is_defining_state: bool,
     temp_state_values: [dynamic] Value_Id,
 }
 
+Step :: struct {
+    step: Collapse_Step,
+    update_state: Update_State,
+    
+    // Search
+    found: [dynamic] ^Cell,
+    // Pick
+    to_be_collapsed: ^Cell,
+    // Collapse
+    pickable_states: [dynamic] ^State_Entry,
+    // Propagate
+    changes:         [dynamic] ^Cell,
+    changes_cursor:  int,
+}
+
 Collapse_Step :: distinct i64
 
 Cell :: struct {
     p:              v2, 
-    points:         [dynamic] v2, // for rendering the voronoi cell
-    all_neighbours: [dynamic] ^Cell,
+    points:         [] v2, // for rendering the voronoi cell
+    all_neighbours: [] ^Cell,
     neighbours:     [dynamic] ^Cell,
     
     state: Cell_State,
     
-    collapsed_at: Collapse_Step,
-    
     states: [] State_Entry,
+    
     entropy: f32,
+    average_color: rl.Color,
 }
 
 State_Entry :: struct {
     id: State_Id,
+    removed_at: Collapse_Step,
     
-    support_amount: f32,
-    picked_at:      Collapse_Step,
-    removed_at:     Collapse_Step,
+    support_from_neighbours: [] f32,
 }
 
 Cell_State :: enum {
@@ -56,14 +63,6 @@ Cell_State :: enum {
 Support :: struct {
     id:     State_Id,
     amount: [Direction] f32,
-}
-
-Search :: struct {
-    c: ^Collapse,
-    
-    metric: Search_Metric,
-    lowest: f32,
-    found:  [dynamic] ^Cell,
 }
 
 Value_Id :: distinct u8
@@ -91,9 +90,9 @@ cells: [dynamic] Cell
 
 Update_State :: enum {
     Search,
+    Pick,
     Collapse,
     Propagate,
-    // Rewind,
 }
 
 Wave_Support :: struct {
@@ -162,12 +161,10 @@ get_support_amount :: proc (c: ^Collapse, from: State_Id, to: State_Id, closenes
 collapse_reset :: proc (c: ^Collapse) {
     // println("%", view_variable(size_of(Collapse))); assert(false)
     // #assert(size_of(Collapse) <= 380, "members have changed")
-    
-    collapse_rewind(c)
-    
+        
     for state in c.states do delete(state._values)
     clear(&c.states)
-    clear(&c.steps_with_choices)
+    clear(&c.steps)
     
     clear(&c.values)
     clear(&c.temp_state_values)
@@ -176,16 +173,7 @@ collapse_reset :: proc (c: ^Collapse) {
     delete(c.supports)
     c.supports = nil
     
-    c.update_state = .Search
-    c.current_step = {}
-    c.changes_cursor = 0
     c.is_defining_state = false
-}
-
-collapse_rewind :: proc (c: ^Collapse) {
-    clear(&c.to_be_collapsed)
-    clear(&c.changes)
-    c.changes_cursor = 0
 }
 
 ////////////////////////////////////////////////
@@ -279,25 +267,18 @@ end_state   :: proc (c: ^Collapse) {
 
 ////////////////////////////////////////////////
 
-init_search :: proc (search: ^Search, c: ^Collapse, metric: Search_Metric, allocator := context.allocator) {
-    search.lowest = +Infinity
-    
-    search.c      = c
-    search.metric = metric
-    make(&search.found, allocator)
-}
-
 calculate_entropy :: proc (c: ^Collapse, cell: ^Cell) {
+    spall_proc()
     // @speed this could be done iteratively if needed, but its fast enough for now
     total_frequency: f32
     cell.entropy = 0
     for state in cell.states {
-        if state.removed_at <= c.current_step do continue
+        if state.removed_at <= peek(c.steps).step do continue
         total_frequency += c.states[state.id].frequency
     }
     
     for state in cell.states {
-        if state.removed_at <= c.current_step do continue
+        if state.removed_at <= peek(c.steps).step do continue
         frequency := c.states[state.id].frequency
         probability := frequency / total_frequency
         
@@ -305,33 +286,33 @@ calculate_entropy :: proc (c: ^Collapse, cell: ^Cell) {
     }
 }
 
-test_search_cell :: proc (search: ^Search, cell: ^Cell) {
-    assert(cell.state != .Collapsed)
+calculate_average_color :: proc (c: ^Collapse, cell: ^Cell) {
+    spall_proc()
     
-    value: f32
     switch cell.state {
-      case .Collapsed: unreachable()
-        
       case .Uninitialized:
-        switch search.metric {
-          case .States:  value = cast(f32) len(search.c.states)
-          case .Entropy: value = log2(cast(f32) len(search.c.states))
-        }
-            
+        cell.average_color = 0
+        
       case .Collapsing:
-        switch search.metric {
-          case .States:  value = cast(f32) slow__get_states_count(search.c, cell)
-          case .Entropy: value = cell.entropy
+        color: v4
+        count: f32
+        for state in cell.states {
+            if state.removed_at <= peek(c.steps).step do continue
+            
+            state    := c.states[state.id]
+            color_id := state.middle_value
+            color += rl_color_to_v4(c.values[color_id]) * state.frequency
+            count += state.frequency
         }
-    }
-    
-    if search.lowest > value {
-        search.lowest = value
-        clear(&search.found)
-    }
-    
-    if search.lowest == value {
-        append(&search.found, cell)
+        
+        color = safe_ratio_0(color, count)
+        cell.average_color = cast(rl.Color) v4_to_rgba(color * {1,1,1,0.3})
+        
+      case .Collapsed:
+        state_entry  := slow__get_collapsed_state(c, cell^)
+        state        := c.states[state_entry.id]
+        color_id     := state.middle_value
+        cell.average_color = c.values[color_id]
     }
 }
 
@@ -340,19 +321,22 @@ test_search_cell :: proc (search: ^Search, cell: ^Cell) {
 ////////////////////////////////////////////////
 
 calc_cell_states_support :: proc (c: ^Collapse, cell: ^Cell) {
-    for neighbour in cell.neighbours {
+    spall_proc()
+    for neighbour, neighbour_index in cell.neighbours {
         closeness := get_closeness(cell.p - neighbour.p)
         
         for &state in cell.states {
-            if state.removed_at <= c.current_step do continue
+            if state.removed_at <= peek(c.steps).step do continue
             
             if neighbour.state == .Uninitialized {
                 for from in c.states {
                     amount := get_support_amount(c, from.id, state.id, closeness)
-                    state.support_amount += amount
+                    state.support_from_neighbours[neighbour_index] += amount
+                    // state.highest_support_from_neighbours += amount
                 }
             } else {
-                state.support_amount += get_support_for_state(c, neighbour.states[:], state.id, closeness)
+                state.support_from_neighbours[neighbour_index] += get_support_for_state(c, neighbour, state.id, closeness)
+                // state.highest_support_from_neighbours += get_support_for_state(c, neighbour, state.id, closeness)
             }
         }
     }
@@ -364,103 +348,117 @@ cell_next_state :: proc (c: ^Collapse, cell: ^Cell) {
     switch cell.state {
       case .Uninitialized:
         cell.state = .Collapsing
-        cell.collapsed_at = Invalid_Collapse_Step
+        
         make(&cell.states, len(c.states))
         
         for &state, index in cell.states {
             state.id = cast(State_Id) index
             state.removed_at = Invalid_Collapse_Step
-            state.picked_at  = Invalid_Collapse_Step
+            make(&state.support_from_neighbours, len(cell.neighbours))
         }
         
         calc_cell_states_support(c, cell)
-        
+        calculate_average_color(c, cell)
         
       case .Collapsing:
         cell.state = .Collapsed
         
-        count := 0
-        for state in cell.states {
-            if state.removed_at > c.current_step {
-                count += 1
-                assert(state.picked_at == Invalid_Collapse_Step || state.picked_at <= c.current_step)
-            }
-        }
-        assert(count == 1)
-        
       case .Collapsed:
         cell.state = .Uninitialized
+        for state in cell.states {
+            delete(state.support_from_neighbours)
+        }
         delete(cell.states)
         cell.states = nil
     }
 }
 
-collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: enum { Ok, Rewind, Done }) {
+Update_Result :: enum { Ok, Rewind, Done }
+collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result) {
     spall_proc()
     assert(c.states != nil)
     
     result = .Ok
     
-    switch c.update_state {
+    current := peek(c.steps)
+    switch current.update_state {
       case .Search:
-        assert(len(c.to_be_collapsed) == 0)
         spall_scope("Find next cell to be collapsed")
         
-        search: Search
-        init_search(&search, c, search_metric, context.temp_allocator)
-        check_changes := len(c.changes) != 0
-        if check_changes {
-            for cell in c.changes {
-                if cell == nil || cell.state == .Collapsed do continue
-                assert(cell.state != .Collapsed)
-                if search.metric == .Entropy do calculate_entropy(c, cell)
-                test_search_cell(&search, cell)
-            }
+        lowest := +Infinity
+        for &cell in cells {
+            if render_wavefunction_as_average do calculate_average_color(c, &cell)
+            if cell.state == .Collapsed do continue
+            if search_metric == .Entropy do calculate_entropy(c, &cell)
             
-            clear(&c.changes)
-        }
-        
-        if len(search.found) == 0 {
-            for &cell in cells {
-                if cell.state == .Collapsed do continue
-                if search.metric == .Entropy do calculate_entropy(c, &cell)
-                test_search_cell(&search, &cell)
-            }
-        }
-            
-        if len(search.found) > 0 {
-            cell: ^Cell
-            for len(search.found) > 0 {
-                index := random_index(entropy, search.found[:])
+            value: f32
+            switch cell.state {
+              case .Collapsed: unreachable()
                 
-                cell = search.found[index]
-                unordered_remove(&search.found, index)
-                
-                if cell.collapsed_at != c.current_step {
-                    cell.collapsed_at = c.current_step
-                    break
+              case .Uninitialized:
+                switch search_metric {
+                  case .States:  value = cast(f32) len(c.states)
+                  case .Entropy: value = log2(cast(f32) len(c.states))
+                }
+                    
+              case .Collapsing:
+                switch search_metric {
+                  case .States:  value = cast(f32) slow__get_states_count(c, &cell)
+                  case .Entropy: value = cell.entropy
                 }
             }
             
-            if cell != nil  {
-                append(&c.to_be_collapsed, cell)
-                append(&c.steps_with_choices, c.current_step)
-                
-                c.update_state = .Collapse
-            } else {
-                result = .Rewind
+            if lowest > value {
+                lowest = value
+                clear(&current.found)
             }
+            
+            if lowest == value {
+                append(&current.found, &cell)
+            }
+        }
+        
+        if len(current.found) == 0 {
+            result = .Done
         } else {
-            if !check_changes {
-                result = .Done
+            current.update_state = .Pick
+        }
+        
+      case .Pick:
+        spall_scope("Pick a cell from the found")
+        
+        assert(current.to_be_collapsed == nil)
+        
+        if len(current.found) == 0 {
+            result = .Rewind
+        } else {
+            index := random_index(entropy, current.found)
+            current.to_be_collapsed = current.found[index]
+            unordered_remove(&current.found, index)
+            
+            if current.to_be_collapsed.state == .Uninitialized {
+                // @todo(viktor): special case this to reduce unnecesary work
+                cell_next_state(c, current.to_be_collapsed)
             }
+            
+            clear(&current.pickable_states)
+            for &state in current.to_be_collapsed.states {
+                if state.removed_at <= current.step do continue
+                append(&current.pickable_states, &state)
+            }
+            
+            current.update_state = .Collapse
         }
         
       case .Collapse:
         spall_scope("Collapse chosen cell")
         
-        assert(len(c.to_be_collapsed) == 1)
-        for cell in c.to_be_collapsed {
+        assert(current.to_be_collapsed != nil)
+        
+        if len(current.pickable_states) == 0 {
+            result = .Rewind
+        } else {
+            cell := current.to_be_collapsed
             assert(cell.state != .Collapsed)
             
             if cell.state == .Uninitialized {
@@ -469,157 +467,135 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: enum 
             }
             
             pick := Invalid_State
-            assert(slow__get_states_count(c, cell) > 0)
             total: f32
-            for state in cell.states {
-                if state.removed_at <= c.current_step do continue
-                // assert(state.picked_at == Invalid_Collapse_Step || state.picked_at == c.current_step)
-                if state.picked_at == c.current_step {
-                    continue
-                }
-                
+            for state in current.pickable_states {
+                assert(state.removed_at > current.step)
                 total += c.states[state.id].frequency
             }
             
-            // @todo(viktor): replace with state.support_amount ?
-            weights := make([] f32, len(cell.states), context.temp_allocator)
-              
-            for neighbour in cell.neighbours {
-                closeness := get_closeness(neighbour.p - cell.p)
-                // @important @speed cache this
-                for from, from_index in cell.states {
-                    if from.removed_at <= c.current_step do continue
-                    if from.picked_at == c.current_step do continue
-                    
-                    for to in neighbour.states {
-                        if to.removed_at <= c.current_step do continue
-                        
-                        amount := get_support_amount(c, from.id, to.id, closeness)
-                        weights[from_index] += amount
-                    }
-                }
-            }
-              
-            for weight in weights do total += weight
-            
-            count := 0
-            // @note(viktor): dont check all states just early out and try another cell
-            for &state, index in cell.states {
-                if state.removed_at <= c.current_step do continue
-                if state.picked_at == c.current_step {
-                    count += 1
-                    break
-                }
-            }
-            
-            if count == 0 {
-                target := random_unilateral(entropy, f32) * total
-                for &state, index in cell.states {
-                    if state.removed_at <= c.current_step do continue
-                    if state.picked_at == c.current_step {
-                        state.removed_at = c.current_step
-                        continue
-                    }
-                    
-                    count += 1
-                    
-                    target -= c.states[state.id].frequency
-                    target -= weights[index]
-                    if pick == Invalid_State && target <= 0 {
-                        pick = state.id
-                        state.picked_at = c.current_step
-                    } else {
-                        state.removed_at = c.current_step
+            DoWeights :: true
+            when DoWeights {
+                // @todo(viktor): precompute this weighting per neighbour based on direction
+                weights := make([] f32, len(cell.states), context.temp_allocator)
+                
+                for neighbour in cell.neighbours {
+                    closeness := get_closeness(neighbour.p - cell.p)
+                    // @important @speed cache this
+                    for from, from_index in current.pickable_states {
+                        for to in neighbour.states {
+                            if to.removed_at <= current.step do continue
+                            
+                            amount := get_support_amount(c, from.id, to.id, closeness)
+                            weights[from_index] += amount
+                        }
                     }
                 }
                 
-                if pick != Invalid_State {
-                    mark_as_changed(c, cell)
-                    cell_next_state(c, cell)
+                for weight in weights do total += weight
+            }
+            
+            target := random_unilateral(entropy, f32) * total
+            for &state, index in current.pickable_states {
+                target -= c.states[state.id].frequency
+                
+                when DoWeights do target -= weights[index]
+                
+                if pick == Invalid_State && target <= 0 {
+                    pick = state.id
                 } else {
-                    result = .Rewind
+                    state.removed_at = current.step
                 }
+            }
+            
+            if pick != Invalid_State {
+                mark_as_changed(current, cell)
+                cell_next_state(c, cell)
             } else {
                 result = .Rewind
             }
-            
         }
         
-        clear(&c.to_be_collapsed)
-        c.update_state = .Propagate
+        current.update_state = .Propagate
         
       case .Propagate:
         spall_scope("Propagate changes")
         
-        if len(c.changes) == c.changes_cursor {
-            c.update_state = .Search
-            c.changes_cursor = 0
+        assert(len(current.changes) != 0)
+        
+        changed: ^Cell
+        for changed == nil && current.changes_cursor < len(current.changes) {
+            changed = current.changes[current.changes_cursor]
+            current.changes_cursor += 1
+        }
+        
+        if changed == nil && current.changes_cursor == len(current.changes) {
+            result = .Rewind
         } else {
-            changed := c.changes[c.changes_cursor]
-            c.changes_cursor += 1
-            for changed == nil {
-                changed = c.changes[c.changes_cursor]
-                c.changes_cursor += 1
-            }
+            assert(changed.state != .Uninitialized)
             
-            spall_scope("recalc states loop")
             propagate_remove: for neighbour in changed.neighbours {
                 assert(neighbour != nil)
                 if neighbour.state == .Collapsed do continue propagate_remove
+                was_just_inited := false
                 if neighbour.state == .Uninitialized {
+                    was_just_inited = true
                     cell_next_state(c, neighbour)
                 }
                 assert(neighbour.state != .Uninitialized)
                 
+                changed_index: int = -1
+                for n, n_index in neighbour.neighbours do if n == changed { changed_index = n_index; break }
+                assert(changed_index != -1)
+                
                 closeness := get_closeness(neighbour.p - changed.p)
+                closeness_reversed := get_closeness(changed.p - neighbour.p)
                 did_change := false
                 // @todo(viktor): dont recalculate the total amount everytime, do it at init and then update it according to the removed states in changed, i.e. the support of those states
-                removed_states_from_changed := make([dynamic] State_Id, context.temp_allocator)
-                for state in changed.states {
-                    if state.removed_at == c.current_step {
-                        append(&removed_states_from_changed, state.id)
-                    }
-                }
-                
-                count := 0
+                states_count := 0
+                spall_begin("recalc states loop")
                 for &to in neighbour.states {
-                    if to.removed_at <= c.current_step do continue
+                    if to.removed_at <= current.step do continue
                     
                     should_remove: bool
                     
                     should_remove = true
-                    removed_amount: f32
-                    for from in removed_states_from_changed {
-                        amount := get_support_amount(c, from, to.id, closeness)
-                        removed_amount += amount
+                    current_support: f32
+                    for from in changed.states {
+                        if from.removed_at <= current.step do continue
+                        amount := get_support_amount(c, from.id, to.id, closeness)
+                        current_support += amount
                     }
-                    total_amount := get_support_for_state(c, changed.states[:], to.id, closeness)
-                    should_remove = total_amount <= 0
-                    to.support_amount = total_amount
-                    assert(should_remove == (to.support_amount <= 0))
+                    
+                    previous_support := to.support_from_neighbours[changed_index]
+                    to.support_from_neighbours[changed_index] = current_support
+                    should_remove = current_support <= 0
                     
                     if should_remove {
                         did_change = true
-                        
-                        to.removed_at = c.current_step
+                        to.removed_at = current.step
                     } else {
-                        count += 1
+                        states_count += 1
                     }
                 }
+                spall_end()
                 
                 if did_change {
-                    if count == 0 {
+                    if states_count == 0 {
                         result = .Rewind
                         break propagate_remove
                     }
                     
-                    if count == 1 {
+                    if states_count == 1 {
                         cell_next_state(c, neighbour)
                     }
                     
-                    mark_as_changed(c, neighbour)
+                    mark_as_changed(current, neighbour)
                 }
             }
+        }
+        
+        if len(current.changes) == current.changes_cursor {
+            append(&c.steps, Step { step = current.step + 1 })
         }
     }
     
@@ -629,7 +605,7 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: enum 
 slow__get_collapsed_state :: proc (c: ^Collapse, cell: Cell) -> (result: State_Entry) {
     assert(cell.state == .Collapsed)
     for state in cell.states {
-        if state.removed_at <= c.current_step do continue
+        if state.removed_at <= peek(c.steps).step do continue
         
         return state
     }
@@ -638,7 +614,7 @@ slow__get_collapsed_state :: proc (c: ^Collapse, cell: Cell) -> (result: State_E
 
 slow__get_states_count :: proc (c: ^Collapse, cell: ^Cell) -> (result: i32) {
     for state in cell.states {
-        if state.removed_at <= c.current_step do continue
+        if state.removed_at <= peek(c.steps).step do continue
         
         result += 1
     }
@@ -646,25 +622,31 @@ slow__get_states_count :: proc (c: ^Collapse, cell: ^Cell) -> (result: i32) {
     return result
 }
 
-get_support_for_state :: proc (c: ^Collapse, from_states: [] State_Entry, to: State_Id, closeness: [Direction] f32) -> (result: f32) {
-    for from in from_states {
-        if from.removed_at <= c.current_step do continue
+get_support_for_state :: proc (c: ^Collapse, from: ^Cell, to: State_Id, closeness: [Direction] f32) -> (result: f32) {
+    for from in from.states {
+        if from.removed_at <= peek(c.steps).step do continue
         amount := get_support_amount(c, from.id, to, closeness)
         result += amount
     }
     return result
 }
 
-mark_as_changed :: proc (c: ^Collapse, cell: ^Cell) {
+mark_as_changed :: proc (current: ^Step, cell: ^Cell) {
     spall_proc()
     
-    for &it in c.changes {
-        if it == cell {
-            it = nil
-        }
+    // @note(viktor): deduplicate changed cells
+    for &it in current.changes {
+        if it == cell do it = nil
     }
     
-    append(&c.changes, cell)
+    assert(cell.state != .Uninitialized)
+    append(&current.changes, cell)
+}
+
+delete_step :: proc (step: Step) {
+    delete(step.found)
+    delete(step.pickable_states)
+    delete(step.changes)
 }
 
 extract_states :: proc (c: ^Collapse, pixels: [] rl.Color, width, height: i32) {

@@ -66,19 +66,25 @@ random_bilateral :: proc(series: ^RandomSeries, $T: typeid) -> (result: T) {
 
 
 
-random_pointer :: proc(series: ^RandomSeries, data: []$T) -> (result: ^T) {
+random_pointer :: proc { random_pointer_slice, random_pointer_array }
+random_pointer_array :: proc(series: ^RandomSeries, data: [dynamic]$T) -> (result: ^T) { return random_pointer_slice(series, data[:]) }
+random_pointer_slice :: proc(series: ^RandomSeries, data: []$T) -> (result: ^T) {
     assert(len(data) != 0)
     index := random_between(series, i32, 0, cast(i32) len(data)-1)
     result = &data[index]
     return result
 }
-random_value :: proc(series: ^RandomSeries, data: []$T) -> (result: T) {
+random_value :: proc { random_value_slice, random_value_array }
+random_value_array :: proc(series: ^RandomSeries, data: [dynamic]$T) -> (result: T) { return random_value_slice(series, data[:]) }
+random_value_slice :: proc(series: ^RandomSeries, data: []$T) -> (result: T) {
     assert(len(data) != 0)
     index := random_between(series, i32, 0, cast(i32) len(data)-1)
     result = data[index]
     return result
 }
-random_index :: proc(series: ^RandomSeries, data: []$T) -> (result: i32) {
+random_index :: proc { random_index_slice, random_index_array }
+random_index_array :: proc(series: ^RandomSeries, data: [dynamic]$T) -> (result: i32) { return random_index_slice(series, data[:]) }
+random_index_slice :: proc(series: ^RandomSeries, data: []$T) -> (result: i32) {
     assert(len(data) != 0)
     result = random_between(series, i32, 0, cast(i32) len(data)-1)
     return result

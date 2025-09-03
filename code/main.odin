@@ -30,16 +30,11 @@ desired_update_state: Maybe(Update_State)
 
 cell_size_on_screen: v2
 
-average_colors: [] Average_Color
-Average_Color :: struct {
-    color: rl.Color,
-}
-
 show_neighbours                := false
 show_all_neighbours            := false
 show_voronoi_cells             := false
 render_wavefunction_as_average := true
-highlight_changes              := true
+highlight_step                 := true
 
 viewing_group: ^Color_Group
 color_groups:  [dynamic] Color_Group
@@ -48,8 +43,8 @@ Color_Group :: struct {
     ids:   [/* State_Id */] b32,
 }
 
-cells_background_color := Salmon
-cells_background_color_t: f32
+cells_background_color := DarkGreen
+cells_background_hue_t: f32
 
 dimension: v2i = {25, 25}
 
@@ -87,8 +82,8 @@ search_metric := Search_Metric.Entropy
 ////////////////////////////////////////////////
 
 neighbour_mode := Neighbour_Mode {
-    kind = { .Threshold },
-    threshold = 1.2,
+    // kind = { .Threshold },
+    // threshold = 1.2,
 }
 Neighbour_Kind :: enum {
     Threshold,
@@ -138,7 +133,6 @@ Frame :: struct {
     rewind_to: enum { Previous_Choice, Start },
 }
 
-show_index: i32 = -1
 desired_N:  i32 = N
 
 main :: proc () {
@@ -199,8 +193,6 @@ main :: proc () {
     defer {
         // @todo(viktor): @leak this and more leaks
         collapse_reset(&collapse)
-        delete(collapse.changes)
-        delete(collapse.to_be_collapsed)
         
         for group in color_groups do delete(group.ids)
         delete(color_groups)
@@ -212,9 +204,9 @@ main :: proc () {
             delete(cell.states)
         }
         delete(cells)
-        delete(average_colors)
     }
     
+    this_frame: Frame
     for !rl.WindowShouldClose() {
         spall_scope("Frame")
         free_all(context.temp_allocator)
@@ -224,7 +216,7 @@ main :: proc () {
         ////////////////////////////////////////////////
         // UI
         
-        this_frame := Frame {
+        this_frame = Frame {
             desired_dimension      = dimension,
             pixels                 = nil,
             pixels_dimension       = {},
@@ -254,67 +246,36 @@ main :: proc () {
         rl.BeginDrawing()
         rl.ClearBackground({0x54, 0x57, 0x66, 0xFF})
         
-        if len(average_colors) != len(cells) {
-            delete(average_colors)
-            make(&average_colors, len(cells))
-        }
-        
-        for cell in collapse.changes {
-            if cell == nil do continue
-            
-            index := (cast(umm) cell - cast(umm) raw_data(cells)) / size_of(Cell)
-            average := &average_colors[index]
-            spall_scope("average color")
-            
-            color: v4
-            count: f32
-            for state in cell.states {
-                if state.removed_at <= collapse.current_step do continue
-                
-                state    := collapse.states[state.id]
-                color_id := state.middle_value
-                color += rl_color_to_v4(collapse.values[color_id]) * state.frequency
-                count += state.frequency
-            }
-            
-            color = safe_ratio_0(color, count)
-            average.color = cast(rl.Color) v4_to_rgba(color * {1,1,1,0.3})
-        }
-        
+        current := peek(collapse.steps)
         for &cell, index in cells {
-            if cell.collapsed_at > collapse.current_step do cell.collapsed_at = Invalid_Collapse_Step
+            // @todo(viktor): Is this cleanup still necessary?
             for &state in cell.states {
-                if state.picked_at  > collapse.current_step do state.picked_at  = Invalid_Collapse_Step
-                if state.removed_at > collapse.current_step do state.removed_at = Invalid_Collapse_Step
+                if state.removed_at > current.step do state.removed_at = Invalid_Collapse_Step
             }
-            average := &average_colors[index]
             
-            if cell.state == .Collapsed {
-                state_entry  := slow__get_collapsed_state(&collapse, cell)
-                state        := collapse.states[state_entry.id]
-                color_id     := state.middle_value
-                average.color = collapse.values[color_id]
-            }
+            
         }
         
+        spall_begin("Prepare Render")
         {
-            cells_background_color_t += rl.GetFrameTime()
-            if cells_background_color_t >= Tau do cells_background_color_t -= Tau
+            cells_background_hue_t += rl.GetFrameTime() * DegreesPerRadian
+            if cells_background_hue_t >= 360 do cells_background_hue_t -= 360
             
-            alpha := linear_blend(cast(f32) .1, .8, clamp_01_to_range(f32(-1), sin(cells_background_color_t), 1))
-            color := cells_background_color
-            color.a *= alpha
+            hsv := rl.ColorToHSV(v4_to_rl_color(cells_background_color))
+            hue := hsv.x + cells_background_hue_t
+            color := rl.ColorFromHSV(hue, hsv.y, hsv.z)
+            
             background := rectangle_min_dimension(v2{}, vec_cast(f32, dimension))
-            rl.DrawRectangleRec(world_to_screen(background), v4_to_rl_color(color))
+            rl.DrawRectangleRec(world_to_screen(background), color)
         }
         
         if viewing_group == nil {
+            spall_begin("render cells")
             for &cell, index in cells {
-                if show_index != -1 && show_index != auto_cast index do continue
-                
                 color: rl.Color
+                
                 if render_wavefunction_as_average {
-                    color = average_colors[index].color
+                    color = cell.average_color
                 } else {
                     if cell.state == .Collapsed {
                         state := slow__get_collapsed_state(&collapse, cell)
@@ -325,11 +286,11 @@ main :: proc () {
                 }
                 draw_cell(cell, color)
             }
+            spall_end()
             
             if show_voronoi_cells {
+                spall_scope("show voronoi cells")
                 for cell, index in cells {
-                    if show_index != -1 && show_index != auto_cast index do continue
-                    
                     color_wheel := color_wheel
                     color := v4_to_rl_color(color_wheel[(index) % len(color_wheel)])
                     rl.DrawCircleV(world_to_screen(cell.p), 1, color)
@@ -338,6 +299,7 @@ main :: proc () {
             }
             
             if show_neighbours {
+                spall_scope("show neighbours")
                 color := v4_to_rl_color(Emerald) 
                 color_alpha := v4_to_rl_color(Emerald * {1,1,1,0.5}) 
                 
@@ -352,6 +314,7 @@ main :: proc () {
             }
             
             if show_all_neighbours {
+                spall_scope("show all neighbours")
                 color := v4_to_rl_color(Blue) 
                 color_alpha := v4_to_rl_color(Blue * {1,1,1,0.5}) 
                 
@@ -364,30 +327,20 @@ main :: proc () {
                     }
                 }
             }
-                        
-            if highlight_changes {
-                color := rl.YELLOW
-                for change in collapse.changes[collapse.changes_cursor:] {
-                    if change == nil do continue
-                    draw_cell_outline(change^, color)
+            
+            if highlight_step {
+                spall_scope("highlight step")
+                for cell in current.found {
+                    draw_cell_outline(cell^, rl.GREEN)
                 }
                 
-                for &cell in cells {
-                    if cell.state == .Collapsed {
-                        state_entry  := slow__get_collapsed_state(&collapse, cell)
-                        if state_entry.picked_at == collapse.current_step {
-                            draw_cell_outline(cell, rl.RED)
-                        }
-                    }
+                for change in current.changes[current.changes_cursor:] {
+                    if change == nil do continue
+                    draw_cell_outline(change^, rl.YELLOW)
                 }
-            }
-            
-            for cell in collapse.to_be_collapsed {
-                a := world_to_screen(cell.p)
-                for p_index in 0..<len(cell.points) {
-                    b := world_to_screen(cell.points[p_index])
-                    c := world_to_screen(cell.points[(p_index+1)%len(cell.points)])
-                    rl.DrawTriangle(a, b, c, rl.PURPLE)
+                
+                if current.to_be_collapsed != nil {
+                    draw_cell_outline(current.to_be_collapsed^, rl.ORANGE)
                 }
             }
         } else {
@@ -443,9 +396,11 @@ main :: proc () {
             rl.DrawCircleV(p, center_size, viewing_group.color)
         }
         
+        spall_end(/* Prepare Render */)
+        spall_begin("Execute Render")
         rl_imgui_render()
-        
         rl.EndDrawing()
+        spall_end()
         
         spall_end(/* Render */)
     }
@@ -520,34 +475,29 @@ do_tasks_in_order :: proc (this_frame: Frame, c: ^Collapse, entropy: ^RandomSeri
             spall_scope("Rewind")
             this_frame.tasks -= { .rewind }
             
-            collapse_rewind(c)
-            
             switch this_frame.rewind_to {
               case .Previous_Choice: 
-                if len(c.steps_with_choices) > 0 {
-                    // @leak
-                    // if c.current_step.search.found != nil {
-                    //     delete(c.current_step.search.found)
-                    //     c.current_step.search.found = nil
-                    // }
-                    c.current_step = pop(&c.steps_with_choices)
-                } else {
-                    c.current_step = {}
+                if len(c.steps) > 0 {
+                    bad_step := pop(&c.steps)
+                    delete_step(bad_step)
+                }
+                
+                if len(c.steps) == 0 {
+                    append(&c.steps, Step {})
                 }
                 
               case .Start: 
-                c.current_step = {}
+                for step in c.steps {
+                    delete_step(step)
+                }
+                clear(&c.steps)
+                append(&c.steps, Step {})
             }
             
-            c.update_state = .Search
+            current := peek(c.steps)
             
-            if c.current_step == 0 {
-                zero(average_colors[:])
-                // @leak
-                // for &step in c.steps_with_choices { delete(step.search.found); step.search.found = nil }
-                clear(&c.steps_with_choices)
+            if current.step == 0 {
                 total_duration = 0
-                
                 for &cell in cells {
                     cell.state = .Collapsed
                     cell_next_state(c, &cell)
@@ -558,20 +508,28 @@ do_tasks_in_order :: proc (this_frame: Frame, c: ^Collapse, entropy: ^RandomSeri
                     
                     changed := false
                     for &state in cell.states {
-                        if state.removed_at != Invalid_Collapse_Step && state.removed_at >= c.current_step {
+                        if state.removed_at != Invalid_Collapse_Step && state.removed_at >= current.step {
                             state.removed_at = Invalid_Collapse_Step
                             changed = true
-                        }
-                        
-                        if state.picked_at != Invalid_Collapse_Step && state.picked_at != c.current_step {
-                            state.picked_at = Invalid_Collapse_Step
                         }
                     }
                     
                     if changed {
                         cell.state = .Collapsing
                         calc_cell_states_support(c, &cell)
+                        calculate_average_color(c, &cell)
                     }
+                }
+                
+                switch current.update_state {
+                  case .Search: unreachable()
+                  case .Propagate:
+                    current.update_state = .Collapse
+                  case .Collapse:
+                    current.update_state = .Pick
+                  case .Pick:
+                    // just go back
+                    unimplemented()
                 }
             }
             
@@ -585,33 +543,32 @@ do_tasks_in_order :: proc (this_frame: Frame, c: ^Collapse, entropy: ^RandomSeri
                 if update_start == {} do update_start = time.now()
                 
                 this_update_start := time.now()
-                switch collapse_update(c, entropy) {
+                result := collapse_update(c, entropy)
+                if result != .Done {
+                    total_duration += time.since(this_update_start)
+                }
+                
+                switch result {
                   case .Done:
                   case .Rewind:
-                    total_duration += time.since(this_update_start)
                     this_frame.tasks += { .rewind }
-                    
                   case .Ok:
-                    total_duration += time.since(this_update_start)
-                        
-                    if paused {
-                        if desired_update_state != nil {
-                            if desired_update_state != c.update_state {
-                                this_frame.tasks += { .update }
-                            } else {
-                                desired_update_state = nil
-                            }
-                        } else {
-                            break task_loop
-                        }
-                    }
-                    
                     if time.duration_seconds(time.since(update_start)) < TargetFrameTime * 0.95 {
                         this_frame.tasks += { .update }
                     }
                 }
                 
-                c.current_step = auto_cast len(c.steps_with_choices)
+                if paused {
+                    if desired_update_state != nil {
+                        if desired_update_state != peek(c.steps).update_state {
+                            this_frame.tasks += { .update }
+                        } else {
+                            desired_update_state = nil
+                        }
+                    } else {
+                        break task_loop
+                    }
+                }
             }
         }
     }
@@ -628,9 +585,6 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
     clear(&cells)
     
     area := dimension.x * dimension.y
-    delete(average_colors)
-    make(&average_colors, area)
-    
     points := make([dynamic] v2d)
     generate_points(&points, cast(u32) area)
     
@@ -651,22 +605,22 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
         cell: Cell
         cell.p = vec_cast(f32, it.center * vec_cast(f64, dimension))
         
-        make(&cell.points, 0, len(it.points))
-        for point in it.points {
+        make(&cell.points, len(it.points))
+        for point, index in it.points {
             p := vec_cast(f32, point * vec_cast(f64, dimension))
-            append(&cell.points, p)
+            cell.points[index] = p
         }
         
         cell.state = .Uninitialized 
         append(&cells, cell)
     }
     
-    for &cell, index in cells {
-        voronoi := voronoi_cells[index]
-        for neighbour_index in voronoi.neighbour_indices {
+    for &cell, cell_index in cells {
+        voronoi := voronoi_cells[cell_index]
+        make(&cell.all_neighbours, len(voronoi.neighbour_indices))
+        for neighbour_index, index in voronoi.neighbour_indices {
             neighbour := &cells[neighbour_index]
-            
-            append(&cell.all_neighbours, neighbour)
+            cell.all_neighbours[index] = neighbour
         }
     }
     
@@ -802,18 +756,23 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
 }
 
 draw_cell :: proc (cell: Cell, color: rl.Color) {
-    a := world_to_screen(cell.p)
-    for p_index in 0..<len(cell.points) {
-        b := cell.points[p_index]
-        c := cell.points[(p_index+1)%len(cell.points)]
-        rl.DrawTriangle(a, world_to_screen(b), world_to_screen(c), color)
+    @(static) draw_cell_buffer: [dynamic] v2
+    clear(&draw_cell_buffer)
+    
+    append(&draw_cell_buffer, world_to_screen(cell.p))
+    for point in cell.points {
+        append(&draw_cell_buffer, world_to_screen(point))
     }
+    append(&draw_cell_buffer, draw_cell_buffer[1])
+    
+    rl.DrawTriangleFan(raw_data(draw_cell_buffer), auto_cast len(draw_cell_buffer), color)
 }
 draw_cell_outline :: proc (cell: Cell, color: rl.Color) {
     for p_index in 0..<len(cell.points) {
         begin := world_to_screen(cell.points[p_index])
         end   := world_to_screen(cell.points[(p_index+1)%len(cell.points)])
         rl.DrawLineV(begin, end, color)
+        // @todo(viktor): rl.DrawLineStrip
     }
 }
 
@@ -858,6 +817,6 @@ screen_to_world :: proc (screen: v2) -> (world: v2i) {
 }
 
 direction_to_angles :: proc(direction: [2]$T) -> (angle: T) {
-    angle = atan2(direction.y, direction.x)  * DegreesPerRadian
+    angle = atan2(direction.y, direction.x) * DegreesPerRadian
     return angle
 }
