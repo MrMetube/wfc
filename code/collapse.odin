@@ -20,6 +20,8 @@ Step :: struct {
     step: Collapse_Step,
     update_state: Update_State,
     
+    was_rewinded_into: bool,
+    
     // Search
     found: [dynamic] ^Cell,
     // Pick
@@ -27,8 +29,12 @@ Step :: struct {
     // Collapse
     pickable_states: [dynamic] ^State_Entry,
     // Propagate
-    changes:         [dynamic] ^Cell,
+    changes:         [dynamic] Change,
     changes_cursor:  int,
+}
+
+Change :: struct {
+    cell: ^Cell,
 }
 
 Collapse_Step :: distinct i64
@@ -42,6 +48,8 @@ Cell :: struct {
     state: Cell_State,
     
     states: [] State_Entry,
+    
+    states_removed_this_step: [dynamic] State_Id,
     
     entropy: f32,
     average_color: rl.Color,
@@ -491,6 +499,9 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Updat
             }
             
             target := random_unilateral(entropy, f32) * total
+            
+            change, _ := get_change(current, cell)
+            
             for &state, index in current.pickable_states {
                 target -= c.states[state.id].frequency
                 
@@ -500,13 +511,14 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Updat
                     pick = state.id
                 } else {
                     state.removed_at = current.step
+                    append(&change.cell.states_removed_this_step, state.id)
                 }
             }
             
             if pick != Invalid_State {
-                mark_as_changed(current, cell)
                 cell_next_state(c, cell)
             } else {
+                // @leak current.changes?
                 result = .Rewind
             }
         }
@@ -518,20 +530,25 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Updat
         
         assert(len(current.changes) != 0)
         
-        changed: ^Cell
-        for changed == nil && current.changes_cursor < len(current.changes) {
-            changed = current.changes[current.changes_cursor]
+        change: ^Change
+        for (change == nil || change.cell == nil)  && current.changes_cursor < len(current.changes) {
+            change = &current.changes[current.changes_cursor]
             current.changes_cursor += 1
         }
         
-        if changed == nil && current.changes_cursor == len(current.changes) {
+        if change.cell == nil && current.changes_cursor == len(current.changes) {
             result = .Rewind
         } else {
-            assert(changed.state != .Uninitialized)
+            cell := change.cell
+            assert(cell.state != .Uninitialized)
             
-            propagate_remove: for neighbour in changed.neighbours {
+            propagate_remove: for neighbour in cell.neighbours {
                 assert(neighbour != nil)
                 if neighbour.state == .Collapsed do continue propagate_remove
+                
+                neighbour_change, appended := get_change(current, neighbour)
+                
+                // @todo(viktor): dont waste time here, special case this
                 was_just_inited := false
                 if neighbour.state == .Uninitialized {
                     was_just_inited = true
@@ -539,13 +556,13 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Updat
                 }
                 assert(neighbour.state != .Uninitialized)
                 
-                changed_index: int = -1
-                for n, n_index in neighbour.neighbours do if n == changed { changed_index = n_index; break }
-                assert(changed_index != -1)
+                cell_index: int = -1
+                for n, n_index in neighbour.neighbours do if n == cell { cell_index = n_index; break }
+                assert(cell_index != -1)
                 
-                closeness := get_closeness(neighbour.p - changed.p)
-                did_change := false
+                closeness := get_closeness(neighbour.p - cell.p)
                 // @todo(viktor): dont recalculate the total amount everytime, do it at init and then update it according to the removed states in changed, i.e. the support of those states
+                
                 states_count := 0
                 spall_begin("recalc states loop")
                 for &to in neighbour.states {
@@ -555,25 +572,41 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Updat
                     
                     should_remove = true
                     current_support: f32
-                    for from in changed.states {
+                    for from in cell.states {
                         if from.removed_at <= current.step do continue
                         amount := get_support_amount(c, from.id, to.id, closeness)
                         current_support += amount
                     }
                     
-                    to.support_from_neighbours[changed_index] = current_support
+                    removed_support: f32
+                    for from in change.cell.states_removed_this_step {
+                        amount := get_support_amount(c, from, to.id, closeness)
+                        removed_support += amount
+                    }
+                    
+                    previous_support := to.support_from_neighbours[cell_index]
+                    if !was_just_inited && removed_support != 0 {
+                        delta := (previous_support - removed_support) - current_support
+                        if abs(delta) < 0.001 {
+                            ok += 1
+                        } else {
+                            not_ok += 1
+                        }
+                    }
+                    
+                    to.support_from_neighbours[cell_index] = current_support
                     should_remove = current_support <= 0
                     
                     if should_remove {
-                        did_change = true
                         to.removed_at = current.step
+                        append(&neighbour.states_removed_this_step, to.id)
                     } else {
                         states_count += 1
                     }
                 }
                 spall_end()
                 
-                if did_change {
+                if len(neighbour.states_removed_this_step) != 0 {
                     if states_count == 0 {
                         result = .Rewind
                         break propagate_remove
@@ -582,18 +615,57 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Updat
                     if states_count == 1 {
                         cell_next_state(c, neighbour)
                     }
-                    
-                    mark_as_changed(current, neighbour)
+                } else {
+                    if appended {
+                        // @note(viktor): we optimistically appended it and it didn't actually change
+                        pop(&current.changes)
+                    }
                 }
             }
+            
+            clear(&change.cell.states_removed_this_step)
         }
         
         if len(current.changes) == current.changes_cursor {
+            // @leak
+            // for &it in current.changes { delete(it.removed_states); it.removed_states = nil }
+            // delete(current.changes); current.changes = nil
+            current.changes_cursor = 0
+            
+            print("ok / not ok - % / % | was rewinded into %\n", view_integer(ok, width=4), view_integer(not_ok, width=4), current.was_rewinded_into)
+            ok, not_ok = 0, 0
+            for &cell in cells {
+                clear(&cell.states_removed_this_step)
+            }
+            
             append(&c.steps, Step { step = current.step + 1 })
         }
     }
     
     return result
+}
+ok, not_ok: int
+
+get_change :: proc (current: ^Step, cell: ^Cell) -> (result: ^Change, appended: bool) {
+    spall_proc()
+    
+    for &change, index in current.changes {
+        if change.cell == cell {
+            if index < current.changes_cursor {
+            } else {
+                result = &change
+                break
+            }
+        }
+    }
+    
+    if result == nil {
+        append(&current.changes, Change { cell = cell })
+        result = peek(current.changes)
+        appended = true
+    }
+    
+    return result, appended
 }
 
 slow__get_collapsed_state :: proc (c: ^Collapse, cell: Cell) -> (result: State_Entry) {
@@ -607,6 +679,7 @@ slow__get_collapsed_state :: proc (c: ^Collapse, cell: Cell) -> (result: State_E
 }
 
 slow__get_states_count :: proc (c: ^Collapse, cell: ^Cell) -> (result: i32) {
+    spall_proc()
     for state in cell.states {
         if state.removed_at <= peek(c.steps).step do continue
         
@@ -623,18 +696,6 @@ get_support_for_state :: proc (c: ^Collapse, from: ^Cell, to: State_Id, closenes
         result += amount
     }
     return result
-}
-
-mark_as_changed :: proc (current: ^Step, cell: ^Cell) {
-    spall_proc()
-    
-    // @note(viktor): deduplicate changed cells
-    for &it in current.changes {
-        if it == cell do it = nil
-    }
-    
-    assert(cell.state != .Uninitialized)
-    append(&current.changes, cell)
 }
 
 delete_step :: proc (step: Step) {

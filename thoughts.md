@@ -1,13 +1,11 @@
-## Sampling
-  - Sample more than 4 Directions
-    - Diagonals 8
-    - More - but the Input only has that much Detail and contains step functions so we cant interpolate between Pixels
 ## Lattice contruction
-  - Neighbours Distance Threshhold
   - Dont enforce all neighbours, so they dont eliminate states but just make then increasingly unlikely?
+  - Weigh neighbours in similar directions less than neighbours in sparse directions
   - Only Focus on the most cardinally aligned neighbours and disregard the rest, what about hexgrid?
   - Only take the closest N neighbours, what about hexgrid?
-## Rule Extraction
-  - Abandon discrete states and move to continous Input functions from which we can sample and interpolate as much as we want
-  - Only do adjacency rules and ignore any rotation, so check support in any direction
+  - Use the perpendicular to the common edge instead of the vector between the centers? Shouldn't this only effect the edges where the center is adjusted to be inside the bounds of the grid?
   
+## Rule Extraction
+  - rotate and mirror input
+  - Only do adjacency rules and ignore any rotation, so check support in any direction
+  - Sample the 8 Diagonals

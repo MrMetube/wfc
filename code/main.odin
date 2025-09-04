@@ -83,6 +83,7 @@ neighbour_mode := Neighbour_Mode {
     // kind = { .Threshold },
     // threshold = 1.2,
 }
+// @todo(viktor): Get rid of this
 Neighbour_Kind :: enum {
     Threshold,
 }
@@ -143,8 +144,6 @@ main :: proc () {
         print("% leaked %\n", leak.location, view_memory_size(cast(umm) leak.size))
     }
     
-    unused(screen_to_world)
-    
     rl.SetTraceLogLevel(.WARNING)
     rl.InitWindow(Screen_Size.x, Screen_Size.y, "Wave Function Collapse")
     rl.SetTargetFPS(TargetFps)
@@ -186,7 +185,8 @@ main :: proc () {
     
     entropy := seed_random_series(7458)
     collapse: Collapse
-    do_tasks_in_order({ tasks = { .setup_grid } }, &collapse, &entropy, &arena)
+    pre := Frame { tasks = { .setup_grid } }
+    do_tasks_in_order(&pre, &collapse, &entropy, &arena)
     
     defer {
         collapse_reset(&collapse)
@@ -214,7 +214,6 @@ main :: proc () {
     
     this_frame: Frame
     for !rl.WindowShouldClose() {
-        spall_scope("Frame")
         free_all(context.temp_allocator)
         
         rl_imgui_new_frame()
@@ -222,12 +221,10 @@ main :: proc () {
         ////////////////////////////////////////////////
         // UI
         
-        this_frame = Frame {
-            desired_dimension      = dimension,
-            pixels                 = nil,
-            pixels_dimension       = {},
-            desired_neighbour_mode = neighbour_mode,
-        }
+        this_frame.desired_dimension      = dimension
+        this_frame.desired_neighbour_mode = neighbour_mode
+        this_frame.pixels                 = nil
+        this_frame.pixels_dimension       = {}
         
         ui(&collapse, images, &this_frame)
         
@@ -243,7 +240,7 @@ main :: proc () {
         ////////////////////////////////////////////////
         // Update 
         
-        do_tasks_in_order(this_frame, &collapse, &entropy, &arena)
+        do_tasks_in_order(&this_frame, &collapse, &entropy, &arena)
         
         ////////////////////////////////////////////////
         // Render
@@ -333,8 +330,8 @@ main :: proc () {
                 }
                 
                 for change in current.changes[current.changes_cursor:] {
-                    if change == nil do continue
-                    draw_cell_outline(change^, rl.YELLOW)
+                    if change.cell == nil do continue
+                    draw_cell_outline(change.cell^, rl.YELLOW)
                 }
                 
                 if current.to_be_collapsed != nil {
@@ -404,12 +401,13 @@ main :: proc () {
     }
 }
 
-do_tasks_in_order :: proc (this_frame: Frame, c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
+do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
     spall_scope("Update")
     this_frame := this_frame
     
-    update_start: time.Time
-    task_loop: for this_frame.tasks != {} {
+    update_start := time.now()
+    update_limit := round(time.Duration, TargetFrameTime * cast(f64) time.Second)
+    task_loop: for this_frame.tasks != {} && time.since(update_start) < update_limit {
         if .setup_grid in this_frame.tasks {
             this_frame.tasks -= { .setup_grid }
             
@@ -493,6 +491,7 @@ do_tasks_in_order :: proc (this_frame: Frame, c: ^Collapse, entropy: ^RandomSeri
             }
             
             current := peek(c.steps)
+            current.was_rewinded_into = true
             
             if current.step == 0 {
                 total_duration = 0
@@ -520,42 +519,32 @@ do_tasks_in_order :: proc (this_frame: Frame, c: ^Collapse, entropy: ^RandomSeri
                 }
                 
                 switch current.update_state {
-                  case .Search: unreachable()
-                  case .Propagate:
-                    current.update_state = .Collapse
-                  case .Collapse:
-                    current.update_state = .Pick
-                  case .Pick:
-                    // just go back
-                    unimplemented()
+                  case .Search, .Pick: unreachable() // Can't rewind in this state.
+                  case .Collapse:      current.update_state = .Pick
+                  case .Propagate:     current.update_state = .Collapse
                 }
             }
             
+            this_frame.tasks += { .update }
+            
             if paused do break task_loop
         }
+        
         
         if .update in this_frame.tasks {
             this_frame.tasks -= { .update }
             
             if c.states != nil {
-                if update_start == {} do update_start = time.now()
-                
                 this_update_start := time.now()
                 result := collapse_update(c, entropy)
-                if result != .Done {
-                    total_duration += time.since(this_update_start)
-                }
                 
                 switch result {
-                  case .Done:
-                    break task_loop
-                  case .Rewind:
-                    this_frame.tasks += { .rewind }
-                  case .Ok:
-                    if time.duration_seconds(time.since(update_start)) < TargetFrameTime * 0.95 {
-                        this_frame.tasks += { .update }
-                    }
+                  case .Done:   break task_loop
+                  case .Rewind: this_frame.tasks += { .rewind }
+                  case .Ok:     this_frame.tasks += { .update }
                 }
+                
+                total_duration += time.since(this_update_start)
                 
                 if paused {
                     if desired_update_state != nil {
@@ -748,8 +737,6 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
         append(points, v2d {.7, .3})
         append(points, v2d {.8, .8})
         append(points, v2d {.5, .5})
-        
-      case: unreachable()
     }
 }
 
@@ -803,18 +790,6 @@ world_to_screen_vec :: proc (world: v2) -> (screen: v2) {
     screen = grid_min + {1,-1} * (world * cell_size_on_screen)
     
     return screen
-}
-
-screen_to_world :: proc (screen: v2) -> (world: v2i) {
-    screen_size := vec_cast(f32, Screen_Size)
-    screen_min := v2{0, screen_size.y}
-    
-    grid_size := cell_size_on_screen * vec_cast(f32, dimension)
-    grid_min := screen_min + {1,-1} * 0.5 * (screen_size - grid_size)
-    
-    world = vec_cast(i32, (screen - grid_min) / cell_size_on_screen * {1, -1})
-    
-    return world
 }
 
 direction_to_angles :: proc(direction: [2]$T) -> (angle: T) {

@@ -14,6 +14,7 @@ import "core:mem"
 // ------- High Contrast
 // #009052 green
 
+// #0b6773 nay blue v4{0.04, 0.4, 0.45, 1}
 // #2EC4B6 sea green
 // #7C7A8B taupe gray
 // #FF7E6B salmon
