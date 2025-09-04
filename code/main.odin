@@ -29,7 +29,6 @@ desired_update_state: Maybe(Update_State)
 cell_size_on_screen: v2
 
 show_neighbours                := false
-show_all_neighbours            := false
 show_voronoi_cells             := false
 render_wavefunction_as_average := true
 highlight_step                 := true
@@ -44,7 +43,7 @@ Color_Group :: struct {
 cells_background_color := DarkGreen
 cells_background_hue_t: f32
 
-dimension: v2i = {25, 25}
+dimension: v2i = {66, 66}
 
 File :: struct {
     data:    [] u8,
@@ -52,46 +51,36 @@ File :: struct {
     texture: rl.Texture2D,
 }
 
-// -1 Constant 0 Cosine 1 Linear
-view_mode_t: f32 = 0
-
 ////////////////////////////////////////////////
 
 Direction :: enum {
-    East, North, West, South,
+    E, NE, N, NW, W, SW, S, SE,
 }
 
 Deltas := [Direction] v2i { 
-    .East  = { 1, 0},
-    .North = { 0, 1},
-    .West  = {-1, 0},
-    .South = { 0,-1},
+    .E  = { 1, 0},
+    .NE = { 1, 1},
+    .N  = { 0, 1},
+    .NW = {-1, 1},
+    .W  = {-1, 0},
+    .SW = {-1,-1},
+    .S  = { 0,-1},
+    .SE = { 1,-1},
 }
 
-Opposite := [Direction] Direction {
-    .East  = .West,
-    .North = .South,
-    .West  = .East,
-    .South = .North,
+opposite_direction :: proc (direction: Direction) -> (result: Direction) {
+    count := len(Direction)
+    result = cast(Direction) ((cast(int) direction + count/2) % count)
+    return result
 }
 
-search_metric := Search_Metric.Entropy
+// 0 Cosine 1 Linear
+// @todo(viktor): even linear seems to overlap too much to get clean output, next after linear would be nearest or something with steeper falloff
+view_mode_t: f32 = 0.5
 
 ////////////////////////////////////////////////
 
-neighbour_mode := Neighbour_Mode {
-    // kind = { .Threshold },
-    // threshold = 1.2,
-}
-// @todo(viktor): Get rid of this
-Neighbour_Kind :: enum {
-    Threshold,
-}
-Neighbour_Mode :: struct {
-    kind: bit_set[Neighbour_Kind],
-    
-    threshold: f32,
-}
+search_metric := Search_Metric.Entropy
 
 Generate_Kind :: enum {
     Grid,
@@ -110,7 +99,6 @@ generate_kind: Generate_Kind = .Grid
 
 Task :: enum {
     setup_grid, 
-    setup_neighbours,
     extract_states, 
     rewind, 
     restart, 
@@ -122,8 +110,7 @@ Frame :: struct {
     
     // setup grid
     desired_dimension:      v2i,
-    desired_neighbour_mode: Neighbour_Mode,
-        
+    
     // extract states
     pixels:           [] rl.Color,
     pixels_dimension: v2i,
@@ -201,13 +188,7 @@ main :: proc () {
         delete(color_groups)
         
         for cell in cells {
-            delete(cell.points)
-            delete(cell.all_neighbours)
-            delete(cell.neighbours)
-            for state in cell.states {
-                delete(state.support_from_neighbours)
-            }
-            delete(cell.states)
+            delete_cell(cell)
         }
         delete(cells)
     }
@@ -222,7 +203,6 @@ main :: proc () {
         // UI
         
         this_frame.desired_dimension      = dimension
-        this_frame.desired_neighbour_mode = neighbour_mode
         this_frame.pixels                 = nil
         this_frame.pixels_dimension       = {}
         
@@ -231,10 +211,6 @@ main :: proc () {
         if dimension != this_frame.desired_dimension {
             dimension = this_frame.desired_dimension
             this_frame.tasks += { .setup_grid }
-        }
-        if neighbour_mode != this_frame.desired_neighbour_mode {
-            neighbour_mode = this_frame.desired_neighbour_mode
-            this_frame.tasks += { .setup_neighbours }
         }
         
         ////////////////////////////////////////////////
@@ -304,21 +280,6 @@ main :: proc () {
                     for neighbour in cell.neighbours {
                         end := world_to_screen(neighbour.p)
                         rl.DrawLineEx(center, end, 2, color_alpha)
-                    }
-                }
-            }
-            
-            if show_all_neighbours {
-                spall_scope("show all neighbours")
-                color := v4_to_rl_color(Blue) 
-                color_alpha := v4_to_rl_color(Blue * {1,1,1,0.5}) 
-                
-                for cell in cells {
-                    center := world_to_screen(cell.p)
-                    rl.DrawCircleV(center, 4, color)
-                    for neighbour in cell.all_neighbours {
-                        end := world_to_screen(neighbour.p)
-                        rl.DrawLineEx(center, end, 1, color_alpha)
                     }
                 }
             }
@@ -403,7 +364,10 @@ main :: proc () {
 
 do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
     spall_scope("Update")
+    
     this_frame := this_frame
+    
+    next_frame: Frame
     
     update_start := time.now()
     update_limit := round(time.Duration, TargetFrameTime * cast(f64) time.Second)
@@ -413,16 +377,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             
             setup_grid(c, entropy, arena)
             
-            this_frame.tasks += { .setup_neighbours, .restart }
-        }
-        
-        if .setup_neighbours in this_frame.tasks {
-            this_frame.tasks -= { .setup_neighbours }
-            
-            setup_neighbours()
-            
             this_frame.tasks += { .restart }
-            if paused do break task_loop
         }
         
         if .extract_states in this_frame.tasks {
@@ -457,7 +412,6 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             }
             
             this_frame.tasks += { .restart }
-            if paused do break task_loop
         }
         
         if .restart in this_frame.tasks {
@@ -471,18 +425,20 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             spall_scope("Rewind")
             this_frame.tasks -= { .rewind }
             
+            is_restart := false
             switch this_frame.rewind_to {
               case .Previous_Choice: 
                 if len(c.steps) > 0 {
                     bad_step := pop(&c.steps)
                     delete_step(bad_step)
                 }
-                
                 if len(c.steps) == 0 {
+                    is_restart = true
                     append(&c.steps, Step {})
                 }
                 
               case .Start: 
+                is_restart = true
                 for step in c.steps {
                     delete_step(step)
                 }
@@ -491,9 +447,8 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             }
             
             current := peek(c.steps)
-            current.was_rewinded_into = true
             
-            if current.step == 0 {
+            if is_restart {
                 total_duration = 0
                 for &cell in cells {
                     cell.state = .Collapsed
@@ -525,9 +480,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 }
             }
             
-            this_frame.tasks += { .update }
-            
-            if paused do break task_loop
+            next_frame.tasks += { .update }
         }
         
         
@@ -540,22 +493,22 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 
                 switch result {
                   case .Done:   break task_loop
-                  case .Rewind: this_frame.tasks += { .rewind }
-                  case .Ok:     this_frame.tasks += { .update }
+                  case .Rewind: next_frame.tasks += { .rewind }
+                  case .Ok:     next_frame.tasks += { .update }
                 }
                 
                 total_duration += time.since(this_update_start)
-                
-                if paused {
-                    if desired_update_state != nil {
-                        if desired_update_state != peek(c.steps).update_state {
-                            this_frame.tasks += { .update }
-                        } else {
-                            desired_update_state = nil
-                        }
-                    } else {
-                        break task_loop
-                    }
+            }
+        }
+        
+        if !paused {
+            this_frame ^= next_frame
+        } else {
+            if desired_update_state != nil {
+                if desired_update_state != peek(c.steps).update_state {
+                    this_frame ^= next_frame
+                } else {
+                    desired_update_state = nil
                 }
             }
         }
@@ -573,9 +526,10 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
     clear(&cells)
     
     area := dimension.x * dimension.y
-    points := make([dynamic] v2d)
+    points := make([dynamic] v2d, 0, area, context.temp_allocator)
     generate_points(&points, cast(u32) area)
     
+    // @todo(viktor): Just take an allocator here
     dt: Delauney_Triangulation
     begin_triangulation(&dt, arena, points[:])
     complete_triangulation(&dt)
@@ -585,7 +539,6 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
         delete(dt.all_bad_edges)
         delete(dt.bad_triangles)
         delete(dt.polygon)
-        delete(points)
     }
     
     for it in voronoi_cells {
@@ -604,34 +557,17 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
     
     for &cell, cell_index in cells {
         voronoi := voronoi_cells[cell_index]
-        make(&cell.all_neighbours, len(voronoi.neighbour_indices))
+        make(&cell.neighbours, len(voronoi.neighbour_indices))
+        
         for neighbour_index, index in voronoi.neighbour_indices {
             neighbour := &cells[neighbour_index]
-            cell.all_neighbours[index] = neighbour
+            cell.neighbours[index] = neighbour
         }
     }
     
     for cell in voronoi_cells {
         delete(cell.points)
         delete(cell.neighbour_indices)
-    }
-}
-
-setup_neighbours :: proc () {
-    for &cell in cells {
-        clear(&cell.neighbours)
-        
-        for neighbour in cell.all_neighbours {
-            do_append := true
-            if do_append && .Threshold in neighbour_mode.kind {
-                delta := neighbour.p - cell.p
-                if length(delta) > neighbour_mode.threshold {
-                    do_append = false
-                }
-            }
-            
-            if do_append do append(&cell.neighbours, neighbour)
-        }
     }
 }
 

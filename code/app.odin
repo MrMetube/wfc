@@ -107,30 +107,16 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         imgui.text("Directional Spread")
         imgui.get_content_region_avail(&region)
         imgui.push_item_width(region.x*2/3)
-        if imgui.slider_float("Blend Factor %.1f", &view_mode_t, -1, 1) {
-            if abs(view_mode_t-(-1)) < 0.1 {
-                view_mode_t = -1
-            } 
-            if abs(view_mode_t-0) < 0.1 {
-                view_mode_t = 0
-            } 
-            if abs(view_mode_t-1) < 0.1 {
-                view_mode_t = 1
-            } 
-            this_frame.tasks += { .restart }
+        if imgui.slider_float("Blend Factor %.1f", &view_mode_t, 0, 1) {
+            if viewing_group == nil {
+                this_frame.tasks += { .restart }
+            }
         }
         imgui.pop_item_width()
         
         imgui.get_content_region_avail(&region)
-        if view_mode_t < 0 {
-            imgui.progress_bar(-view_mode_t, {region.x, 0}, overlay="Constant")
-            imgui.progress_bar(1+view_mode_t, {region.x, 0}, overlay="Cosine")
-            imgui.progress_bar(0, {region.x, 0}, overlay="Linear")
-        } else {
-            imgui.progress_bar(0, {region.x, 0}, overlay="Constant")
-            imgui.progress_bar(1-view_mode_t, {region.x, 0}, overlay="Cosine")
-            imgui.progress_bar(view_mode_t, {region.x, 0}, overlay="Linear")
-        }
+        imgui.progress_bar(1-view_mode_t, {region.x, 0}, overlay="Cosine")
+        imgui.progress_bar(view_mode_t-0, {region.x, 0}, overlay="Linear")
         
         imgui.columns(2)
         for &group, index in color_groups {
@@ -168,27 +154,6 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         imgui.slider_int2("Size", &this_frame.desired_dimension, 3, 300, flags = .Logarithmic)
         
         imgui.checkbox("Show Neighbours", &show_neighbours)
-        imgui.checkbox("Show All Neighbours", &show_all_neighbours)
         imgui.checkbox("Show Voronoi Cells", &show_voronoi_cells)
-        
-        imgui.text("Neighbour Mode")
-        neighbours := [Neighbour_Kind] string {
-            .Threshold = "Distance Threshold",
-        }
-        for text, mode in neighbours {
-            b := mode in neighbour_mode.kind
-            if imgui.checkbox(text, &b) {
-                if  b do this_frame.desired_neighbour_mode.kind += { mode }
-                if !b do this_frame.desired_neighbour_mode.kind -= { mode }
-            }
-        }
-        
-        if .Threshold in neighbour_mode.kind {
-            imgui.get_content_region_avail(&region)
-            imgui.push_item_width(region.x*2/3)
-            imgui.slider_float("Threshold", &this_frame.desired_neighbour_mode.threshold, 0.5, 2)
-            imgui.pop_item_width()
-        }
-        
     imgui.end()
 }
