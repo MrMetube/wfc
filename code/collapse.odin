@@ -35,7 +35,7 @@ Change :: struct {
     cell: ^Cell,
 }
 
-Collapse_Step :: distinct i64
+Collapse_Step :: distinct i32
 
 Cell :: struct {
     p:              v2, 
@@ -302,7 +302,12 @@ calculate_entropy :: proc (c: ^Collapse, cell: ^Cell) {
 calculate_average_color :: proc (c: ^Collapse, cell: ^Cell) {
     spall_proc()
     
-    switch cell.state {
+    state := cell.state
+    if viewing_step != peek(c.steps).step {
+        if state == .Collapsed do state = .Collapsing
+    }
+    
+    switch state {
       case .Uninitialized:
         cell.average_color = 0
         
@@ -310,7 +315,7 @@ calculate_average_color :: proc (c: ^Collapse, cell: ^Cell) {
         color: v4
         count: f32
         for state in cell.states {
-            if state.removed_at <= peek(c.steps).step do continue
+            if state.removed_at <= viewing_step do continue
             
             state    := c.states[state.id]
             color_id := state.middle_value
@@ -319,7 +324,7 @@ calculate_average_color :: proc (c: ^Collapse, cell: ^Cell) {
         }
         
         color = safe_ratio_0(color, count)
-        cell.average_color = cast(rl.Color) v4_to_rgba(color * {1,1,1,0.3})
+        cell.average_color = cast(rl.Color) v4_to_rgba(color)
         
       case .Collapsed:
         state_entry  := slow__get_collapsed_state(c, cell^)
@@ -638,9 +643,6 @@ collapse_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Updat
         }
         
         if len(current.changes) == current.changes_cursor {
-            delete(current.changes); current.changes = nil
-            current.changes_cursor = 0
-            
             for &cell in cells {
                 clear(&cell.states_removed_this_step)
             }
@@ -731,7 +733,7 @@ extract_states :: proc (c: ^Collapse, pixels: [] rl.Color, width, height: i32) {
         delete(group.ids)
     }
     clear(&color_groups)
-    viewing_group   = nil
+    viewing_group = nil
     
     // @incomplete: Allow for rotations and mirroring here
     {

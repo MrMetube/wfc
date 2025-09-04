@@ -7,13 +7,8 @@ import "core:time"
 
 import rl "vendor:raylib"
 
-/* @todo(viktor): 
-    - Maybe dont collapse into a concrete state immediatly but just into a set with all the same color / "middle value"
-    Decide on how to handle visual center vs. actual center for voronoi cells on the edge
-    - Make a visual editor for the closeness weighting function or make the viewing not a different mode but a window
-*/
-
 Screen_Size :: v2i{1600, 900}
+Viewing_Size :: v2i{1024, 1024}
 
 TargetFps       :: 60
 TargetFrameTime :: 1./TargetFps
@@ -33,6 +28,7 @@ show_voronoi_cells             := false
 render_wavefunction_as_average := true
 highlight_step                 := true
 
+viewing_render_target: rl.RenderTexture
 viewing_group: ^Color_Group
 color_groups:  [dynamic] Color_Group
 Color_Group :: struct {
@@ -50,6 +46,9 @@ File :: struct {
     image:   rl.Image,
     texture: rl.Texture2D,
 }
+
+viewing_step_detached: bool
+viewing_step: Collapse_Step
 
 ////////////////////////////////////////////////
 
@@ -91,7 +90,6 @@ Generate_Kind :: enum {
     Spiral,
     Random,
     BlueNoise,
-    Test,
 }
 generate_kind: Generate_Kind = .Grid
 
@@ -101,7 +99,6 @@ Task :: enum {
     setup_grid, 
     extract_states, 
     rewind, 
-    restart, 
     update,
 }
 
@@ -116,7 +113,7 @@ Frame :: struct {
     pixels_dimension: v2i,
     
     // rewind
-    rewind_to: enum { Previous_Choice, Start },
+    rewind_to: enum { Previous_Choice, Viewed, Start },
 }
 
 desired_N:  i32 = N
@@ -131,7 +128,7 @@ main :: proc () {
         print("% leaked %\n", leak.location, view_memory_size(cast(umm) leak.size))
     }
     
-    rl.SetTraceLogLevel(.WARNING)
+    // rl.SetTraceLogLevel(.WARNING)
     rl.InitWindow(Screen_Size.x, Screen_Size.y, "Wave Function Collapse")
     rl.SetTargetFPS(TargetFps)
     
@@ -193,6 +190,8 @@ main :: proc () {
         delete(cells)
     }
     
+    viewing_render_target = rl.LoadRenderTexture(Viewing_Size.x, Viewing_Size.y)
+    
     this_frame: Frame
     for !rl.WindowShouldClose() {
         free_all(context.temp_allocator)
@@ -222,92 +221,20 @@ main :: proc () {
         // Render
         
         spall_begin("Render")
-        rl.BeginDrawing()
-        rl.ClearBackground({0x54, 0x57, 0x66, 0xFF})
+        rl.BeginTextureMode(viewing_render_target)
+        rl.ClearBackground({0x1F, 0x31, 0x4B, 0xFF})
         
-        // @todo(viktor): handle empty steps, when paused and selecting an input
-        current := peek(collapse.steps)
-        spall_begin("Prepare Render")
-        {
-            cells_background_hue_t += rl.GetFrameTime() * DegreesPerRadian
-            if cells_background_hue_t >= 360 do cells_background_hue_t -= 360
+        // @todo(viktor): Confirm that the directions are correctly mapped to vectors and displayed correctly on the circle
+        if viewing_group != nil {
+            center := Viewing_Size / 2
+            p := vec_cast(f32, center)
+            size := cast(f32) Viewing_Size.x / cast(f32) ((len(color_groups)+1) * 2 + 1)
             
-            hsv := rl.ColorToHSV(v4_to_rl_color(cells_background_color))
-            hue := hsv.x + cells_background_hue_t
-            color := rl.ColorFromHSV(hue, hsv.y, hsv.z)
+            ring_size    := 0.9 * size
+            ring_padding := 0.1 * size
             
-            background := rectangle_min_dimension(v2{}, vec_cast(f32, dimension))
-            rl.DrawRectangleRec(world_to_screen(background), color)
-        }
-        
-        if viewing_group == nil {
-            spall_begin("render cells")
-            for &cell in cells {
-                color: rl.Color
-                
-                if render_wavefunction_as_average {
-                    color = cell.average_color
-                } else {
-                    if cell.state == .Collapsed {
-                        state := slow__get_collapsed_state(&collapse, cell)
-                        color = collapse.values[collapse.states[state.id].middle_value]
-                    } else {
-                        color = 0
-                    }
-                }
-                draw_cell(cell, color)
-            }
-            spall_end()
+            center_size  := ring_size
             
-            if show_voronoi_cells {
-                spall_scope("show voronoi cells")
-                for cell, index in cells {
-                    color_wheel := color_wheel
-                    color := v4_to_rl_color(color_wheel[(index) % len(color_wheel)])
-                    rl.DrawCircleV(world_to_screen(cell.p), 1, color)
-                    draw_cell_outline(cell, color)
-                }
-            }
-            
-            if show_neighbours {
-                spall_scope("show neighbours")
-                color := v4_to_rl_color(Emerald) 
-                color_alpha := v4_to_rl_color(Emerald * {1,1,1,0.5}) 
-                
-                for cell in cells {
-                    center := world_to_screen(cell.p)
-                    rl.DrawCircleV(center, 4, color)
-                    for neighbour in cell.neighbours {
-                        end := world_to_screen(neighbour.p)
-                        rl.DrawLineEx(center, end, 2, color_alpha)
-                    }
-                }
-            }
-            
-            if highlight_step {
-                spall_scope("highlight step")
-                for cell in current.found {
-                    draw_cell_outline(cell^, rl.GREEN)
-                }
-                
-                for change in current.changes[current.changes_cursor:] {
-                    if change.cell == nil do continue
-                    draw_cell_outline(change.cell^, rl.YELLOW)
-                }
-                
-                if current.to_be_collapsed != nil {
-                    draw_cell_outline(current.to_be_collapsed^, rl.ORANGE)
-                }
-            }
-        } else {
-            center := get_center(rectangle_min_dimension(v2i{}, dimension))
-            p := world_to_screen(center)
-            
-            size := min(cell_size_on_screen.x, cell_size_on_screen.y) * 3
-            size = min(size, 20)
-            center_size := size
-            ring_size := size
-            ring_padding := 0.2 * ring_size
             view_slices :: 250
             for comparing_group, group_index in color_groups {
                 total_supports := make([] f32, view_slices, context.temp_allocator)
@@ -351,8 +278,91 @@ main :: proc () {
             
             rl.DrawCircleV(p, center_size, viewing_group.color)
         }
+        rl.EndTextureMode()
+        
+        rl.BeginDrawing()
+        rl.ClearBackground({0x54, 0x57, 0x66, 0xFF})
+        
+        // @todo(viktor): handle empty steps, when paused and selecting an input
+        current := peek(collapse.steps)
+        spall_begin("Prepare Render")
+        {
+            cells_background_hue_t += rl.GetFrameTime() * DegreesPerRadian
+            if cells_background_hue_t >= 360 do cells_background_hue_t -= 360
+            
+            hsv := rl.ColorToHSV(v4_to_rl_color(cells_background_color))
+            hue := hsv.x + cells_background_hue_t
+            color := rl.ColorFromHSV(hue, hsv.y, hsv.z)
+            
+            background := rectangle_min_dimension(v2{}, vec_cast(f32, dimension))
+            rl.DrawRectangleRec(world_to_screen(background), color)
+        }
+        
+        spall_begin("render cells")
+        for &cell in cells {
+            color: rl.Color
+            
+            if render_wavefunction_as_average {
+                color = cell.average_color
+            } else {
+                if cell.state == .Collapsed {
+                    state := slow__get_collapsed_state(&collapse, cell)
+                    color = collapse.values[collapse.states[state.id].middle_value]
+                } else {
+                    color = 0
+                }
+            }
+            draw_cell(cell, color)
+        }
+        spall_end()
+        
+        if show_voronoi_cells {
+            spall_scope("show voronoi cells")
+            for cell, index in cells {
+                color_wheel := color_wheel
+                color := v4_to_rl_color(color_wheel[(index) % len(color_wheel)])
+                rl.DrawCircleV(world_to_screen(cell.p), 1, color)
+                draw_cell_outline(cell, color)
+            }
+        }
+        
+        if show_neighbours {
+            spall_scope("show neighbours")
+            color := v4_to_rl_color(Emerald) 
+            color_alpha := v4_to_rl_color(Emerald * {1,1,1,0.5}) 
+            
+            for cell in cells {
+                center := world_to_screen(cell.p)
+                rl.DrawCircleV(center, 4, color)
+                for neighbour in cell.neighbours {
+                    end := world_to_screen(neighbour.p)
+                    rl.DrawLineEx(center, end, 2, color_alpha)
+                }
+            }
+        }
+        
+        if highlight_step {
+            viewed := collapse.steps[min(cast(int) viewing_step, len(collapse.steps)-1)]
+            spall_scope("highlight step")
+            for cell in viewed.found {
+                draw_cell_outline(cell^, rl.GREEN)
+            }
+            
+            start := viewed.step == current.step ? viewed.changes_cursor : 0
+            for change in viewed.changes[start:] {
+                if change.cell == nil do continue
+                draw_cell_outline(change.cell^, rl.YELLOW)
+            }
+            
+            if viewed.to_be_collapsed != nil {
+                draw_cell_outline(viewed.to_be_collapsed^, rl.ORANGE)
+            }
+        }
+    
+        rl.DrawTextureEx(viewing_render_target.texture, 0, 0, 0, 255)
         
         spall_end(/* Prepare Render */)
+        
         spall_begin("Execute Render")
         rl_imgui_render()
         rl.EndDrawing()
@@ -360,6 +370,11 @@ main :: proc () {
         
         spall_end(/* Render */)
     }
+}
+
+restart :: proc (this_frame: ^Frame) {
+    this_frame.tasks += { .rewind }
+    this_frame.rewind_to = .Start
 }
 
 do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
@@ -377,7 +392,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             
             setup_grid(c, entropy, arena)
             
-            this_frame.tasks += { .restart }
+            restart(this_frame)
         }
         
         if .extract_states in this_frame.tasks {
@@ -411,14 +426,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 group.ids[state.id] = true
             }
             
-            this_frame.tasks += { .restart }
-        }
-        
-        if .restart in this_frame.tasks {
-            this_frame.tasks -= { .restart }
-            
-            this_frame.tasks += { .rewind }
-            this_frame.rewind_to = .Start
+            restart(this_frame)
         }
         
         if .rewind in this_frame.tasks {
@@ -427,6 +435,14 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             
             is_restart := false
             switch this_frame.rewind_to {
+              case .Viewed:
+                if viewing_step + 1 < auto_cast len(c.steps) {
+                    for step in c.steps[viewing_step+1:] {
+                        delete_step(step)
+                    }
+                }
+                resize_dynamic_array(&c.steps, auto_cast viewing_step + 1)
+                
               case .Previous_Choice: 
                 if len(c.steps) > 0 {
                     bad_step := pop(&c.steps)
@@ -666,13 +682,6 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
             
             append(points, new_point)
         }
-        
-      case .Test:
-        append(points, v2d {.2, .2})
-        append(points, v2d {.3, .7})
-        append(points, v2d {.7, .3})
-        append(points, v2d {.8, .8})
-        append(points, v2d {.5, .5})
     }
 }
 
