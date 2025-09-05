@@ -19,7 +19,7 @@ TargetFrameTime :: 1./TargetFps
 total_duration: time.Duration
 
 paused: b32
-desired_update_state: Maybe(Update_State)
+desired_update_state: Maybe(Step_State)
 
 cell_size_on_screen: v2
 
@@ -283,8 +283,8 @@ main :: proc () {
         rl.BeginDrawing()
         rl.ClearBackground({0x54, 0x57, 0x66, 0xFF})
         
-        // @todo(viktor): handle empty steps, when paused and selecting an input
-        current := peek(collapse.steps)
+        current := len(collapse.steps) != 0 ? peek(collapse.steps)^ : {}
+        
         spall_begin("Prepare Render")
         {
             cells_background_hue_t += rl.GetFrameTime() * DegreesPerRadian
@@ -302,15 +302,9 @@ main :: proc () {
         for &cell in cells {
             color: rl.Color
             
-            if render_wavefunction_as_average {
-                color = cell.average_color
-            } else {
-                if cell.state == .Collapsed {
-                    state := slow__get_collapsed_state(&collapse, cell)
-                    color = collapse.values[collapse.states[state.id].middle_value]
-                } else {
-                    color = 0
-                }
+            color = cell.average_color
+            if !render_wavefunction_as_average && !cell.collapsed {
+                color = 0
             }
             draw_cell(cell, color)
         }
@@ -339,8 +333,8 @@ main :: proc () {
             }
         }
         
-        if highlight_step {
-            viewed := collapse.steps[min(cast(int) viewing_step, len(collapse.steps)-1)]
+        if highlight_step && len(collapse.steps) > 0 {
+            viewed := collapse.steps[min(viewing_step, current.step)]
             for cell in viewed.found {
                 draw_cell_outline(cell^, rl.GREEN)
             }
@@ -387,6 +381,8 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             
             setup_grid(c, entropy, arena)
             
+            setup_cells(c)
+            
             restart(this_frame)
         }
         
@@ -401,7 +397,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             
             // Extract color groups
             for state in c.states {
-                color_id := state.middle_value
+                color_id := state.middle
                 color := c.values[color_id]
                 
                 group: ^Color_Group
@@ -421,9 +417,13 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 group.ids[state.id] = true
             }
             
+            setup_cells(c)
+            
             restart(this_frame)
         }
         
+        if len(c.states) == 0 do break task_loop
+
         if .rewind in this_frame.tasks {
             spall_scope("Rewind")
             this_frame.tasks -= { .rewind }
@@ -462,17 +462,33 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             
             current := peek(c.steps)
             // print("Rewind to %\n", cast(int) current.step)
+            // print("Is Restart %\n", is_restart)
             
             if is_restart {
+                spall_scope("Restart")
+                
                 total_duration = 0
+                assert(len(cells[0].states) == len(c.states))
+                
                 for &cell in cells {
-                    cell.state = .Collapsed
-                    cell_next_state(c, &cell)
+                    cell.collapsed = false
+                    clear(&cell.states_removed_this_step)
+                    
+                    assert(len(cell.states[0].support_from_neighbours) == len(cell.neighbours))
+                    
+                    for &state, index in cell.states {
+                        state.id = cast(State_Id) index
+                        state.removed_at = Invalid_Collapse_Step
+                        
+                        zero(state.support_from_neighbours)
+                    }
+                }
+                
+                for &cell in cells {
+                    calc_cell_states_support(c, &cell)
                 }
             } else {
                 for &cell in cells {
-                    if cell.state == .Uninitialized do continue
-                    
                     changed := false
                     for &state in cell.states {
                         if state.removed_at != Invalid_Collapse_Step && state.removed_at >= current.step {
@@ -482,29 +498,30 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                     }
                     
                     if changed {
-                        cell.state = .Collapsing
+                        cell.collapsed = false
                         calc_cell_states_support(c, &cell)
-                        calculate_average_color(c, &cell)
                     }
+                    calculate_average_color(c, &cell)
                 }
                 
-                switch current.update_state {
+                switch current.state {
                   case .Search, .Pick: unreachable() // Can't rewind in this state.
-                  case .Collapse:      current.update_state = .Pick
-                  case .Propagate:     current.update_state = .Collapse
+                  case .Collapse:      current.state = .Pick
+                  case .Propagate:     current.state = .Collapse
                 }
             }
             
             next_frame.tasks += { .update }
         }
         
-        
         if .update in this_frame.tasks {
             this_frame.tasks -= { .update }
             
+            // print("Update with %\n", peek(c.steps).state)
+            
             if c.states != nil {
                 this_update_start := time.now()
-                result := collapse_update(c, entropy)
+                result := step_update(c, entropy)
                 
                 switch result {
                   case .Done:   break task_loop
@@ -521,12 +538,30 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             next_frame = {}
         } else {
             if desired_update_state != nil {
-                if desired_update_state != peek(c.steps).update_state {
+                if desired_update_state != peek(c.steps).state {
                     this_frame ^= next_frame
                 } else {
                     desired_update_state = nil
                 }
             }
+        }
+    }
+}
+
+setup_cells :: proc (c: ^Collapse) {
+    for &cell in cells {
+        remake := len(cell.states) != len(c.states)
+        if remake {
+            for state in cell.states do delete(state.support_from_neighbours)
+            delete(cell.states)
+            
+            make(&cell.states, len(c.states))
+        }
+        
+        for &state, index in cell.states {
+            state.id = cast(State_Id) index
+            state.removed_at = Invalid_Collapse_Step
+            if remake do make(&state.support_from_neighbours, len(cell.neighbours))
         }
     }
 }
@@ -567,7 +602,6 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
             cell.points[index] = p
         }
         
-        cell.state = .Uninitialized 
         append(&cells, cell)
     }
     

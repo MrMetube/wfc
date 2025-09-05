@@ -7,7 +7,7 @@ step_depth: [dynamic] f32
 
 ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
     region: v2
-    current := peek(c.steps)
+    current := len(c.steps) != 0 ? peek(c.steps)^ : {}
     
     imgui.begin("Stats")
         imgui.text(tprint("Total time %",  view_time_duration(total_duration, precision = 3)))
@@ -28,14 +28,14 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
             
             if imgui.button("Step") {
                 this_frame.tasks += { .update }
-                desired_update_state = cast(Update_State) ((cast(int) current.update_state + 1) % len(Update_State))
+                desired_update_state = cast(Step_State) ((cast(int) current.state + 1) % len(Step_State))
             }
             
             if imgui.button("Rewind one step")  do this_frame.tasks += { .rewind  }
             
             if imgui.button("Update once") do this_frame.tasks += { .update }
             
-            imgui.text(tprint("%", current.update_state))
+            imgui.text(tprint("%", current.state))
         } else {
             if imgui.button("Pause") do paused = true
             this_frame.tasks += { .update }
