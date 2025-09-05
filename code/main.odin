@@ -125,10 +125,10 @@ main :: proc () {
     context.allocator = mem.tracking_allocator(&track)
 
     defer for _, leak in track.allocation_map {
-        print("% leaked %\n", leak.location, view_memory_size(cast(umm) leak.size))
+        print("% leaked %\n", leak.location, view_memory_size(leak.size))
     }
     
-    // rl.SetTraceLogLevel(.WARNING)
+    rl.SetTraceLogLevel(.WARNING)
     rl.InitWindow(Screen_Size.x, Screen_Size.y, "Wave Function Collapse")
     rl.SetTargetFPS(TargetFps)
     
@@ -317,7 +317,6 @@ main :: proc () {
         spall_end()
         
         if show_voronoi_cells {
-            spall_scope("show voronoi cells")
             for cell, index in cells {
                 color_wheel := color_wheel
                 color := v4_to_rl_color(color_wheel[(index) % len(color_wheel)])
@@ -327,7 +326,6 @@ main :: proc () {
         }
         
         if show_neighbours {
-            spall_scope("show neighbours")
             color := v4_to_rl_color(Emerald) 
             color_alpha := v4_to_rl_color(Emerald * {1,1,1,0.5}) 
             
@@ -343,15 +341,14 @@ main :: proc () {
         
         if highlight_step {
             viewed := collapse.steps[min(cast(int) viewing_step, len(collapse.steps)-1)]
-            spall_scope("highlight step")
             for cell in viewed.found {
                 draw_cell_outline(cell^, rl.GREEN)
             }
             
             start := viewed.step == current.step ? viewed.changes_cursor : 0
             for change in viewed.changes[start:] {
-                if change.cell == nil do continue
-                draw_cell_outline(change.cell^, rl.YELLOW)
+                if change == nil do continue
+                draw_cell_outline(change^, rl.YELLOW)
             }
             
             if viewed.to_be_collapsed != nil {
@@ -379,8 +376,6 @@ restart :: proc (this_frame: ^Frame) {
 
 do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
     spall_scope("Update")
-    
-    this_frame := this_frame
     
     next_frame: Frame
     
@@ -437,6 +432,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             switch this_frame.rewind_to {
               case .Viewed:
                 if viewing_step + 1 < auto_cast len(c.steps) {
+                    spall_scope("Cleanup Steps")
                     for step in c.steps[viewing_step+1:] {
                         delete_step(step)
                     }
@@ -445,6 +441,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 
               case .Previous_Choice: 
                 if len(c.steps) > 0 {
+                    spall_scope("Cleanup Steps")
                     bad_step := pop(&c.steps)
                     delete_step(bad_step)
                 }
@@ -455,6 +452,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 
               case .Start: 
                 is_restart = true
+                spall_scope("Cleanup Steps")
                 for step in c.steps {
                     delete_step(step)
                 }
@@ -463,6 +461,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             }
             
             current := peek(c.steps)
+            // print("Rewind to %\n", cast(int) current.step)
             
             if is_restart {
                 total_duration = 0
@@ -519,6 +518,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
         
         if !paused {
             this_frame ^= next_frame
+            next_frame = {}
         } else {
             if desired_update_state != nil {
                 if desired_update_state != peek(c.steps).update_state {

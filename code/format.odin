@@ -538,7 +538,6 @@ format_view :: proc (ctx: ^Format_Context, view: View) {
 ////////////////////////////////////////////////
 
 format_any :: proc (ctx: ^Format_Context, arg: any) {
-    spall_proc()
     if ctx.max_depth <= 0 do return
     
     switch value in arg {

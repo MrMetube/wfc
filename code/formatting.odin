@@ -200,7 +200,7 @@ units_table := [?] Magnitude (f64) {
 ////////////////////////////////////////////////
 // Time
 
-view_memory_size :: proc (value: umm, scale := Memory.bytes, limit := Memory.exabytes, precision: u8 = 0) -> (result: Temp_Views) {
+view_memory_size :: proc (#any_int value: umm, scale := Memory.bytes, limit := Memory.exabytes, precision: u8 = 0) -> (result: Temp_Views) {
     return view_magnitude(value, bytes_table[:], cast(int) scale, cast(int) limit, precision)
 }
 view_time_duration :: proc (value: time.Duration, scale := Time_Unit.nanoseconds, limit := Time_Unit.hours, precision: u8 = 0) -> (result: Temp_Views) {

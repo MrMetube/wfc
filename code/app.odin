@@ -6,8 +6,6 @@ import "lib:imgui"
 step_depth: [dynamic] f32
 
 ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
-    spall_proc()
-    
     region: v2
     current := peek(c.steps)
     

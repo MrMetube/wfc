@@ -83,7 +83,6 @@ begin_triangulation :: proc(dt: ^Delauney_Triangulation, arena: ^Arena, points: 
 }
 
 triangulation_append :: proc (dt: ^Delauney_Triangulation, index: TriIndex, triangle: Triangle) {
-    spall_proc()
     circle := circum_circle(triangle)
     
     wt := Work_Triangle{ index, circle }
@@ -103,7 +102,6 @@ complete_triangulation :: proc (dt: ^Delauney_Triangulation) {
 }
 
 step_triangulation :: proc(dt: ^Delauney_Triangulation) {
-    spall_proc()
     // @note(viktor): We use the Bowyer-Watson algorithm to create the delauney triangulation
     // See: https://en.wikipedia.org/wiki/Bowyer%E2%80%93Watson_algorithm
     
@@ -180,7 +178,6 @@ collect_points :: proc (node: ^Quad_Node(v2d), dest: ^Array(v2d)) {
         }
     }
     
-    spall_scope("collect nodes")
     for link := node.sentinel.next; link != &node.sentinel;  {
         assert(link.next != link)
         
@@ -198,7 +195,6 @@ collect_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^Array(Triangl
         }
     }
     
-    spall_scope("collect nodes")
     for link := node.sentinel.next; link != &node.sentinel;  {
         assert(link.next != link)
         
@@ -232,7 +228,6 @@ collect_work_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^Array(Wo
         }
     }
     
-    spall_scope("collect nodes")
     for link := node.sentinel.next; link != &node.sentinel;  {
         assert(link.next != link)
         

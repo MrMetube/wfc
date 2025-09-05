@@ -130,9 +130,7 @@ arena_has_room_size :: proc(arena: ^Arena, #any_int size_init: u64, #any_int ali
 zero :: proc { zero_size, zero_slice }
 zero_size :: proc(memory: pmm, size: u64) {
     bytes := slice_from_parts(u8, memory, size)
-    for &b in bytes {
-        b = {}
-    }
+    for &b in bytes do b = 0
 }
 zero_slice :: proc(data: []$T){
     for &entry in data do entry = {}
