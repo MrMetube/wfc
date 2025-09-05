@@ -75,11 +75,9 @@ opposite_direction :: proc (direction: Direction) -> (result: Direction) {
 
 // 0 Cosine 1 Linear
 // @todo(viktor): even linear seems to overlap too much to get clean output, next after linear would be nearest or something with steeper falloff
-view_mode_t: f32 = 0.5
+view_mode_t: f32 = 1
 
 ////////////////////////////////////////////////
-
-search_metric := Search_Metric.Entropy
 
 Generate_Kind :: enum {
     Grid,
@@ -169,6 +167,8 @@ main :: proc () {
     
     entropy := seed_random_series(7458)
     collapse: Collapse
+    collapse.search_metric = .Entropy
+    
     pre := Frame { tasks = { .setup_grid } }
     do_tasks_in_order(&pre, &collapse, &entropy, &arena)
     
@@ -184,9 +184,7 @@ main :: proc () {
         for group in color_groups do delete(group.ids)
         delete(color_groups)
         
-        for cell in cells {
-            delete_cell(cell)
-        }
+        for cell in cells do delete_cell(cell)
         delete(cells)
     }
     
@@ -340,8 +338,7 @@ main :: proc () {
             }
             
             start := viewed.step == current.step ? viewed.changes_cursor : 0
-            for change in viewed.changes[start:] {
-                if change == nil do continue
+            for change in viewed.changes[start:] do if change != nil {
                 draw_cell_outline(change^, rl.YELLOW)
             }
             
@@ -461,8 +458,8 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             }
             
             current := peek(c.steps)
-            print("Rewind to %\n", cast(int) current.step)
-            print("Is Restart %\n", is_restart)
+            // print("Rewind to %\n", cast(int) current.step)
+            // print("Is Restart %\n", is_restart)
             
             if is_restart {
                 spall_scope("Restart")
@@ -472,6 +469,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 
                 for &cell in cells {
                     cell.collapsed = false
+                    cell.is_dirty = true
                     for &state, index in cell.states {
                         state.id = cast(State_Id) index
                         state.removed_at = Invalid_Collapse_Step
@@ -479,6 +477,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 }
             } else {
                 for &cell in cells {
+                    cell.is_dirty = true
                     for &state in cell.states {
                         if state.removed_at != Invalid_Collapse_Step && state.removed_at >= current.step {
                             state.removed_at = Invalid_Collapse_Step
@@ -500,7 +499,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
         if .update in this_frame.tasks {
             this_frame.tasks -= { .update }
             
-            print("Update with %\n", peek(c.steps).state)
+            // print("Update with %\n", peek(c.steps).state)
             
             if c.states != nil {
                 this_update_start := time.now()
@@ -553,6 +552,7 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
         cell_size_on_screen = ratio.y 
     }
     
+    for cell in cells do delete_cell(cell)
     clear(&cells)
     
     area := dimension.x * dimension.y

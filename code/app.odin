@@ -73,8 +73,8 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         }
         imgui.text("Search Metric")
         for text, metric in metrics {
-            if imgui.radio_button(text, metric == search_metric) {
-                search_metric = metric
+            if imgui.radio_button(text, metric == c.search_metric) {
+                c.search_metric = metric
             }
         }
         

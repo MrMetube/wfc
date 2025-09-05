@@ -6,7 +6,6 @@ import rl "vendor:raylib"
 
 // @todo(viktor): make these members of collapse
 N: i32 = 3
-Search_Metric :: enum { States, Entropy }
 
 Collapse :: struct {
     states:   [dynamic] State,
@@ -14,6 +13,7 @@ Collapse :: struct {
     supports: [/* center - State_Id */] [/* neighbour - State_Id */] [Direction] f32,
     
     steps: [dynamic] Step,
+    search_metric: Search_Metric,
     
     // Extraction
     is_defining_state: bool,
@@ -27,6 +27,8 @@ Collapse_Step :: distinct i32
 Invalid_State         :: max(State_Id)
 Invalid_Value         :: max(Value_Id)
 Invalid_Collapse_Step :: max(Collapse_Step)
+
+Search_Metric :: enum { States, Entropy }
 
 State :: struct {
     id: State_Id,
@@ -75,6 +77,7 @@ Cell :: struct {
     
     states: [] State_Entry,
     
+    is_dirty: bool,
     entropy: f32,
     average_color: rl.Color,
 }
@@ -131,8 +134,7 @@ get_support_amount :: proc (c: ^Collapse, from: State_Id, to: State_Id, closenes
 }
 
 get_support_for_state :: proc (c: ^Collapse, from: State_Id, to: ^Cell, closeness: [Direction] f32, max: Collapse_Step) -> (result: f32) {
-    for to in to.states {
-        if to.removed_at <= max do continue
+    for to in to.states do if to.removed_at > max {
         amount := get_support_amount(c, from, to.id, closeness)
         result += amount
     }
@@ -155,15 +157,19 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
         
         lowest := +Infinity
         for &cell in cells {
-            calculate_average_color(c, &cell)
+            if cell.is_dirty do calculate_average_color(c, &cell)
             if cell.collapsed do continue
-            if search_metric == .Entropy do calculate_entropy(c, &cell)
+            if cell.is_dirty && c.search_metric == .Entropy do calculate_entropy(c, &cell)
+            cell.is_dirty = false
             
             value: f32
             
-            switch search_metric {
-                case .States:  value = cast(f32) slow__get_states_count(c, &cell)
-                case .Entropy: value = cell.entropy
+            switch c.search_metric {
+              case .Entropy: value = cell.entropy
+              case .States:  
+                for state in cell.states do if state.removed_at > current.step {
+                    value += 1
+                }
             }
             
             if lowest > value {
@@ -197,8 +203,7 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
             assert(!current.to_be_collapsed.collapsed)
             
             clear(&current.pickable_states)
-            for &state in current.to_be_collapsed.states {
-                if state.removed_at <= current.step do continue
+            for &state in current.to_be_collapsed.states do if state.removed_at > current.step {
                 append(&current.pickable_states, &state)
             }
             
@@ -215,6 +220,7 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
         } else {
             cell := current.to_be_collapsed
             assert(!cell.collapsed)
+            cell.is_dirty = true
             
             pick := Invalid_State
             total: f32
@@ -233,9 +239,7 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
                     closeness := get_closeness(neighbour.p - cell.p)
                     // @todo(viktor): @speed this is a lot but it happens once for step.
                     for from, from_index in current.pickable_states {
-                        for to in neighbour.states {
-                            if to.removed_at <= current.step do continue
-                            
+                        for to in neighbour.states do if to.removed_at > current.step {
                             amount := get_support_amount(c, from.id, to.id, closeness)
                             weights[from_index] += amount
                         }
@@ -261,11 +265,10 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
                 }
             }
             
-            for &state in cell.states {
-                if state.removed_at <= current.step do continue
-                if state.id == pick do continue
-                
-                state.removed_at = current.step
+            for &state in cell.states do if state.removed_at > current.step {
+                if state.id != pick {
+                    state.removed_at = current.step
+                }
             }
             
             if pick != Invalid_State {
@@ -293,9 +296,7 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
             result = .Rewind
         } else {
             did_change := false
-            propagate_remove: for neighbour in change.neighbours {
-                assert(neighbour != nil)
-                if neighbour.collapsed do continue propagate_remove
+            propagate_remove: for neighbour in change.neighbours do if !neighbour.collapsed {
                 appended := append_change_if_not_already_scheduled(current, neighbour)
                 
                 cell_index: int = -1
@@ -305,11 +306,10 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
                 closeness := get_closeness(change.p - neighbour.p)
                 
                 states_count := 0
-                spall_begin("recalc states loop")
-                // @todo(viktor): @speed I'd like to do this iteratively by storing the states removed from change and only checking against those but I seem to be too stupid to do so. Note that it would only be faster for when less then half of all states from changed are removed, as we otherwise just iterate through all remaining states. Also note that we need to store the previous value and that needs to be properly updated when rewinding.
-                for &to in neighbour.states {
-                    if to.removed_at <= current.step do continue
-                    
+                if change.collapsed do spall_begin("recalc states - changed collapsed")
+                else do spall_begin("recalc states - changed not collapsed")
+                // @todo(viktor): @speed I'd like to do this iteratively by storing the states removed from change and only checking against those but I seem to be too stupid to do so. Note that it would only be faster for when less then half of all states from changed are removed, as we otherwise just iterate through all remaining states. Also note that we need to store the previous value and that needs to be properly updated when rewinding. Also note that 99% of the time spent here is when changed isnt collapsed but just lost a few states.
+                for &to in neighbour.states do if to.removed_at > current.step {
                     current_support := get_support_for_state(c, to.id, change, closeness, current.step)
                     
                     if current_support <= 0 {
@@ -322,6 +322,7 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
                 spall_end()
                 
                 if did_change {
+                    neighbour.is_dirty = true
                     if states_count == 0 {
                         result = .Rewind
                         break propagate_remove
@@ -341,7 +342,7 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
         
         if current.changes_cursor == len(current.changes) {
             if result != .Rewind {
-                print("Next Step\n")
+                // print("Next Step\n")
                 append(&c.steps, Step { step = current.step + 1 })
             }
         }
@@ -384,16 +385,16 @@ calculate_entropy :: proc (c: ^Collapse, cell: ^Cell) {
     spall_proc()
     assert(!cell.collapsed)
     
+    current := peek(c.steps)
+    
     // @todo(viktor): @speed this could be done iteratively if needed, but its fast enough for now
     total_frequency: f32
     cell.entropy = 0
-    for state in cell.states {
-        if state.removed_at <= peek(c.steps).step do continue
+    for state in cell.states do if state.removed_at > current.step {
         total_frequency += c.states[state.id].frequency
     }
     
-    for state in cell.states {
-        if state.removed_at <= peek(c.steps).step do continue
+    for state in cell.states do if state.removed_at > current.step {
         frequency := c.states[state.id].frequency
         probability := frequency / total_frequency
         
@@ -406,9 +407,7 @@ calculate_average_color :: proc (c: ^Collapse, cell: ^Cell) {
     
     color: v4
     count: f32
-    for state in cell.states {
-        if state.removed_at <= viewing_step do continue
-        
+    for state in cell.states do if state.removed_at > viewing_step {
         state    := c.states[state.id]
         color_id := state.middle
         color += rl_color_to_v4(c.values[color_id]) * state.frequency
@@ -417,28 +416,6 @@ calculate_average_color :: proc (c: ^Collapse, cell: ^Cell) {
     
     color = safe_ratio_0(color, count)
     cell.average_color = cast(rl.Color) v4_to_rgba(color)
-}
-
-slow__get_collapsed_state :: proc (c: ^Collapse, cell: Cell) -> (result: State_Entry) {
-    assert(cell.collapsed)
-    
-    for state in cell.states {
-        if state.removed_at <= peek(c.steps).step do continue
-        
-        return state
-    }
-    unreachable()
-}
-
-slow__get_states_count :: proc (c: ^Collapse, cell: ^Cell) -> (result: i32) {
-    spall_proc()
-    for state in cell.states {
-        if state.removed_at <= peek(c.steps).step do continue
-        
-        result += 1
-    }
-    
-    return result
 }
 
 delete_cell :: proc (cell: Cell) {
