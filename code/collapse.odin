@@ -75,8 +75,6 @@ Cell :: struct {
     
     states: [] State_Entry,
     
-    states_removed_this_step: [dynamic] State_Id,
-    
     entropy: f32,
     average_color: rl.Color,
 }
@@ -84,8 +82,6 @@ Cell :: struct {
 State_Entry :: struct {
     id: State_Id,
     removed_at: Collapse_Step,
-    
-    support_from_neighbours: [] f32,
 }
 
 ////////////////////////////////////////////////
@@ -141,23 +137,6 @@ get_support_for_state :: proc (c: ^Collapse, from: State_Id, to: ^Cell, closenes
         result += amount
     }
     return result
-}
-
-calc_cell_states_support :: proc (c: ^Collapse, cell: ^Cell) {
-    spall_proc()
-    // @todo(viktor): @speed can we do this update only for the difference between this time and last time?
-    
-    current := peek(c.steps)
-    for neighbour, neighbour_index in cell.neighbours {
-        closeness := get_closeness(neighbour.p - cell.p)
-        
-        for &state in cell.states {
-            if state.removed_at <= current.step do continue
-            
-            support := get_support_for_state(c, state.id, neighbour, closeness, current.step)
-            state.support_from_neighbours[neighbour_index] = support
-        }
-    }
 }
 
 ////////////////////////////////////////////////
@@ -252,7 +231,7 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
                 
                 for neighbour in cell.neighbours {
                     closeness := get_closeness(neighbour.p - cell.p)
-                    // @important @speed cache this
+                    // @todo(viktor): @speed this is a lot but it happens once for step.
                     for from, from_index in current.pickable_states {
                         for to in neighbour.states {
                             if to.removed_at <= current.step do continue
@@ -267,7 +246,6 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
             }
             
             target := random_unilateral(entropy, f32) * total
-            copy := target
             append_change_if_not_already_scheduled(current, cell)
             
             pick_index := -1
@@ -288,7 +266,6 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
                 if state.id == pick do continue
                 
                 state.removed_at = current.step
-                append(&cell.states_removed_this_step, state.id)
             }
             
             if pick != Invalid_State {
@@ -315,48 +292,36 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
         if change == nil && current.changes_cursor == len(current.changes) {
             result = .Rewind
         } else {
-            cell := change
-            
-            propagate_remove: for neighbour in cell.neighbours {
+            did_change := false
+            propagate_remove: for neighbour in change.neighbours {
                 assert(neighbour != nil)
                 if neighbour.collapsed do continue propagate_remove
                 appended := append_change_if_not_already_scheduled(current, neighbour)
                 
                 cell_index: int = -1
-                for n, n_index in neighbour.neighbours do if n == cell { cell_index = n_index; break }
+                for n, n_index in neighbour.neighbours do if n == change { cell_index = n_index; break }
                 assert(cell_index != -1)
                 
-                closeness := get_closeness(cell.p - neighbour.p)
+                closeness := get_closeness(change.p - neighbour.p)
                 
                 states_count := 0
                 spall_begin("recalc states loop")
-                // @todo(viktor): @speed dont recalculate the total amount everytime, do it at init and then update it according to the removed states in changed, i.e. the support of those states
+                // @todo(viktor): @speed I'd like to do this iteratively by storing the states removed from change and only checking against those but I seem to be too stupid to do so. Note that it would only be faster for when less then half of all states from changed are removed, as we otherwise just iterate through all remaining states. Also note that we need to store the previous value and that needs to be properly updated when rewinding.
                 for &to in neighbour.states {
                     if to.removed_at <= current.step do continue
                     
-                    current_support := get_support_for_state(c, to.id, cell, closeness, current.step)
-                    // @todo(viktor): Why is this still so unreliable!
-                    removed_support: f32
-                    for from in cell.states_removed_this_step {
-                        amount := get_support_amount(c, to.id, from, closeness)
-                        removed_support += amount
-                    }
+                    current_support := get_support_for_state(c, to.id, change, closeness, current.step)
                     
-                    previous_support := to.support_from_neighbours[cell_index]
-                    now_support := max(0, previous_support - removed_support)
-                    // assert(absolute_difference(now_support, current_support) < 0.001)
-                    to.support_from_neighbours[cell_index] = current_support
-                    
-                    if to.support_from_neighbours[cell_index] <= 0 {
+                    if current_support <= 0 {
                         to.removed_at = current.step
-                        append(&neighbour.states_removed_this_step, to.id)
+                        did_change = true
                     } else {
                         states_count += 1
                     }
                 }
                 spall_end()
                 
-                if len(neighbour.states_removed_this_step) != 0 {
+                if did_change {
                     if states_count == 0 {
                         result = .Rewind
                         break propagate_remove
@@ -372,21 +337,11 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
                     }
                 }
             }
-            
-            clear(&cell.states_removed_this_step)
-        }
-        
-        if current.changes_cursor == len(current.changes) {
-            // @todo(viktor): Huh?
-            for &cell in cells {
-                if len(cell.states_removed_this_step) != 0 {
-                    append_change_if_not_already_scheduled(current, &cell)
-                }
-            }
         }
         
         if current.changes_cursor == len(current.changes) {
             if result != .Rewind {
+                print("Next Step\n")
                 append(&c.steps, Step { step = current.step + 1 })
             }
         }
@@ -489,10 +444,6 @@ slow__get_states_count :: proc (c: ^Collapse, cell: ^Cell) -> (result: i32) {
 delete_cell :: proc (cell: Cell) {
     delete(cell.points)
     delete(cell.neighbours)
-    delete(cell.states_removed_this_step)
-    for state in cell.states {
-        delete(state.support_from_neighbours)
-    }
     delete(cell.states)
 }
 

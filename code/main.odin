@@ -461,8 +461,8 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             }
             
             current := peek(c.steps)
-            // print("Rewind to %\n", cast(int) current.step)
-            // print("Is Restart %\n", is_restart)
+            print("Rewind to %\n", cast(int) current.step)
+            print("Is Restart %\n", is_restart)
             
             if is_restart {
                 spall_scope("Restart")
@@ -472,36 +472,19 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 
                 for &cell in cells {
                     cell.collapsed = false
-                    clear(&cell.states_removed_this_step)
-                    
-                    assert(len(cell.states[0].support_from_neighbours) == len(cell.neighbours))
-                    
                     for &state, index in cell.states {
                         state.id = cast(State_Id) index
                         state.removed_at = Invalid_Collapse_Step
-                        
-                        zero(state.support_from_neighbours)
                     }
-                }
-                
-                for &cell in cells {
-                    calc_cell_states_support(c, &cell)
                 }
             } else {
                 for &cell in cells {
-                    changed := false
                     for &state in cell.states {
                         if state.removed_at != Invalid_Collapse_Step && state.removed_at >= current.step {
                             state.removed_at = Invalid_Collapse_Step
-                            changed = true
+                            cell.collapsed = false
                         }
                     }
-                    
-                    if changed {
-                        cell.collapsed = false
-                        calc_cell_states_support(c, &cell)
-                    }
-                    calculate_average_color(c, &cell)
                 }
                 
                 switch current.state {
@@ -517,7 +500,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
         if .update in this_frame.tasks {
             this_frame.tasks -= { .update }
             
-            // print("Update with %\n", peek(c.steps).state)
+            print("Update with %\n", peek(c.steps).state)
             
             if c.states != nil {
                 this_update_start := time.now()
@@ -550,18 +533,14 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
 
 setup_cells :: proc (c: ^Collapse) {
     for &cell in cells {
-        remake := len(cell.states) != len(c.states)
-        if remake {
-            for state in cell.states do delete(state.support_from_neighbours)
+        if len(cell.states) != len(c.states) {
             delete(cell.states)
-            
             make(&cell.states, len(c.states))
         }
         
         for &state, index in cell.states {
             state.id = cast(State_Id) index
             state.removed_at = Invalid_Collapse_Step
-            if remake do make(&state.support_from_neighbours, len(cell.neighbours))
         }
     }
 }
