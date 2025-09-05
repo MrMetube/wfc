@@ -134,10 +134,6 @@ main :: proc () {
     
     rl_imgui_init()
     
-    arena: Arena
-    init_arena(&arena, make([]u8, 512*Megabyte))
-    defer delete(arena.storage)
-    
     images: map[string] File
     defer {
         for _, file in images do delete(file.data)
@@ -170,7 +166,7 @@ main :: proc () {
     collapse.search_metric = .Entropy
     
     pre := Frame { tasks = { .setup_grid } }
-    do_tasks_in_order(&pre, &collapse, &entropy, &arena)
+    do_tasks_in_order(&pre, &collapse, &entropy)
     
     defer {
         collapse_reset(&collapse)
@@ -213,7 +209,7 @@ main :: proc () {
         ////////////////////////////////////////////////
         // Update 
         
-        do_tasks_in_order(&this_frame, &collapse, &entropy, &arena)
+        do_tasks_in_order(&this_frame, &collapse, &entropy)
         
         ////////////////////////////////////////////////
         // Render
@@ -365,7 +361,7 @@ restart :: proc (this_frame: ^Frame) {
     this_frame.rewind_to = .Start
 }
 
-do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
+do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSeries) {
     spall_scope("Update")
     
     next_frame: Frame
@@ -376,7 +372,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
         if .setup_grid in this_frame.tasks {
             this_frame.tasks -= { .setup_grid }
             
-            setup_grid(c, entropy, arena)
+            setup_grid(c, entropy)
             
             setup_cells(c)
             
@@ -544,7 +540,7 @@ setup_cells :: proc (c: ^Collapse) {
     }
 }
 
-setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
+setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries) {
     ratio := vec_cast(f32, Screen_Size-100) / vec_cast(f32, dimension)
     if ratio.x < ratio.y {
         cell_size_on_screen = ratio.x
@@ -559,17 +555,10 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
     points := make([dynamic] v2d, 0, area, context.temp_allocator)
     generate_points(&points, cast(u32) area)
     
-    // @todo(viktor): Just take an allocator here
     dt: Delauney_Triangulation
-    begin_triangulation(&dt, arena, points[:])
+    begin_triangulation(&dt, points[:], allocator = context.temp_allocator)
     complete_triangulation(&dt)
     voronoi_cells := end_triangulation_voronoi_cells(&dt)
-    defer {
-        delete(voronoi_cells)
-        delete(dt.all_bad_edges)
-        delete(dt.bad_triangles)
-        delete(dt.polygon)
-    }
     
     for it in voronoi_cells {
         cell: Cell
@@ -592,11 +581,6 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, arena: ^Arena) {
             neighbour := &cells[neighbour_index]
             cell.neighbours[index] = neighbour
         }
-    }
-    
-    for cell in voronoi_cells {
-        delete(cell.points)
-        delete(cell.neighbour_indices)
     }
 }
 

@@ -1,6 +1,7 @@
 #+vet !unused-procedures
 package main
 
+import "core:mem"
 import slices "core:slice"
 
 v2d :: [2] f64
@@ -20,8 +21,8 @@ Work_Triangle :: struct {
 }
 
 Delauney_Triangulation :: struct {
-    arena:  ^Arena,
-    points: [] v2d,
+    allocator: mem.Allocator,
+    points:    [] v2d,
     
     tree: Quad_Tree(Work_Triangle),
     
@@ -47,10 +48,14 @@ Voronoi_Cell :: struct {
 
 ////////////////////////////////////////////////
 
-begin_triangulation :: proc(dt: ^Delauney_Triangulation, arena: ^Arena, points: []v2d) {
+begin_triangulation :: proc(dt: ^Delauney_Triangulation, points: []v2d, allocator := context.allocator) {
     spall_proc()
-    dt.arena  = arena
+    dt.allocator = allocator
     dt.points = points
+    
+    dt.all_bad_edges.allocator = allocator
+    dt.polygon.allocator       = allocator
+    dt.bad_triangles.allocator = allocator
 
     max_vertex: v2d = 1
     extra :: 1
@@ -63,11 +68,8 @@ begin_triangulation :: proc(dt: ^Delauney_Triangulation, arena: ^Arena, points: 
     { // I ~ O(n): Sort points into a hilbert curve for better locality in the main part
         spall_scope("Sort points into a hilbert curve")
         
-        temp := begin_temporary_memory(arena)
-        defer end_temporary_memory(temp)
-        
         point_tree: Quad_Tree(v2d)
-        init_quad_tree(&point_tree, temp.arena, rectangle_min_dimension(v2d{}, 2))
+        init_quad_tree(&point_tree, rectangle_min_dimension(v2d{}, 2), allocator = context.temp_allocator)
         
         for point in points {
             quad_insert(&point_tree, &point_tree.root, point, rectangle_min_dimension(point, 0))
@@ -77,7 +79,7 @@ begin_triangulation :: proc(dt: ^Delauney_Triangulation, arena: ^Arena, points: 
         collect_points(&point_tree.root, &buffer)
     }
     
-    init_quad_tree(&dt.tree, dt.arena, rectangle_center_dimension(v2d{.5,.5}, v2d{400,400}))
+    init_quad_tree(&dt.tree, rectangle_center_dimension(v2d{.5,.5}, v2d{400,400}), allocator = dt.allocator)
     
     triangulation_append(dt, dt.super_tri_index, dt.super_triangle)
 }
@@ -188,7 +190,7 @@ collect_points :: proc (node: ^Quad_Node(v2d), dest: ^Array(v2d)) {
     }
 }
 
-collect_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^Array(Triangle), points: []v2d, dt: ^Delauney_Triangulation) {
+collect_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^[dynamic] Triangle, points: []v2d, dt: ^Delauney_Triangulation) {
     if node.children != nil {
         for &child in node.children {
             collect_triangles(&child, dest, points, dt)
@@ -221,7 +223,7 @@ collect_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^Array(Triangl
     }
 }
 
-collect_work_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^Array(Work_Triangle), points: []v2d, dt: ^Delauney_Triangulation) {
+collect_work_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^[dynamic] Work_Triangle, points: []v2d, dt: ^Delauney_Triangulation) {
     if node.children != nil {
         for &child in node.children {
             collect_work_triangles(&child, dest, points, dt)
@@ -240,11 +242,11 @@ collect_work_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^Array(Wo
 
 end_triangulation :: proc(dt: ^Delauney_Triangulation) -> (result: [] Triangle) {
     spall_proc()
-    buffer := make_array(dt.arena, Triangle, dt.triangle_count)
+    buffer := make([dynamic] Triangle, 0, dt.triangle_count, dt.allocator)
     
     collect_triangles(&dt.tree.root, &buffer, dt.points, dt)
     
-    result = slice(buffer)
+    result = buffer[:]
     return result
 }
 
@@ -271,13 +273,18 @@ foo_all :: proc (a, b: $V, bounds: Rectangle(V)) -> (ok: b32, result: V) {
 
 end_triangulation_voronoi_cells :: proc(dt: ^Delauney_Triangulation) -> (result: [] Voronoi_Cell) {
     spall_proc()
-    buffer := make_array(dt.arena, Work_Triangle, dt.triangle_count)
+    buffer := make([dynamic] Work_Triangle, 0, dt.triangle_count, context.temp_allocator)
     
     collect_work_triangles(&dt.tree.root, &buffer, dt.points, dt)
     
-    triangles := slice(buffer)
+    triangles := buffer[:]
     
-    result = make([] Voronoi_Cell, len(dt.points))
+    result = make([] Voronoi_Cell, len(dt.points), dt.allocator)
+    
+    for &voronoi in result {
+        voronoi.neighbour_indices.allocator = dt.allocator
+        voronoi.points.allocator            = dt.allocator
+    }
     
     bounds := rectangle_min_dimension(v2d {0,0}, 1)
     

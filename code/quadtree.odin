@@ -1,11 +1,13 @@
 package main
 
+import "core:mem"
+
 Rectangle2d :: Rectangle([2] f64)
 
 Quad_Tree :: struct ($D: typeid) {
     root:      Quad_Node(D),
     max_depth: i32,
-    arena:     ^Arena,
+    allocator: mem.Allocator,
     
     first_free_entry: ^Quad_Entry(D),
 }
@@ -31,8 +33,8 @@ Quad_Entry :: struct ($D: typeid) {
     next: ^Quad_Entry(D),
 }
 
-init_quad_tree :: proc (tree: ^Quad_Tree($D), arena: ^Arena, bounds: Rectangle2d, max_depth: i32 = 16) {
-    tree.arena = arena
+init_quad_tree :: proc (tree: ^Quad_Tree($D), bounds: Rectangle2d, max_depth: i32 = 16, allocator := context.allocator) {
+    tree.allocator = allocator
     
     tree.root.bounds = bounds
     tree.root.order  = .CounterclockwiseFromBottom
@@ -53,7 +55,7 @@ quad_insert :: proc(tree: ^Quad_Tree($D), node: ^Quad_Node(D), data: D, bounds: 
     result = quad_op(tree, node, data, bounds, tree.max_depth, .Insert)
     if result == nil {
         result = &tree.root
-        link := list_pop_head(&tree.first_free_entry) or_else push(tree.arena, Quad_Entry(D))
+        link := list_pop_head(&tree.first_free_entry) or_else new(Quad_Entry(D), tree.allocator)
         link ^= { data = data }
         list_prepend(&result.sentinel, link)
     }
@@ -82,7 +84,7 @@ quad_op :: proc(tree: ^Quad_Tree($D), node: ^Quad_Node(D), data: D, bounds: Rect
         if result == nil {
             result = node
             when op == .Insert {
-                link := list_pop_head(&tree.first_free_entry) or_else push(tree.arena, Quad_Entry(D))
+                link := list_pop_head(&tree.first_free_entry) or_else new(Quad_Entry(D), tree.allocator)
                 link ^= { data = data }
                 list_prepend(&result.sentinel, link)
             }
@@ -99,7 +101,7 @@ quad_op :: proc(tree: ^Quad_Tree($D), node: ^Quad_Node(D), data: D, bounds: Rect
     The 1st and 4th child change the order based on their parents order.
  */
 quad_init_children :: proc (tree: ^Quad_Tree($D), node: ^Quad_Node(D)) {
-    node.children = push_struct(tree.arena, type_of(node.children^))
+    node.children = new(type_of(node.children^), tree.allocator)
     
     dim := get_dimension(node.bounds) * 0.5
     bl := rectangle_min_dimension(node.bounds.min + dim * {0,0}, dim)
