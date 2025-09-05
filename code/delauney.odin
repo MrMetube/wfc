@@ -250,23 +250,22 @@ end_triangulation :: proc(dt: ^Delauney_Triangulation) -> (result: [] Triangle) 
     return result
 }
 
-// @todo(viktor): what is this called? its an intersection between a vector and a side of a aabb
-foo :: proc (a, b: $V/[2]$E, is_x: bool, side: E) -> (result: V) {
-    ab := b - a
-    assert( is_x || ab.y != 0)
-    assert(!is_x || ab.x != 0)
+bounds_line_intersection :: proc (a, b: $V, bounds: Rectangle(V)) -> (ok: b32, result: V) {
+    side :: proc (a, b: $V/[2]$E, is_x: bool, side: E) -> (result: V) {
+        ab := b - a
+        assert( is_x || ab.y != 0)
+        assert(!is_x || ab.x != 0)
+        
+        result.x =  is_x ? side : (a.x + ab.x * (side-a.y) / ab.y)
+        result.y = !is_x ? side : (a.y + ab.y * (side-a.x) / ab.x)
+        
+        return result
+    }
     
-    result.x =  is_x ? side : (a.x + ab.x * (side-a.y) / ab.y)
-    result.y = !is_x ? side : (a.y + ab.y * (side-a.x) / ab.x)
-    
-    return result
-}
-
-foo_all :: proc (a, b: $V, bounds: Rectangle(V)) -> (ok: b32, result: V) {
-    if b.x < bounds.min.x && !(a.x < bounds.min.x) { ok = true; result = foo(a, b,  true, bounds.min.x) }
-    if b.x > bounds.max.x && !(a.x > bounds.max.x) { ok = true; result = foo(a, b,  true, bounds.max.x) }
-    if b.y < bounds.min.y && !(a.y < bounds.min.y) { ok = true; result = foo(a, b, false, bounds.min.y) }
-    if b.y > bounds.max.y && !(a.y > bounds.max.y) { ok = true; result = foo(a, b, false, bounds.max.y) }
+    if b.x < bounds.min.x && !(a.x < bounds.min.x) { ok = true; result = side(a, b,  true, bounds.min.x) }
+    if b.x > bounds.max.x && !(a.x > bounds.max.x) { ok = true; result = side(a, b,  true, bounds.max.x) }
+    if b.y < bounds.min.y && !(a.y < bounds.min.y) { ok = true; result = side(a, b, false, bounds.min.y) }
+    if b.y > bounds.max.y && !(a.y > bounds.max.y) { ok = true; result = side(a, b, false, bounds.max.y) }
     
     return ok, result
 }
@@ -330,8 +329,8 @@ end_triangulation_voronoi_cells :: proc(dt: ^Delauney_Triangulation) -> (result:
                 
                 unordered_remove(&voronoi.points, point_index)
                 
-                p_ok, p := foo_all(prev, point, bounds)
-                n_ok, n := foo_all(next, point, bounds)
+                p_ok, p := bounds_line_intersection(prev, point, bounds)
+                n_ok, n := bounds_line_intersection(next, point, bounds)
                 for it in voronoi.points do if length(it - p) < 0.01 { p_ok = false; break }
                 for it in voronoi.points do if length(it - n) < 0.01 { n_ok = false; break }
                 

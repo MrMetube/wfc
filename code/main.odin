@@ -160,8 +160,7 @@ main :: proc () {
         }
     }
     
-    
-    entropy := seed_random_series(7458)
+    entropy := seed_random_series()
     collapse: Collapse
     collapse.search_metric = .Entropy
     
@@ -587,7 +586,8 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries) {
 generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
     // @note(viktor): We get numerical instability if points are perfectly vertically or horizontally aligned
     side := round(u32, square_root(cast(f32) count))
-    entropy := seed_random_series(123456789)
+    entropy := seed_random_series()
+    
     switch generate_kind  {
       case .Shifted_Grid:
         for x in 0 ..< side {
@@ -683,7 +683,8 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
 }
 
 draw_cell :: proc (cell: Cell, color: rl.Color) {
-    @(static) buffer: [dynamic] v2 // @leak
+    @(static) buffer: [dynamic] v2
+    buffer.allocator = context.temp_allocator
     clear(&buffer)
     
     append(&buffer, world_to_screen(cell.p))
@@ -695,7 +696,8 @@ draw_cell :: proc (cell: Cell, color: rl.Color) {
     rl.DrawTriangleFan(raw_data(buffer), auto_cast len(buffer), color)
 }
 draw_cell_outline :: proc (cell: Cell, color: rl.Color) {
-    @(static) buffer: [dynamic] v2 // @leak
+    @(static) buffer: [dynamic] v2
+    buffer.allocator = context.temp_allocator
     clear(&buffer)
     
     for point in cell.points {
