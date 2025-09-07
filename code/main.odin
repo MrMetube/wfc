@@ -121,7 +121,7 @@ main :: proc () {
     mem.tracking_allocator_init(&track, context.allocator)
     defer mem.tracking_allocator_destroy(&track)
     context.allocator = mem.tracking_allocator(&track)
-
+    
     defer for _, leak in track.allocation_map {
         print("% leaked %\n", leak.location, view_memory_size(leak.size))
     }

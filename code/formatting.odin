@@ -101,10 +101,10 @@ view_magnitude :: proc (value: $T, table: [] Magnitude (T), scale, limit: int, p
                 below := table[(scale + index) - 1]
                 rest := cast(f64) before / cast(f64) below.upper_bound
                 append_temp_view(view_float(rest, precision = precision))
-                append_temp_view(view_string(magnitude.symbol))
+                append_temp_view(magnitude.symbol)
             } else {
                 append_temp_view(view_integer(value))
-                append_temp_view(view_string(magnitude.symbol))
+                append_temp_view(magnitude.symbol)
             }
             break
         }
@@ -216,26 +216,26 @@ view_time :: proc (value: time.Time) -> (result: Temp_Views) {
     begin_temp_views()
 
     append_temp_view(view_integer(cast(i64) y,   width = 4))
-    append_temp_view(view_character('-'))
+    append_temp_view('-')
     if mon < .October {
         // @note(viktor): Workaround as we do not handle width combined with .LeadingZero flag correctly
-        append_temp_view(view_character('0'))
+        append_temp_view('0')
         append_temp_view(view_integer(cast(i64) mon, width = 1))
     } else {
         append_temp_view(view_integer(cast(i64) mon, width = 2))
     }
-    append_temp_view(view_character('-'))
+    append_temp_view('-')
     append_temp_view(view_integer(cast(i64) d,   width = 2))
-    append_temp_view(view_character(' '))
+    append_temp_view(' ')
     
     append_temp_view(view_integer(cast(i64) h,   width = 2))
-    append_temp_view(view_character(':'))
+    append_temp_view(':')
     append_temp_view(view_integer(cast(i64) min, width = 2))
-    append_temp_view(view_character(':'))
+    append_temp_view(':')
     append_temp_view(view_integer(cast(i64) s,   width = 2))
-    append_temp_view(view_character('.'))
+    append_temp_view('.')
     append_temp_view(view_integer((ns),          width = 9))
-    append_temp_view(view_string(" +0000 UTC"))
+    append_temp_view(" +0000 UTC")
     
     result = end_temp_views()
     return result
@@ -243,10 +243,10 @@ view_time :: proc (value: time.Time) -> (result: Temp_Views) {
 
 ////////////////////////////////////////////////
 
-view_source_code_location :: proc(value: runtime.Source_Code_Location) -> (result: Temp_Views) {
+view_source_code_location :: proc(value: runtime.Source_Code_Location, show_procedure := false) -> (result: Temp_Views) {
     begin_temp_views()
     
-    append_temp_view(view_string(value.file_path))
+    append_temp_view(value.file_path)
             
     when ODIN_ERROR_POS_STYLE == .Default {
         open  :: '(' 
@@ -258,15 +258,19 @@ view_source_code_location :: proc(value: runtime.Source_Code_Location) -> (resul
         #panic("Unhandled ODIN_ERROR_POS_STYLE")
     }
     
-    append_temp_view(view_character(open))
+    append_temp_view(open)
     
     append_temp_view(view_integer(u64(value.line)))
     if value.column != 0 {
-        append_temp_view(view_character(':'))
+        append_temp_view(':')
         append_temp_view(view_integer(u64(value.column)))
     }
 
-    append_temp_view(view_character(close))
+    append_temp_view(close)
+    
+    if show_procedure {
+        append_temp_view(value.procedure)
+    }
     
     result = end_temp_views()
     return result

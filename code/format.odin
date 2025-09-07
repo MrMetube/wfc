@@ -5,13 +5,20 @@ package main
 import "base:intrinsics"
 import "base:runtime"
 import "core:os"
+import "core:unicode/utf8"
 import "core:fmt"
+import "core:mem"
 
 // @volatile This breaks if in the midst of a print we start another print on the same thread. we could use a cursor to know from where onwards we can use the buffer.
 ConsoleBufferSize :: #config(ConsoleBufferSize, 128 * Megabyte)
 @(thread_local) console_buffer: [ConsoleBufferSize] u8
 
 ////////////////////////////////////////////////
+
+/* 
+    Can we abstract all these writes to allocators and dynamic arrays of them?
+    Can we make a "file_allocator" that maps its memory to a file?
+ */
 
 @(printlike)
 print_to_console :: proc (format: string, args: ..any, flags: Format_Context_Flags = {}, console := os.stdout) {
@@ -54,43 +61,73 @@ View_Proc_Result :: union{ View, Temp_Views, any }
 Temp_Views :: distinct [] View
 
 View :: struct {
-    value: struct #raw_union {
-        byte:  u8,
-        word:  u16,
-        dword: u32,
-        qword: u64,
-        
-        half_float:   f16,
-        single_float: f32,
-        double_float: f64,
-        
-        bytes: []u8,
-    },
-    size: u8,
-    kind: Format_View_Kind,
-    
-    settings: bit_set[ enum {Width, Basis, Precision}],
-    // General
+    value: any,
+
     // @todo(viktor): width only makes sense for single line values of fixed size, so maybe make it exclusive with multiline
+    // @todo(viktor): extract width and pad_right_side into a special view, that wraps an any value, thereby also allowing multiline to correctly handle padding and alignment
     width:          u16,
     pad_right_side: b8,
-    // @todo(viktor): string format, escaped, (as hex)
+
+    // @todo(viktor): ??? copy over format_context_flags from context and let a format element override the context for its data
     
-    // @todo(viktor): copy over flags from context and let a format element override the context for its data
-    
-    // Numbers
+    info: union {
+        View_Integer,
+        View_Float,
+        View_Pointer,
+        
+        // @todo(viktor): View_String escaped (or as hex)?
+        
+        View_Struct,
+        View_Array,
+    }
+}
+
+View_Integer :: struct {
+    value_size_in_bytes: int,
     flags:         Format_Number_Flags,
     positive_sign: Format_Number_Sign,
     
-    // Integer
-    basis: u8,
+    base:      u8,
+    is_signed: b8,
     
-    // Float
-    precision:  u8,
-    float_kind: Format_Float_Kind,
-    /*
+    /* 
+    minimum_digits = 1;
+    padding = 48;
+    digits_per_comma = 0;
+    comma_string = "";
+    */
+}
+View_Float :: struct {
+    value_size_in_bytes: int,
+    flags:         Format_Number_Flags,
+    positive_sign: Format_Number_Sign,
     
-    // Struct
+    precision_set: b8,
+    precision:     u8,
+    kind:          Format_Float_Kind,
+    /* 
+    -1,     // precision ?
+    -1,     // ??
+    YES,    // ??
+    DECIMAL // decimal, scientific ?
+    */
+}
+View_Pointer :: struct {
+    // @todo(viktor): view_pointer is the only place where ctx.max_depth is relevant, so maybe just say, 
+    /* 
+    base: u8 = 16,
+    minimum_digits: u8 = 1,
+    padding: u8 = 48,
+    digits_per_comma: u8 = 4,
+    comma_string: string = "_",
+     */
+    // Maybe:
+    //   follow_pointers_until_depth_reaches 
+    //   or for i.e. double-linked-lists
+    //   follow_unique/unseen_pointers_until_depth_reached
+}
+View_Struct :: struct {
+    /* 
     draw_type_name: b32,
     separator_between_name_and_value: string, // " = "
     
@@ -103,8 +140,10 @@ View :: struct {
     
     indentation_width: i32, // 4
     use_newlines_if_long_form: b32,
-    
-    // Array
+     */
+}
+View_Array :: struct {
+    /* 
     array_begin_string: string, // "{"
     array_end_string:   string, // "}"
     array_separator:    string, // ", "
@@ -112,23 +151,7 @@ View :: struct {
     printing_stopped_early_string: string, // "..."
     draw_separator_after_last_element: bool, // false;
     stop_printing_after_this_many_elements: i32, // 100;
-    // @todo(viktor): multiline?
-    
-    // @todo(viktor): view_pointer is the only place where ctx.max_depth is relevant, so maybe just say, 
-    // follow_pointers_until_depth_reaches 
-    // or for i.e. double-linked-lists
-    // follow_unique/unseen_pointers_until_depth_reached
-    */
-}
-
-Format_View_Kind :: enum u8 {
-    Bytes,
-    
-    String, Character, 
-    
-    UnsignedInteger, SignedInteger, Float,
-    
-    Indent, Outdent, Linebreak,
+     */
 }
 
 Format_Number_Sign   :: enum u8 { Never, Plus, Space }
@@ -137,123 +160,89 @@ Format_Number_Flags  :: bit_set[ enum u8 { LeadingZero, PrependBaseSpecifier, Up
 Format_Context_Flags :: bit_set[ enum u8 { PrependTypes, Multiline, AppendZero }; u8 ]
 
 ////////////////////////////////////////////////
-/*
-{
-    {
-        default_format_int = {
-            formatter = {(zero-initialized Any)};
-            base = 10;
-        
-            minimum_digits = 1;
-            padding = 48;
-            digits_per_comma = 0;
-            comma_string = "";
-        };
-        
-        default_format_float = {
-            {(zero-initialized Any)}, 
-            -1, 
-            -1, 
-            YES, 
-            DECIMAL
-        };
-        
-        default_format_absolute_pointer = {
-            formatter = {(zero-initialized Any)};
-        
-            base = 16;
-            minimum_digits = 1;
-            padding = 48;
-            digits_per_comma = 4;
-            comma_string = "_";
-        };
-        
-        indentation_depth = 2;
-        log_runtime_errors = true;
-    }, 
-}
-*/
-////////////////////////////////////////////////
+
+View_Multiline_Format :: enum { Indent, Outdent, Linebreak }
 
 // @todo(viktor): this could also take an enum which is then interpreted as a float
 // @todo(viktor): this could also take complex numbers and quaternions
 view_float :: proc (
-    value: $F, 
-    width: Maybe(u16) = nil, pad_right_side: b8 = false,
+    value: any, 
+    width: u16 = 0, pad_right_side: b8 = false,
     flags: Format_Number_Flags = {}, positive_sign: Format_Number_Sign = .Never, 
-    precision: Maybe(u8) = nil, kind: Format_Float_Kind = .Shortest
-) -> (result: View) 
-where intrinsics.type_is_float(F) {
-         when F == f16 do result.value.half_float   = value
-    else when F == f32 do result.value.single_float = value
-    else when F == f64 do result.value.double_float = value
-    else do #panic("not a supported float")
+    precision: Maybe(u8) = nil, kind: Format_Float_Kind = .Shortest,
+    size := 0,
+) -> (result: View) {
+    type_info := type_info_of(value.id)
+    core_info := runtime.type_info_core(type_info)
+    _ = core_info.variant.(runtime.Type_Info_Float)
     
-    result.kind  = .Float
-    result.size = size_of(value)
+    result.value.data = value.data
+    result.value.id = core_info.id
     
-    view_set_general(&result, width, pad_right_side)
-    view_set_number(&result, flags, positive_sign)
+    result.width = width
+    result.pad_right_side = pad_right_side
+    
+    size := size != 0 ? size : type_info.size
+    info := View_Float {
+        value_size_in_bytes = size,
+        flags = flags,
+        positive_sign = positive_sign,
+        
+        kind = kind,
+    }
     
     if precision, ok := precision.?; ok {
-        result.settings += { .Precision }
-        result.precision = precision
+        info.precision_set = true
+        info.precision = precision
     }
-    result.float_kind = kind
+    
+    result.info = info
     
     return result
 }
 
 view_integer :: proc (
-    value: $I, 
-    width: Maybe(u16) = nil, pad_right_side: b8 = false,
+    value: any, 
+    width: u16 = 0, pad_right_side: b8 = false,
     flags: Format_Number_Flags = {}, positive_sign: Format_Number_Sign = .Never, 
-    basis: Maybe(u8) = nil,
-) -> (result: View) 
-where intrinsics.type_is_integer(I) {
-    result.size = size_of(value)
+    base: u8 = 10,
+    size := 0,
+) -> (result: View) {
+    type_info := type_info_of(value.id)
+    core_info := runtime.type_info_core(type_info)
+    int_info  := core_info.variant.(runtime.Type_Info_Integer)
     
-           when I == u8  { result.kind = .UnsignedInteger; result.value.byte = value
-    } else when I == u16 { result.kind = .UnsignedInteger; result.value.word = value
-    } else when I == u32 { result.kind = .UnsignedInteger; result.value.dword = value
-    } else when I == u64 { result.kind = .UnsignedInteger; result.value.qword = value
-    } else when I == i8  { result.kind = .SignedInteger; result.value.byte  = transmute(u8) value
-    } else when I == i16 { result.kind = .SignedInteger; result.value.word  = transmute(u16) value
-    } else when I == i32 { result.kind = .SignedInteger; result.value.dword = transmute(u32) value
-    } else when I == i64 { result.kind = .SignedInteger; result.value.qword = transmute(u64) value
+    result.value.data = value.data
+    result.value.id = core_info.id
     
-    } else when I == int     && size_of(int)     == 4 { result.kind = .SignedInteger;   result.value.dword = transmute(u32) value
-    } else when I == int     && size_of(int)     == 8 { result.kind = .SignedInteger;   result.value.qword = transmute(u64) value
-    } else when I == uint    && size_of(uint)    == 4 { result.kind = .UnsignedInteger; result.value.dword = transmute(u32) value
-    } else when I == uint    && size_of(uint)    == 8 { result.kind = .UnsignedInteger; result.value.qword = transmute(u64) value
-    } else when I == uintptr && size_of(uintptr) == 4 { result.kind = .UnsignedInteger; result.value.dword = transmute(u32) value
-    } else when I == uintptr && size_of(uintptr) == 8 { result.kind = .UnsignedInteger; result.value.qword = transmute(u64) value
-    } else {
-        core := runtime.type_info_core(type_info_of(I))
-        switch core.id {
-          case u8:  result = view_integer(cast(u8)  value, width, pad_right_side, flags, positive_sign, basis)
-          case u16: result = view_integer(cast(u16) value, width, pad_right_side, flags, positive_sign, basis)
-          case u32: result = view_integer(cast(u32) value, width, pad_right_side, flags, positive_sign, basis)
-          case u64: result = view_integer(cast(u64) value, width, pad_right_side, flags, positive_sign, basis)
-          case i8:  result = view_integer(cast(i8)  value, width, pad_right_side, flags, positive_sign, basis)
-          case i16: result = view_integer(cast(i16) value, width, pad_right_side, flags, positive_sign, basis)
-          case i32: result = view_integer(cast(i32) value, width, pad_right_side, flags, positive_sign, basis)
-          case i64: result = view_integer(cast(i64) value, width, pad_right_side, flags, positive_sign, basis)
-          case: unreachable()
-        }
-        return result
-    }
+    result.width = width
+    result.pad_right_side = pad_right_side
     
-    view_set_general(&result, width, pad_right_side)
-    view_set_number(&result, flags, positive_sign)
-    
-    if basis, ok := basis.?; ok {
-        result.settings += { .Basis }
-        result.basis = basis
+    size := size != 0 ? size : type_info.size
+    result.info = View_Integer {
+        base = base,
+        value_size_in_bytes = size,
+        
+        is_signed = auto_cast int_info.signed,
     }
     
     return result
 }
+
+view_pointer :: proc (
+    value: any, 
+    flags: Format_Number_Flags = {},
+    
+    base: u8 = 16,
+    minimum_digits: u8 = 1,
+    padding: u8 = 48,
+    digits_per_comma: u8 = 4,
+    comma_string: string = "_",
+) -> (result: View_Pointer) {
+    unimplemented()
+}
+
+////////////////////////////////////////////////
 
 view_bin :: proc (
     value: $I, 
@@ -292,25 +281,6 @@ view_hex :: proc (
 }
 
 ////////////////////////////////////////////////
-
-view_character :: proc(value: u8) -> (result: View) {
-    result = {
-        kind  = .Character,
-        value = { byte = value },
-    }
-    return result
-}
-
-// @todo(viktor): string view options
-view_string :: proc(value: string) -> (result: View) {
-    result = {
-        kind  = .String, 
-        value = { bytes = transmute([]u8) value },
-    }
-    return result
-}
-
-////////////////////////////////////////////////
 // @todo(viktor): implement all cases
 // @todo(viktor): use temp views here where needed
 
@@ -334,30 +304,6 @@ view_array :: proc (value: ^$T, count: $N) -> (result: []T) {
     return (cast([^]T) value)[:count]
 }
 
-// - `table/columns(expr, ...)`: Expresses that `expr` should be expanded normally, but interprets all post-`expr` arguments as expressions which should be used to form cells for rows which are generated by this expression's expansions. This replaces the normal cells which are generated for an expansion in a Watch table.
-view_table :: view_columns
-view_columns :: proc (value: $T) { unimplemented() }
-
-////////////////////////////////////////////////
-
-view_set_data :: proc(view: ^View, value: $T, kind: Format_View_Kind) {
-    view.data = value
-    view.kind = kind
-}
-
-view_set_number :: proc (view: ^View, flags: Format_Number_Flags = {}, positive_sign: Format_Number_Sign = .Never) {
-    view.flags = flags
-    view.positive_sign = positive_sign
-}
-
-view_set_general :: proc (view: ^View, width: Maybe(u16) = nil, pad_right_side: b8 = false) {
-    if width, ok := width.?; ok {
-        view.settings += { .Width }
-        view.width = width
-    }
-    view.pad_right_side = pad_right_side
-}
-
 ////////////////////////////////////////////////
 
 Format_Context :: struct {
@@ -367,13 +313,18 @@ Format_Context :: struct {
     indentation: string,
     indentation_depth: u32,
     flags: Format_Context_Flags,
-}
+    
+    /* 
+    indentation_depth = 2;
+    log_runtime_errors = true;
+    */
+} 
 
 ////////////////////////////////////////////////
 
-// @todo(viktor): can we avoid copying twice/thrice, once into temp and once to the print buffer itself and once into the target(console or allocated buffer)? Can we write directly into the final buffer?
 @(private="file") temp_buffer:            [1024] u8
 
+temp_view_allocator: mem.Allocator
 @(private="file") temp_view_buffer:       [1024] View
 @(private="file") temp_view_inside_block: b32
 @(private="file") temp_view_start_index:  u32
@@ -385,11 +336,34 @@ begin_temp_views :: proc (width: Maybe(u16) = nil) {
     temp_view_inside_block = true
     // @incomplete what about width for TempViews, handle in format_string
     temp_view_start_index = temp_view_next_index
+    
+    if temp_view_allocator.procedure == nil {
+        // @todo(viktor): find a better place for this
+        arena  := new(mem.Arena) // Sigh..
+        buffer := make([] u8, 64*4096)
+        mem.arena_init(arena, buffer)
+        temp_view_allocator = mem.arena_allocator(arena)
+        assert(temp_view_allocator.procedure != nil)
+    }
 }
 
-append_temp_view :: proc (view: View) {
+append_temp_view :: proc (value: any) {
     assert(temp_view_inside_block)
-
+    
+    view: View
+    switch data in value {
+      case View: view = data
+      case:      view = { value = data }
+    }
+    
+    // @note(viktor): Sadly we cannot return pointers to stack variables from a view_* proc therefore we need to make a copy of the value
+    info := type_info_of(view.value.id)
+    
+    size := info.size
+    copied := make([] u8, size, temp_view_allocator)
+    copy(copied, slice_from_parts_cast(u8, view.value.data, size))
+    view.value.data = raw_data(copied)
+    
     temp_view_buffer[temp_view_next_index] = view
     temp_view_next_index += 1
     assert(temp_view_next_index < len(temp_view_buffer))
@@ -430,7 +404,7 @@ format_string :: proc (buffer: []u8, format: string, args: ..any, flags := Forma
         if format[index] == '%' {
             part := format[start_of_text:index]
             if part != "" {
-                format_view(&ctx, view_string(part))
+                format_any(&ctx, part)
             }
             start_of_text = index+1
             
@@ -442,97 +416,24 @@ format_string :: proc (buffer: []u8, format: string, args: ..any, flags := Forma
                 arg_index += 1
                 
                 // @incomplete Would be ever want to display a raw View? if so put in a flag to make it use the normal path
-                switch format in arg {
-                  case Temp_Views: for view in format do format_view(&ctx, view)
-                  case View:      format_view(&ctx, format)
-                  case:           format_any(&ctx, arg)
-                }
+                format_any(&ctx, arg)
             }
         }
     }
     
     end := format[start_of_text:]
-    format_view(&ctx, view_string(end))
+    format_any(&ctx, end)
     
     assert(arg_index == auto_cast len(args))
     
     if .AppendZero in flags {
-        format_view(&ctx, view_character(0))
+        format_any(&ctx, rune(0))
     }
     
     temp_view_next_index = 0
+    // Sigh...
+    free_all(temp_view_allocator)
     return to_string(ctx.dest)
-}
-
-format_view :: proc (ctx: ^Format_Context, view: View) {
-    view := view
-    temp := String_Builder { data = temp_buffer[:] }
-    
-    switch view.kind {
-      case .Indent:
-        assert(.Multiline in ctx.flags)
-        ctx.indentation_depth += 1
-        
-      case .Outdent:
-        assert(.Multiline in ctx.flags)
-        ctx.indentation_depth -= 1
-        
-      case .Linebreak:
-        assert(.Multiline in ctx.flags)
-        append(&ctx.dest, "\n")
-        for _ in 0..<ctx.indentation_depth do append(&ctx.dest, ctx.indentation)
-        
-        
-      case .Bytes:
-        unimplemented()
-        
-      case .String:    append(&temp, view.value.bytes)
-      case .Character: append(&temp, view.value.byte)
-        
-      case .UnsignedInteger:
-        value: u64 = ---
-        switch view.size {
-          case 1: value = cast(u64) view.value.byte
-          case 2: value = cast(u64) view.value.word
-          case 4: value = cast(u64) view.value.dword
-          case 8: value =           view.value.qword
-          case: unreachable()
-        }
-        format_unsigned_integer(&temp, value, &view)
-        
-      case .SignedInteger:
-        value: i64 = ---
-        switch view.size {
-          case 1: value = cast(i64) (cast(^i8)  &view.value.byte)^
-          case 2: value = cast(i64) (cast(^i16) &view.value.word)^
-          case 4: value = cast(i64) (cast(^i32) &view.value.dword)^
-          case 8: value =           (cast(^i64) &view.value.qword)^
-          case: unreachable()
-        }
-        format_signed_integer(&temp, value, &view)
-        
-      case .Float:
-        // @todo(viktor): endianess relevant?
-        // This is wrong when we use the format_integer subroutine view.flags += {.LeadingZero}
-        switch view.size {
-          case 2: format_float_with_ryu(&temp, view.value.half_float,   &view)
-          case 4: format_float_with_ryu(&temp, view.value.single_float, &view)
-          case 8: format_float_with_ryu(&temp, view.value.double_float, &view)
-          case: unreachable()
-        }
-        // @todo(viktor): 
-        // NaN Inf+- 
-        // base specifier
-        // scientific and max precision
-        // as hexadecimal 0h
-    }
-    
-    padding := max(0, cast(i32) view.width - cast(i32) temp.count)
-    if       !view.pad_right_side && view.width != 0 do for _ in 0..<padding do append(&ctx.dest, ' ')
-    defer if  view.pad_right_side && view.width != 0 do for _ in 0..<padding do append(&ctx.dest, ' ')
-    
-    // @todo(viktor): Can we avoid this copy?
-    append(&ctx.dest, to_string(temp))
 }
 
 ////////////////////////////////////////////////
@@ -540,175 +441,220 @@ format_view :: proc (ctx: ^Format_Context, view: View) {
 format_any :: proc (ctx: ^Format_Context, arg: any) {
     if ctx.max_depth <= 0 do return
     
+    // @todo(viktor): write this back into ctx.dest
+    temp := String_Builder { data = temp_buffer[:] }
+    defer {
+        // @todo(viktor): Can we avoid this copy? Only if we knew the width of the printed before hand.
+        // padding := max(0, cast(i32) view.width - cast(i32) temp.count)
+        // if       !view.pad_right_side && view.width != 0 do for _ in 0..<padding do append(&ctx.dest, ' ')
+        // defer if  view.pad_right_side && view.width != 0 do for _ in 0..<padding do append(&ctx.dest, ' ')
+        
+        append(&ctx.dest, to_string(temp))
+    }
+    
     switch value in arg {
-      case b8:   format_view(ctx, view_string(value ? "true" : "false"))
-      case b16:  format_view(ctx, view_string(value ? "true" : "false"))
-      case b32:  format_view(ctx, view_string(value ? "true" : "false"))
-      case b64:  format_view(ctx, view_string(value ? "true" : "false"))
-      case bool: format_view(ctx, view_string(value ? "true" : "false"))
-      
-      case string:  format_view(ctx, view_string(value))
-      case cstring: format_view(ctx, view_string(string(value)))
-      
-      case f16: format_view(ctx, view_float(value))
-      case f32: format_view(ctx, view_float(value))
-      case f64: format_view(ctx, view_float(value))
-      
-      // @todo(viktor): rune
-      case u8:      format_view(ctx, view_integer(value))
-      case u16:     format_view(ctx, view_integer(value))
-      case u32:     format_view(ctx, view_integer(value))
-      case u64:     format_view(ctx, view_integer(value))
-      case uint:    format_view(ctx, view_integer(value))
-      case uintptr: format_view(ctx, view_integer(value))
-      
-      case i8:  format_view(ctx, view_integer(value))
-      case i16: format_view(ctx, view_integer(value))
-      case i32: format_view(ctx, view_integer(value))
-      case i64: format_view(ctx, view_integer(value))
-      case int: format_view(ctx, view_integer(value))
-      
       case any:    format_any(ctx, value)
+      case typeid: format_type(ctx, type_info_of(arg.id))
+      
       case nil:    format_pointer(ctx, nil)
       case rawptr: format_pointer(ctx, value)
       
+      case b8:   append(&temp, value ? "true" : "false")
+      case b16:  append(&temp, value ? "true" : "false")
+      case b32:  append(&temp, value ? "true" : "false")
+      case b64:  append(&temp, value ? "true" : "false")
+      case bool: append(&temp, value ? "true" : "false")
+      
+      case rune:
+        // @todo(viktor): maybe do this myself
+        buf, count := utf8.encode_rune(value)
+        bytes := buf[:count]
+        append(&temp, bytes)
+        
+      case string:  append(&temp, value)
+      case cstring: append(&temp, string(value))
+       
+      case u8:      draw_unsigned_integer(&temp, view_integer(value))
+      case u16:     draw_unsigned_integer(&temp, view_integer(value))
+      case u32:     draw_unsigned_integer(&temp, view_integer(value))
+      case u64:     draw_unsigned_integer(&temp, view_integer(value))
+      case uint:    draw_unsigned_integer(&temp, view_integer(value))
+      case uintptr: draw_unsigned_integer(&temp, view_integer(value))
+      case u128:    unimplemented() // @incomplete
+        
+      case i8:   draw_signed_integer(&temp, view_integer(value))
+      case i16:  draw_signed_integer(&temp, view_integer(value))
+      case i32:  draw_signed_integer(&temp, view_integer(value))
+      case i64:  draw_signed_integer(&temp, view_integer(value))
+      case int:  draw_signed_integer(&temp, view_integer(value))
+      case i128: unimplemented() // @incomplete
+        
+      // @todo(viktor): endianess
+      case f16: format_float(&temp, view_float(value, size = size_of(f16)))
+      case f32: format_float(&temp, view_float(value, size = size_of(f32)))
+      case f64: format_float(&temp, view_float(value, size = size_of(f64)))
+      
+      case complex32: 
+        format_any(ctx, real(value))
+        format_any(ctx, view_float(imag(value), positive_sign = .Plus))
+        format_any(ctx, 'i')
+      case complex64: 
+        format_any(ctx, real(value))
+        format_any(ctx, view_float(imag(value), positive_sign = .Plus))
+        format_any(ctx, 'i')
+      case complex128:
+        format_any(ctx, real(value))
+        format_any(ctx, view_float(imag(value), positive_sign = .Plus))
+        format_any(ctx, 'i')
+      
+      case quaternion64: 
+        format_any(ctx, real(value))
+        format_any(ctx, view_float(imag(value), positive_sign = .Plus))
+        format_any(ctx, 'i')
+        format_any(ctx, view_float(jmag(value), positive_sign = .Plus))
+        format_any(ctx, 'j')
+        format_any(ctx, view_float(kmag(value), positive_sign = .Plus))
+        format_any(ctx, 'k')
+      case quaternion128: 
+        format_any(ctx, real(value))
+        format_any(ctx, view_float(imag(value), positive_sign = .Plus))
+        format_any(ctx, 'i')
+        format_any(ctx, view_float(jmag(value), positive_sign = .Plus))
+        format_any(ctx, 'j')
+        format_any(ctx, view_float(kmag(value), positive_sign = .Plus))
+        format_any(ctx, 'k')
+      case quaternion256:
+        format_any(ctx, real(value))
+        format_any(ctx, view_float(imag(value), positive_sign = .Plus))
+        format_any(ctx, 'i')
+        format_any(ctx, view_float(jmag(value), positive_sign = .Plus))
+        format_any(ctx, 'j')
+        format_any(ctx, view_float(kmag(value), positive_sign = .Plus))
+        format_any(ctx, 'k')
+      
+      case Temp_Views: 
+        for view in value do format_any(ctx, view)
+      
+      case View:
+        switch info in value.info {
+          case:
+            // @todo(viktor): We are ignoring the other fields for now
+            format_any(ctx, value.value)
+          case View_Integer:
+            if info.is_signed do draw_signed_integer(&temp,   value)
+            else do              draw_unsigned_integer(&temp, value)
+          
+          case View_Float:
+            format_float(&temp, value)
+            
+          case View_Array, View_Struct, View_Pointer:
+            unimplemented()
+        }
+        /* case .Indent:
+            assert(.Multiline in ctx.flags)
+            ctx.indentation_depth += 1
+            
+        case .Outdent:
+            assert(.Multiline in ctx.flags)
+            ctx.indentation_depth -= 1
+            
+        case .Linebreak:
+            assert(.Multiline in ctx.flags)
+            append(&ctx.dest, "\n")
+            for _ in 0..<ctx.indentation_depth do append(&ctx.dest, ctx.indentation) 
+        */
+      
+        
       case:
-        raw := transmute(RawAny) value
-        type_info := type_info_of(raw.id)
+        type_info := type_info_of(value.id)
         
         switch variant in type_info.variant {
-          case runtime.Type_Info_Any,
-               runtime.Type_Info_Boolean, 
-               runtime.Type_Info_Integer, 
-               runtime.Type_Info_String,
-               runtime.Type_Info_Float:
-            unreachable()
+          case  runtime.Type_Info_Any,
+                runtime.Type_Info_Type_Id,
+                
+                runtime.Type_Info_Rune,
+                runtime.Type_Info_String,
+                
+                runtime.Type_Info_Boolean, 
+                runtime.Type_Info_Integer, 
+                runtime.Type_Info_Float,
+               
+                runtime.Type_Info_Complex, 
+                runtime.Type_Info_Quaternion: unreachable()
             
           case runtime.Type_Info_Pointer:
-            data := (cast(^pmm) raw.data)^
+            data := (cast(^pmm) value.data)^
             format_pointer(ctx, data, variant.elem)
             
           case runtime.Type_Info_Multi_Pointer:
-            data := (cast(^pmm) raw.data)^
-            format_optional_type(ctx, raw.id)
+            data := (cast(^pmm) value.data)^
+            format_optional_type(ctx, value.id)
             format_pointer(ctx, data, variant.elem)
           
           case runtime.Type_Info_Named:
             // @important @todo(viktor): If the struct is an alias like v4 :: [4]f32 we currently print both types. but we should only print the alias
-            if default, ok := Default_Views[raw.id]; ok {
-                // @copypasta from format_string loop
-                switch format in default(value.data) {
-                  case Temp_Views: for view in format do format_view(ctx, view)
-                  case View:      format_view(ctx, format)
-                  case any:       format_any(ctx, format)
-                }
+            if default, ok := Default_Views[value.id]; ok {
+                format_any(ctx, default(value.data))
             } else {
-                format_view(ctx, view_string(variant.name))
-                format_view(ctx, view_character(' '))
-                format_any(ctx, any{data = raw.data, id = variant.base.id})
+                append(&temp, variant.name)
+                format_any(ctx, ' ')
+                format_any(ctx, any{data = value.data, id = variant.base.id})
             }
             
           case runtime.Type_Info_Struct:
-            format_struct(ctx, raw, variant)
+            draw_struct(ctx, transmute(RawAny) value, variant)
             
           case runtime.Type_Info_Union:
-            format_union(ctx, raw.id, raw.data, variant)
+            format_union(ctx, value.id, value.data, variant)
             
           case runtime.Type_Info_Dynamic_Array:
-            slice := cast(^RawSlice) raw.data
-            raw_slice := RawAny{slice.data, raw.id}
-            format_array(ctx, raw_slice, variant.elem, slice.len)
+            slice := cast(^RawSlice) value.data
+            raw_slice := RawAny{slice.data, value.id}
+            draw_array(ctx, raw_slice, variant.elem, slice.len)
             
           case runtime.Type_Info_Slice:
-            slice := cast(^RawSlice) raw.data
-            raw_slice := RawAny{slice.data, raw.id}
-            format_array(ctx, raw_slice, variant.elem, slice.len)
+            slice := cast(^RawSlice) value.data
+            raw_slice := RawAny{slice.data, value.id}
+            draw_array(ctx, raw_slice, variant.elem, slice.len)
             
           case runtime.Type_Info_Array:
-            format_array(ctx, raw, variant.elem, variant.count)
-            
-          case runtime.Type_Info_Complex:
-            format_optional_type(ctx, raw.id)
-            switch complex in value {
-              case complex32: 
-                format_view(ctx, view_float(real(complex)))
-                format_view(ctx, view_float(imag(complex), positive_sign = .Plus))
-                format_view(ctx, view_character('i')) 
-              case complex64: 
-                format_view(ctx, view_float(real(complex)))
-                format_view(ctx, view_float(imag(complex), positive_sign = .Plus))
-                format_view(ctx, view_character('i')) 
-              case complex128:
-                format_view(ctx, view_float(real(complex)))
-                format_view(ctx, view_float(imag(complex), positive_sign = .Plus))
-                format_view(ctx, view_character('i')) 
-            }
-            
-          case runtime.Type_Info_Quaternion:
-            format_optional_type(ctx, raw.id)
-            switch quaternion in value {
-                case quaternion64: 
-                  format_view(ctx, view_float(real(quaternion)))
-                  format_view(ctx, view_float(imag(quaternion), positive_sign = .Plus))
-                  format_view(ctx, view_character('i')) 
-                  format_view(ctx, view_float(jmag(quaternion), positive_sign = .Plus))
-                  format_view(ctx, view_character('j')) 
-                  format_view(ctx, view_float(kmag(quaternion), positive_sign = .Plus))
-                  format_view(ctx, view_character('k')) 
-                case quaternion128: 
-                  format_view(ctx, view_float(real(quaternion)))
-                  format_view(ctx, view_float(imag(quaternion), positive_sign = .Plus))
-                  format_view(ctx, view_character('i')) 
-                  format_view(ctx, view_float(jmag(quaternion), positive_sign = .Plus))
-                  format_view(ctx, view_character('j')) 
-                  format_view(ctx, view_float(kmag(quaternion), positive_sign = .Plus))
-                  format_view(ctx, view_character('k')) 
-                case quaternion256:
-                  format_view(ctx, view_float(real(quaternion)))
-                  format_view(ctx, view_float(imag(quaternion), positive_sign = .Plus))
-                  format_view(ctx, view_character('i')) 
-                  format_view(ctx, view_float(jmag(quaternion), positive_sign = .Plus))
-                  format_view(ctx, view_character('j')) 
-                  format_view(ctx, view_float(kmag(quaternion), positive_sign = .Plus))
-                  format_view(ctx, view_character('k')) 
-              }
+            draw_array(ctx, transmute(RawAny) value, variant.elem, variant.count)
             
           case runtime.Type_Info_Matrix:
-            format_matrix(ctx, raw.id, raw.data, variant.elem, variant.column_count, variant.row_count, variant.layout == .Row_Major)
-
-          case runtime.Type_Info_Type_Id:
-            format_type(ctx, type_info)
-            
-          case runtime.Type_Info_Rune:
-            unimplemented("Unimplemented: rune")
-            
+            format_matrix(ctx, value.id, value.data, variant.elem, variant.column_count, variant.row_count, variant.layout == .Row_Major)
+          
+          ////////////////////////////////////////////////
+          ////////////////////////////////////////////////
+          ////////////////////////////////////////////////
+          // unimplemented fallback to fmt
           case runtime.Type_Info_Enum:
-            format_view(ctx, view_string(fmt.tprint(value)))
+            append(&temp, fmt.tprint(value))
+            
           /* 
             . enumerated array   [key0 = elem0, key1 = elem1, key2 = elem2, ...]
             . maps:              map[key0 = value0, key1 = value1, ...]
             . bit sets           {key0 = elem0, key1 = elem1, ...}
            */  
           case runtime.Type_Info_Enumerated_Array:
-            format_view(ctx, view_string(fmt.tprint(value)))
+            append(&temp, fmt.tprint(value))
           case runtime.Type_Info_Bit_Set:
-            format_view(ctx, view_string(fmt.tprint(value)))
+            append(&temp, fmt.tprint(value))
           case runtime.Type_Info_Bit_Field:
-            format_view(ctx, view_string(fmt.tprint(value)))
+            append(&temp, fmt.tprint(value))
           case runtime.Type_Info_Map:
-            format_view(ctx, view_string(fmt.tprint(value)))
+            append(&temp, fmt.tprint(value))
             
           case runtime.Type_Info_Parameters:
-            format_view(ctx, view_string(fmt.tprint(value)))
+            append(&temp, fmt.tprint(value))
           case runtime.Type_Info_Procedure:
-            format_view(ctx, view_string(fmt.tprint(value)))
+            append(&temp, fmt.tprint(value))
           case runtime.Type_Info_Simd_Vector:
-            format_view(ctx, view_string(fmt.tprint(value)))
+            append(&temp, fmt.tprint(value))
           case runtime.Type_Info_Soa_Pointer:
-            format_view(ctx, view_string(fmt.tprint(value)))
+            append(&temp, fmt.tprint(value))
           
           case: 
-            format_view(ctx, view_string(fmt.tprint(value)))
+            append(&temp, fmt.tprint(value))
             unimplemented("This value is not handled yet")
         }
     }
@@ -718,11 +664,11 @@ format_any :: proc (ctx: ^Format_Context, arg: any) {
 ////////////////////////////////////////////////
 ////////////////////////////////////////////////
 
-format_multiline_formatting :: proc (ctx: ^Format_Context, kind: Format_View_Kind) {
+format_multiline_formatting :: proc (ctx: ^Format_Context, kind: View_Multiline_Format) {
     if ctx.max_depth <= 0 do return
     
     if .Multiline in ctx.flags {
-        format_view(ctx, View { kind = kind })
+        format_any(ctx, kind)
     }
 }
 
@@ -731,7 +677,7 @@ format_optional_type :: proc (ctx: ^Format_Context, type: typeid) {
     
     if .PrependTypes in ctx.flags {
         format_type(ctx, type_info_of(type))
-        format_view(ctx, view_character(' ') )
+        format_any(ctx, ' ')
     }
 }
 
@@ -739,25 +685,39 @@ format_optional_type :: proc (ctx: ^Format_Context, type: typeid) {
 ////////////////////////////////////////////////
 ////////////////////////////////////////////////
 
-DigitsLowercase := "0123456789abcdefghijklmnopqrstuvwxyz"
-DigitsUppercase := "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+@(private="file") DigitsLowercase := "0123456789abcdefghijklmnopqrstuvwxyz"
+@(private="file") DigitsUppercase := "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-format_float_with_ryu :: proc (dest: ^String_Builder, float: $F, view: ^View) {
+// @todo(viktor): 
+// This is wrong when we use the format_integer subroutine view.flags += {.LeadingZero}
+// as hexadecimal 0h (endianess relevant?)
+format_float :: format_float_with_ryu when true else format_float_badly
+format_float_with_ryu :: proc (dest: ^String_Builder, view: View) {
     precision: u32 = 6
-    if .Precision in view.settings do precision = cast(u32) view.precision
+    info := view.info.(View_Float)
+    if info.precision_set do precision = cast(u32) info.precision
     
     buffer := rest(dest^)
-    when size_of(F) == 8 {
+    size := info.value_size_in_bytes
+    
+    if size == 8 {
+        float := view.value.(f64)
         result := d2fixed_buffered(float, precision, buffer)
         dest.count += auto_cast len(result)
-    } else when size_of(F) == 4 {
-        result := f2s_buffered(float, buffer)
+    } else if size == 4 {
+        float := view.value.(f32)
+        when false {
+            result := f2s_buffered(float, buffer)
+        } else {
+            result := d2fixed_buffered(cast(f64) float, precision, buffer)
+        }
         dest.count += auto_cast len(result)
-    } else when size_of(F) == 2 {
+    } else if size == 2 {
+        float := view.value.(f16)
         unimplemented()
-    } else do #panic("convert the general algorithm from ryu you laze bum")
+    } else do panic("convert the general algorithm from ryu you laze bum")
     
-    if .Uppercase in view.flags {
+    if .Uppercase in info.flags {
         for r, i in string(buffer) {
             if r >= 'a' && r <= 'z' {
                 buffer[i] = cast(u8) ('A' + (r-'a'))
@@ -765,57 +725,82 @@ format_float_with_ryu :: proc (dest: ^String_Builder, float: $F, view: ^View) {
         }
     }
 }
-
-format_float_badly :: proc (dest: ^String_Builder, float: $F, view: ^View) {
-    fraction, integer := fractional(float)
-    
-    format_signed_integer(dest, cast(i64) integer, view)
-    
-    precision: u8 = 6
-    if .Precision in view.settings do precision = view.precision
-    
-    if fraction != 0 && precision != 0 {
-        append(dest, '.')
+format_float_badly :: proc (dest: ^String_Builder, view: View) {
+    when false {
+        fraction, integer := fractional(float)
         
-        digits := .Uppercase in view.flags ? DigitsUppercase : DigitsLowercase
+        draw_signed_integer(dest, cast(i64) integer, view)
         
-        val: i32
-        for _ in 0..<precision {
-            fraction, val = fractional(fraction * 10)
-            if val >= 0 && val < auto_cast len(digits) {
-                append(dest, digits[val])
-            } else { /* ??? */ }
+        precision: u8 = 6
+        if .Precision in view.settings do precision = view.precision
+        
+        if fraction != 0 && precision != 0 {
+            append(dest, '.')
+            
+            digits := .Uppercase in view.flags ? DigitsUppercase : DigitsLowercase
+            
+            val: i32
+            for _ in 0..<precision {
+                fraction, val = fractional(fraction * 10)
+                if val >= 0 && val < auto_cast len(digits) {
+                    append(dest, digits[val])
+                } else { /* ??? */ }
+            }
         }
     }
+    unimplemented()
 }
 
-format_signed_integer :: proc (dest: ^String_Builder, integer: i64, view: ^View) {
+draw_signed_integer :: proc (dest: ^String_Builder, view: View) {
+    integer: i64
+    info := view.info.(View_Integer)
+    
+    switch value in view.value {
+      case i8:   integer = cast(i64) value; info.value_size_in_bytes = size_of(i8)
+      case i16:  integer = cast(i64) value; info.value_size_in_bytes = size_of(i16)
+      case i32:  integer = cast(i64) value; info.value_size_in_bytes = size_of(i32)
+      case i64:  integer =           value; info.value_size_in_bytes = size_of(i64)
+      case int:  integer = cast(i64) value; info.value_size_in_bytes = size_of(int)
+      case: unreachable()
+    }
+    
     if integer < 0 {
         append(dest, '-')
-    } else if view.positive_sign == .Plus {
+    } else if info.positive_sign == .Plus {
         append(dest, '+')
-    } else if view.positive_sign == .Space {
+    } else if info.positive_sign == .Space {
         append(dest, ' ')
     } else {
         // @note(viktor): nothing
     }
     
-    format_unsigned_integer(dest, cast(u64) abs(integer), view)
+    view := view
+    view.value = cast(u64) abs(integer)
+    draw_unsigned_integer(dest, view)
 }
 
-// @todo(viktor): if we specify a width and .LeadingZero, we should limit those zeros to the width i guess
-// example: integer = 2 width = 2 -> "02" and not "00000002"
-format_unsigned_integer :: proc (dest: ^String_Builder, integer: u64, view: ^View) {
-    digits := .Uppercase in view.flags ? DigitsUppercase : DigitsLowercase
+draw_unsigned_integer :: proc (dest: ^String_Builder, view: View) {
+    // @todo(viktor): if we specify a width and .LeadingZero, we should limit those zeros to the width i guess. example: integer = 2 width = 2 -> "02" and not "00000002"
+    integer: u64
+    info := view.info.(View_Integer)
+    switch value in view.value {
+      case u8:      integer = cast(u64) value; info.value_size_in_bytes = size_of(u8)
+      case u16:     integer = cast(u64) value; info.value_size_in_bytes = size_of(u16)
+      case u32:     integer = cast(u64) value; info.value_size_in_bytes = size_of(u32)
+      case u64:     integer =           value; info.value_size_in_bytes = size_of(u64)
+      case uint:    integer = cast(u64) value; info.value_size_in_bytes = size_of(uint)
+      case uintptr: integer = cast(u64) value; info.value_size_in_bytes = size_of(uintptr)
+      case: unreachable()
+    }
     
-    basis: u64 = 10
-    if .Basis in view.settings do basis = cast(u64) view.basis
-    assert(view.basis < auto_cast len(digits))
+    digits := .Uppercase in info.flags ? DigitsUppercase : DigitsLowercase
     
-    integer := integer
+    base := cast(u64) info.base
+    assert(info.base < auto_cast len(digits))
     
-    if .PrependBaseSpecifier in view.flags {
-        switch basis {
+    if .PrependBaseSpecifier in info.flags {
+        // @todo(viktor): should this also be uppercased?
+        switch base {
           case 2:  append(dest, "0b")
           case 8:  append(dest, "0o")
           case 12: append(dest, "0z")
@@ -824,21 +809,22 @@ format_unsigned_integer :: proc (dest: ^String_Builder, integer: u64, view: ^Vie
         }
     }
     
-    show_leading_zeros := .LeadingZero in view.flags
+    show_leading_zeros := .LeadingZero in info.flags
     max_integer: u64
     if show_leading_zeros {
-        for _ in 0..<view.size do max_integer = (max_integer<<8) | 0xFF
+        size := info.value_size_in_bytes
+        for _ in 0..<size do max_integer = (max_integer<<8) | 0xFF
     } else {
         max_integer = integer
     }
     
     power: u64 = 1
     for power < max_integer {
-        power *= basis
-        if max_integer / power < basis do break
+        power *= base
+        if max_integer / power < base do break
     }
     
-    for ; power > 0; power /= basis {
+    for ; power > 0; power /= base {
         div := integer / power
         integer -= div * power
         
@@ -860,15 +846,15 @@ format_pointer :: proc (ctx: ^Format_Context, data: pmm, target_type: ^runtime.T
     if ctx.max_depth <= 0 do return
     
     if target_type != nil {
-        format_view(ctx, view_character('&'))
+        format_any(ctx, '&')
     }
     
     if target_type == nil || data == nil {
         value := data
         if value == nil {
-            format_view(ctx, view_string("nil") )
+            format_any(ctx, "nil")
         } else {
-            format_view(ctx, view_integer(cast(umm) value, basis = 16, flags = { .PrependBaseSpecifier, .Uppercase }))
+            format_any(ctx, view_integer(cast(umm) value, base = 16, flags = { .PrependBaseSpecifier, .Uppercase }))
         }
     } else {
         pointed_any := any { data, target_type.id }
@@ -876,22 +862,22 @@ format_pointer :: proc (ctx: ^Format_Context, data: pmm, target_type: ^runtime.T
     }
 }
 
-format_array :: proc (ctx: ^Format_Context, raw: RawAny, type: ^runtime.Type_Info, count: int) {
+draw_array :: proc (ctx: ^Format_Context, raw: RawAny, type: ^runtime.Type_Info, count: int) {
     if ctx.max_depth <= 0 do return
     
     format_optional_type(ctx, raw.id)
     
-    format_view(ctx, view_character('{'))
+    format_any(ctx, '{')
     format_multiline_formatting(ctx, .Indent)
     
     defer {
         format_multiline_formatting(ctx, .Outdent)
         format_multiline_formatting(ctx, .Linebreak)
-        format_view(ctx, view_character('}'))
+        format_any(ctx, '}')
     }
     
     for index in 0..< count {
-        if index != 0 do format_view(ctx, view_string(", "))
+        if index != 0 do format_any(ctx, ", ")
         format_multiline_formatting(ctx, .Linebreak)
         
         offset := cast(umm) (index * type.size)
@@ -902,28 +888,28 @@ format_array :: proc (ctx: ^Format_Context, raw: RawAny, type: ^runtime.Type_Inf
     }
 }
 
-format_struct :: proc (ctx: ^Format_Context, value: RawAny, variant: runtime.Type_Info_Struct) {
+draw_struct :: proc (ctx: ^Format_Context, value: RawAny, variant: runtime.Type_Info_Struct) {
     if ctx.max_depth <= 0 do return
     ctx.max_depth -= 1
     defer ctx.max_depth += 1
         
     format_optional_type(ctx, value.id)
     
-    format_view(ctx, view_character('{'))
+    format_any(ctx, '{')
     format_multiline_formatting(ctx, .Indent)
     
     defer {
         format_multiline_formatting(ctx, .Outdent)
         format_multiline_formatting(ctx, .Linebreak)
-        format_view(ctx, view_character('}'))
+        format_any(ctx, '}')
     }
     
     for index in 0..< variant.field_count {
-        if index != 0 do format_view(ctx, view_string(", "))
+        if index != 0 do format_any(ctx, ", ")
         format_multiline_formatting(ctx, .Linebreak)
         
-        format_view(ctx, view_string(variant.names[index]))
-        format_view(ctx, view_string(" = "))
+        format_any(ctx, variant.names[index])
+        format_any(ctx, " = ")
         field_offset := variant.offsets[index]
         field_type   := variant.types[index]
         
@@ -955,7 +941,7 @@ format_union :: proc (ctx: ^Format_Context, union_type: typeid, data: pmm, varia
     format_optional_type(ctx, union_type)
     
     if data == nil || !variant.no_nil && tag == 0 {
-        format_view(ctx, view_string("nil"))
+        format_any(ctx, "nil")
     } else {
         id := variant.variants[variant.no_nil ? tag : (tag-1)].id
         field := any{ data, id }
@@ -970,13 +956,13 @@ format_matrix :: proc (ctx: ^Format_Context, matrix_type: typeid, data: pmm, typ
     
     format_optional_type(ctx, matrix_type)
     
-    format_view(ctx, view_character('{'))
+    format_any(ctx, '{')
     format_multiline_formatting(ctx, .Indent)
     
     defer {
         format_multiline_formatting(ctx, .Outdent)
         format_multiline_formatting(ctx, .Linebreak)
-        format_view(ctx, view_character('}'))
+        format_any(ctx, '}')
     }
     
     step   := cast(umm) type.size
@@ -996,11 +982,11 @@ format_matrix :: proc (ctx: ^Format_Context, matrix_type: typeid, data: pmm, typ
         for min in 0..<minor {
             defer elem_at += step
             
-            if min != 0 do format_view(ctx, view_string(", "))
+            if min != 0 do format_any(ctx, ", ")
             format_any(ctx, any{cast(pmm) elem_at, type.id})
         }
         
-        format_view(ctx, view_string(", "))
+        format_any(ctx, ", ")
     }
     assert(at == end)
 }
@@ -1014,231 +1000,231 @@ format_type :: proc (ctx: ^Format_Context, type_info: ^runtime.Type_Info) {
     format_endianess :: proc (ctx: ^Format_Context, kind: runtime.Platform_Endianness) {
         switch kind {
           case .Platform: /* nothing */
-          case .Little:   format_view(ctx, view_string("le"))
-          case .Big:      format_view(ctx, view_string("be"))
+          case .Little:   format_any(ctx, "le")
+          case .Big:      format_any(ctx, "be")
         }
     }
     
     if type_info == nil {
-        format_view(ctx, view_string("nil"))
+        format_any(ctx, "nil")
     } else {
         switch info in type_info.variant {
           case runtime.Type_Info_Integer:
             if type_info.id == int {
-                format_view(ctx, view_string("int"))
+                format_any(ctx, "int")
             } else if type_info.id == uint {
-                format_view(ctx, view_string("uint"))
+                format_any(ctx, "uint")
             } else if type_info.id == uintptr {
-                format_view(ctx, view_string("uintptr"))
+                format_any(ctx, "uintptr")
             } else {
-                format_view(ctx, view_character(info.signed ? 'i' : 'u'))
-                format_view(ctx, view_integer(type_info.size * 8))
+                format_any(ctx, info.signed ? 'i' : 'u')
+                format_any(ctx, view_integer(type_info.size * 8))
                 format_endianess(ctx, info.endianness)
             }
             
           case runtime.Type_Info_Float:
-            format_view(ctx, view_character('f'))
-            format_view(ctx, view_integer(type_info.size * 8))
+            format_any(ctx, 'f')
+            format_any(ctx, view_integer(type_info.size * 8))
             format_endianess(ctx, info.endianness)
             
           case runtime.Type_Info_Complex:
-            format_view(ctx, view_string("complex"))
-            format_view(ctx, view_integer(type_info.size * 8))
+            format_any(ctx, "complex")
+            format_any(ctx, view_integer(type_info.size * 8))
             
           case runtime.Type_Info_Quaternion:
-            format_view(ctx, view_string("quaternion"))
-            format_view(ctx, view_integer(type_info.size * 8))
+            format_any(ctx, "quaternion")
+            format_any(ctx, view_integer(type_info.size * 8))
             
           case runtime.Type_Info_Procedure:
-            format_view(ctx, view_string("proc"))
-            // @todo(viktor):  format_view(ctx, view_string(info.convention))
-            if info.params == nil do format_view(ctx, view_string("()"))
+            format_any(ctx, "proc")
+            // @todo(viktor):  format_any(ctx, info.convention)
+            if info.params == nil do format_any(ctx, "()")
             else {
-                format_view(ctx, view_character('('))
+                format_any(ctx, '(')
                 ps := info.params.variant.(runtime.Type_Info_Parameters)
                 for param, i in ps.types {
-                    if i != 0 do format_view(ctx, view_string(", "))
+                    if i != 0 do format_any(ctx, ", ")
                     format_type(ctx, param)
                 }
-                format_view(ctx, view_character(')'))
+                format_any(ctx, ')')
             }
             if info.results != nil {
-                format_view(ctx, view_string(" -> "))
+                format_any(ctx, " -> ")
                 format_type(ctx, info.results)
             }
             
           case runtime.Type_Info_Parameters:
             count := len(info.types)
-            if       count != 0 do format_view(ctx, view_character('('))
-            defer if count != 0 do format_view(ctx, view_character(')'))
+            if       count != 0 do format_any(ctx, '(')
+            defer if count != 0 do format_any(ctx, ')')
             
             for i in 0..<count {
-                if i != 0 do format_view(ctx, view_string(", "))
+                if i != 0 do format_any(ctx, ", ")
                 if i < len(info.names) {
-                    format_view(ctx, view_string(info.names[i]))
-                    format_view(ctx, view_string(": "))
+                    format_any(ctx, info.names[i])
+                    format_any(ctx, ": ")
                 }
                 format_type(ctx, info.types[i])
             }
             
           case runtime.Type_Info_Boolean:
             if type_info.id == bool {
-                format_view(ctx, view_string("bool"))
+                format_any(ctx, "bool")
             } else {
-                format_view(ctx, view_character('b'))
-                format_view(ctx, view_integer(type_info.size * 8))
+                format_any(ctx, 'b')
+                format_any(ctx, view_integer(type_info.size * 8))
             }
               
-          case runtime.Type_Info_Named:   format_view(ctx, view_string(info.name))
-          case runtime.Type_Info_String:  format_view(ctx, view_string(info.is_cstring ? "cstring" : "string"))
-          case runtime.Type_Info_Any:     format_view(ctx, view_string("any"))
-          case runtime.Type_Info_Type_Id: format_view(ctx, view_string("typeid"))
-          case runtime.Type_Info_Rune:    format_view(ctx, view_string("rune"))
+          case runtime.Type_Info_Named:   format_any(ctx, info.name)
+          case runtime.Type_Info_String:  format_any(ctx, info.is_cstring ? "cstring" : "string")
+          case runtime.Type_Info_Any:     format_any(ctx, "any")
+          case runtime.Type_Info_Type_Id: format_any(ctx, "typeid")
+          case runtime.Type_Info_Rune:    format_any(ctx, "rune")
           
           case runtime.Type_Info_Pointer: 
             if info.elem == nil {
-                format_view(ctx, view_string("rawptr"))
+                format_any(ctx, "rawptr")
             } else {
-                format_view(ctx, view_character('^'))
+                format_any(ctx, '^')
                 format_type(ctx, info.elem)
             }
             
           case runtime.Type_Info_Multi_Pointer:
-            format_view(ctx, view_string("[^]"))
+            format_any(ctx, "[^]")
             format_type(ctx, info.elem)
             
           case runtime.Type_Info_Soa_Pointer:
-            format_view(ctx, view_string("#soa ^"))
+            format_any(ctx, "#soa ^")
             format_type(ctx, info.elem)
             
             
           case runtime.Type_Info_Simd_Vector:
-            format_view(ctx, view_string("#simd["))
-            format_view(ctx, view_integer(info.count))
-            format_view(ctx, view_character(']'))
+            format_any(ctx, "#simd[")
+            format_any(ctx, view_integer(info.count))
+            format_any(ctx, ']')
             format_type(ctx, info.elem)
             
           case runtime.Type_Info_Matrix:
-            if info.layout == .Row_Major do format_view(ctx, view_string("#row_major "))
-            format_view(ctx, view_string("matrix["))
-            format_view(ctx, view_integer(info.row_count))
-            format_view(ctx, view_character(','))
-            format_view(ctx, view_integer(info.column_count))
-            format_view(ctx, view_character(']'))
+            if info.layout == .Row_Major do format_any(ctx, "#row_major ")
+            format_any(ctx, "matrix[")
+            format_any(ctx, view_integer(info.row_count))
+            format_any(ctx, ',')
+            format_any(ctx, view_integer(info.column_count))
+            format_any(ctx, ']')
             format_type(ctx, info.elem)
                 
           case runtime.Type_Info_Array:
-            format_view(ctx, view_character('['))
-            format_view(ctx, view_integer(info.count))
-            format_view(ctx, view_character(']'))
+            format_any(ctx, '[')
+            format_any(ctx, view_integer(info.count))
+            format_any(ctx, ']')
             format_type(ctx, info.elem)
             
           case runtime.Type_Info_Enumerated_Array:
-            if info.is_sparse do format_view(ctx, view_string("#sparse "))
-            format_view(ctx, view_character('['))
+            if info.is_sparse do format_any(ctx, "#sparse ")
+            format_any(ctx, '[')
             format_type(ctx, info.index)
-            format_view(ctx, view_character(']'))
+            format_any(ctx, ']')
             format_type(ctx, info.elem)
             
           case runtime.Type_Info_Dynamic_Array:
-            format_view(ctx, view_string("[dynamic]"))
+            format_any(ctx, "[dynamic]")
             format_type(ctx, info.elem)
             
           case runtime.Type_Info_Slice:
-            format_view(ctx, view_string("[]"))
+            format_any(ctx, "[]")
             format_type(ctx, info.elem)
             
           case runtime.Type_Info_Struct:
             switch info.soa_kind {
               case .None:
               case .Fixed:
-                format_view(ctx, view_string("#soa["))
-                format_view(ctx, view_integer(info.soa_len))
-                format_view(ctx, view_character(']'))
+                format_any(ctx, "#soa[")
+                format_any(ctx, view_integer(info.soa_len))
+                format_any(ctx, ']')
                 format_type(ctx, info.soa_base_type)
               case .Slice:
-                format_view(ctx, view_string("#soa[]"))
+                format_any(ctx, "#soa[]")
                 format_type(ctx, info.soa_base_type)
               case .Dynamic:
-                format_view(ctx, view_string("#soa[dynamic]"))
+                format_any(ctx, "#soa[dynamic]")
                 format_type(ctx, info.soa_base_type)
             }
             
-            format_view(ctx, view_string("struct "))
-            if .packed    in info.flags  do format_view(ctx, view_string("#packed "))
-            if .raw_union in info.flags  do format_view(ctx, view_string("#raw_union "))
+            format_any(ctx, "struct ")
+            if .packed    in info.flags  do format_any(ctx, "#packed ")
+            if .raw_union in info.flags  do format_any(ctx, "#raw_union ")
             if .align     in info.flags {
-                format_view(ctx, view_string("#align("))
-                format_view(ctx, view_integer(type_info.align))
-                format_view(ctx, view_character(')'))
+                format_any(ctx, "#align(")
+                format_any(ctx, view_integer(type_info.align))
+                format_any(ctx, ')')
             }
             
-            format_view(ctx, view_character('{'))
+            format_any(ctx, '{')
             format_multiline_formatting(ctx, .Indent)
             defer {
                 format_multiline_formatting(ctx, .Outdent)
                 format_multiline_formatting(ctx, .Linebreak)
-                format_view(ctx, view_character('}'))
+                format_any(ctx, '}')
             }
             
             for i in 0..<info.field_count {
-                if i != 0 do format_view(ctx, view_string(", "))
+                if i != 0 do format_any(ctx, ", ")
                 format_multiline_formatting(ctx, .Linebreak)
                 
-                if info.usings[i] do format_view(ctx, view_string("using "))
-                format_view(ctx, view_string(info.names[i]))
-                format_view(ctx, view_string(": "))
+                if info.usings[i] do format_any(ctx, "using ")
+                format_any(ctx, info.names[i])
+                format_any(ctx, ": ")
                 format_type(ctx, info.types[i])
             }
             
           case runtime.Type_Info_Union:
-            format_view(ctx, view_string("union "))
-            if info.no_nil      do format_view(ctx, view_string("#no_nil "))
-            if info.shared_nil  do format_view(ctx, view_string("#shared_nil "))
+            format_any(ctx, "union ")
+            if info.no_nil      do format_any(ctx, "#no_nil ")
+            if info.shared_nil  do format_any(ctx, "#shared_nil ")
             if info.custom_align {
-                format_view(ctx, view_string("#align("))
-                format_view(ctx, view_integer(type_info.align))
-                format_view(ctx, view_character(')'))
+                format_any(ctx, "#align(")
+                format_any(ctx, view_integer(type_info.align))
+                format_any(ctx, ')')
             }
             
-            format_view(ctx, view_character('{'))
+            format_any(ctx, '{')
             format_multiline_formatting(ctx, .Indent)
             defer {
                 format_multiline_formatting(ctx, .Outdent)
                 format_multiline_formatting(ctx, .Linebreak)
-                format_view(ctx, view_character('}'))
+                format_any(ctx, '}')
             }
             
             for variant, i in info.variants {
-                if i != 0 do format_view(ctx, view_string(", "))
+                if i != 0 do format_any(ctx, ", ")
                 format_multiline_formatting(ctx, .Linebreak)
             
                 format_type(ctx, variant)
             }
             
           case runtime.Type_Info_Enum:
-            format_view(ctx, view_string("enum "))
+            format_any(ctx, "enum ")
             format_type(ctx, info.base)
             
-            format_view(ctx, view_character('{'))
+            format_any(ctx, '{')
             format_multiline_formatting(ctx, .Indent)
             defer {
                 format_multiline_formatting(ctx, .Outdent)
                 format_multiline_formatting(ctx, .Linebreak)
-                format_view(ctx, view_character('}'))
+                format_any(ctx, '}')
             }
             
             for name, i in info.names {
-                if i != 0 do format_view(ctx, view_string(", "))
+                if i != 0 do format_any(ctx, ", ")
                 format_multiline_formatting(ctx, .Linebreak)
 
-                format_view(ctx, view_string(name))
+                format_any(ctx, name)
             }
             
           case runtime.Type_Info_Map:
-            format_view(ctx, view_string("map["))
+            format_any(ctx, "map[")
             format_type(ctx, info.key)
-            format_view(ctx, view_character(']'))
+            format_any(ctx, ']')
             format_type(ctx, info.value)
             
           case runtime.Type_Info_Bit_Set:
@@ -1248,49 +1234,49 @@ format_type :: proc (ctx: ^Format_Context, type_info: ^runtime.Type_Info) {
                 return ok
             }
             
-            format_view(ctx, view_string("bit_set["))
+            format_any(ctx, "bit_set[")
             switch {
               case is_type(info.elem, runtime.Type_Info_Enum):
                 format_type(ctx, info.elem)
               case is_type(info.elem, runtime.Type_Info_Rune):
                 // @todo(viktor): unicode
                 // io.write_encoded_rune(w, rune(info.lower), true, &n) or_return
-                format_view(ctx, view_string("..="))
+                format_any(ctx, "..=")
                 unimplemented("support unicode encoding/decoding")
                 // io.write_encoded_rune(w, rune(info.upper), true, &n) or_return
               case:
-                format_view(ctx, view_integer(info.lower))
-                format_view(ctx, view_string("..="))
-                format_view(ctx, view_integer(info.upper))
+                format_any(ctx, view_integer(info.lower))
+                format_any(ctx, "..=")
+                format_any(ctx, view_integer(info.upper))
             }
             
             if info.underlying != nil {
-                format_view(ctx, view_string("; "))
+                format_any(ctx, "; ")
                 format_type(ctx, info.underlying)
             }
-            format_view(ctx, view_character(']'))
+            format_any(ctx, ']')
             
           case runtime.Type_Info_Bit_Field:
-            format_view(ctx, view_string("bit_field "))
+            format_any(ctx, "bit_field ")
             format_type(ctx, info.backing_type)
             
-            format_view(ctx, view_character('{'))
+            format_any(ctx, '{')
             format_multiline_formatting(ctx, .Indent)
             defer {
                 format_multiline_formatting(ctx, .Outdent)
                 format_multiline_formatting(ctx, .Linebreak)
-                format_view(ctx, view_character('}'))
+                format_any(ctx, '}')
             }
          
             for i in 0..<info.field_count {
-                if i != 0 do format_view(ctx, view_string(", "))
+                if i != 0 do format_any(ctx, ", ")
                 format_multiline_formatting(ctx, .Linebreak)
                 
-                format_view(ctx, view_string(info.names[i]))
-                format_view(ctx, view_character(':'))
+                format_any(ctx, info.names[i])
+                format_any(ctx, ':')
                 format_type(ctx, info.types[i])
-                format_view(ctx, view_character('|'))
-                format_view(ctx, view_integer(info.bit_sizes[i]))
+                format_any(ctx, '|')
+                format_any(ctx, view_integer(info.bit_sizes[i]))
             }
         }
     }
@@ -1298,13 +1284,11 @@ format_type :: proc (ctx: ^Format_Context, type_info: ^runtime.Type_Info) {
 
 ////////////////////////////////////////////////
 
-@(private="file") 
-RawSlice :: struct {
+@(private="file") RawSlice :: struct {
     data: rawptr,
     len:  int,
 }
-@(private="file") 
-RawAny :: struct {
+@(private="file") RawAny :: struct {
     data: rawptr,
 	id:   typeid,
 }
