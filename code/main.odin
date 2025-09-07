@@ -117,6 +117,7 @@ Frame :: struct {
 desired_N:  i32 = N
 
 main :: proc () {
+when true {
     track: mem.Tracking_Allocator
     mem.tracking_allocator_init(&track, context.allocator)
     defer mem.tracking_allocator_destroy(&track)
@@ -124,6 +125,7 @@ main :: proc () {
     
     defer for _, leak in track.allocation_map {
         print("% leaked %\n", leak.location, view_memory_size(leak.size))
+}
     }
     
     rl.SetTraceLogLevel(.WARNING)
@@ -150,7 +152,7 @@ main :: proc () {
                 data, ferr := os2.read_entire_file(info.fullpath, context.allocator)
                 if ferr != nil do print("Error reading file %:%\n", info.name, ferr)
                 
-                cstr := cast(cstring) raw_data(tprint("%\u0000", file_type))
+                cstr := cast(cstring) raw_data(tprint("%", file_type, flags = { .AppendZero }))
                 
                 image := File { data = data }
                 image.image   = rl.LoadImageFromMemory(cstr, raw_data(image.data), auto_cast len(image.data))
@@ -221,41 +223,61 @@ main :: proc () {
         if viewing_group != nil {
             center := Viewing_Size / 2
             p := vec_cast(f32, center)
-            size := cast(f32) Viewing_Size.x / cast(f32) ((len(color_groups)+1) * 2 + 1)
+                        
+            size := cast(f32) Viewing_Size.x / cast(f32) ((len(color_groups)+1) * 2 + 1) * 0.75
             
-            ring_size    := 0.9 * size
-            ring_padding := 0.1 * size
+            samples :: 250
+            turns := cast(f32) samples
+            rads_per_sample := Tau / turns
             
-            center_size  := ring_size
-            
-            view_slices :: 250
+            max_support: f32
             for comparing_group, group_index in color_groups {
-                total_supports := make([] f32, view_slices, context.temp_allocator)
-                max_support: f32
-                
-                turns := cast(f32) view_slices
-                for slice in 0..<view_slices {
-                    turn := cast(f32) slice
+                for sample in 0..<samples {
+                    turn := cast(f32) sample
                     
-                    sampling_direction := arm(turn * Tau / turns)
-                    
+                    sampling_direction := arm(turn * rads_per_sample)
                     closeness := get_closeness(sampling_direction)
+                    
+                    total: f32
                     for vok, vid in viewing_group.ids do if vok {
                         for cok, cid in comparing_group.ids do if cok {
-                            total_supports[slice] += get_support_amount(&collapse, cast(State_Id) vid, cast(State_Id) cid, closeness)
+                            total += get_support_amount(&collapse, cast(State_Id) vid, cast(State_Id) cid, closeness)
                         }
                     }
-                    max_support = max(max_support, total_supports[slice])
+                    max_support = max(max_support, total)
                 }
+            }
+            
+            for comparing_group, group_index in color_groups {
+                total_supports := make([] f32, samples, context.temp_allocator)
                 
-                for slice in 0..<view_slices {
-                    turn := cast(f32) slice
+                for sample in 0..<samples {
+                    turn := cast(f32) sample
                     
-                    sampling_direction := -arm(turn * Tau / turns)
+                    sampling_direction := arm(turn * rads_per_sample)
+                    closeness := get_closeness(sampling_direction)
+
+                    for vok, vid in viewing_group.ids do if vok {
+                        for cok, cid in comparing_group.ids do if cok {
+                            total_supports[sample] += get_support_amount(&collapse, cast(State_Id) vid, cast(State_Id) cid, closeness)
+                        }
+                    }
+                    }
+                
+                for sample in 0..<samples {
+                    ring_size    := 0.9 * size
+                    ring_padding := 0.1 * size
                     
-                    total_support := total_supports[slice]
+                    center_size  := ring_size
+                    
+                    turn := cast(f32) sample
+                    
+                    sampling_direction := arm(turn * rads_per_sample)
+                    
+                    total_support := total_supports[sample]
                     alpha := safe_ratio_0(total_support, max_support)
-                    color := rl.ColorAlpha(comparing_group.color, alpha)
+                    color := comparing_group.color
+                    color = rl.ColorAlpha(color, alpha)
                     
                     center := direction_to_angles(sampling_direction)
                     width: f32 = 360. / turns
@@ -269,9 +291,25 @@ main :: proc () {
                 }
             }
             
-            rl.DrawCircleV(p, center_size, viewing_group.color)
+            rl.DrawCircleV(p, size, viewing_group.color)
         }
         rl.EndTextureMode()
+
+        {
+            image := rl.LoadImageFromTexture(viewing_render_target.texture)
+            pixels := slice_from_parts_cast(rl.Color, image.data, image.width * image.height)
+            for row in 0..<image.height/2 {
+                rev := image.height-1-row
+                for col in 0..<image.width {
+                    a := &pixels[row * image.width + col]
+                    b := &pixels[rev * image.width + col]
+                    swap(a, b)
+                }
+            }
+            
+            rl.UpdateTexture(viewing_render_target.texture, image.data)
+        }
+        
         
         rl.BeginDrawing()
         rl.ClearBackground({0x54, 0x57, 0x66, 0xFF})
@@ -292,13 +330,12 @@ main :: proc () {
         }
         
         spall_begin("render cells")
-        for &cell in cells {
+        for cell in cells {
             color: rl.Color
             
+if render_wavefunction_as_average || cell.collapsed {
             color = cell.average_color
-            if !render_wavefunction_as_average && !cell.collapsed {
-                color = 0
-            }
+                        }
             draw_cell(cell, color)
         }
         spall_end()
@@ -433,8 +470,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 
               case .Previous_Choice: 
                 if len(c.steps) > 0 {
-                    spall_scope("Cleanup Steps")
-                    bad_step := pop(&c.steps)
+                                        bad_step := pop(&c.steps)
                     delete_step(bad_step)
                 }
                 if len(c.steps) == 0 {
@@ -444,8 +480,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 
               case .Start: 
                 is_restart = true
-                spall_scope("Cleanup Steps")
-                for step in c.steps {
+                                for step in c.steps {
                     delete_step(step)
                 }
                 clear(&c.steps)
@@ -687,7 +722,8 @@ draw_cell :: proc (cell: Cell, color: rl.Color) {
     buffer.allocator = context.temp_allocator
     clear(&buffer)
     
-    append(&buffer, world_to_screen(cell.p))
+    world_p := world_to_screen(cell.p)
+    append(&buffer, world_p)
     for point in cell.points {
         append(&buffer, world_to_screen(point))
     }

@@ -10,8 +10,7 @@ import "core:fmt"
 import "core:mem"
 
 // @volatile This breaks if in the midst of a print we start another print on the same thread. we could use a cursor to know from where onwards we can use the buffer.
-ConsoleBufferSize :: #config(ConsoleBufferSize, 128 * Megabyte)
-@(thread_local) console_buffer: [ConsoleBufferSize] u8
+@(thread_local) console_buffer: [128 * Megabyte] u8
 
 ////////////////////////////////////////////////
 
@@ -307,7 +306,7 @@ view_array :: proc (value: ^$T, count: $N) -> (result: []T) {
 ////////////////////////////////////////////////
 
 Format_Context :: struct {
-    dest:  String_Builder,
+    dest: String_Builder,
     
     max_depth: u32,
     indentation: string,
@@ -322,9 +321,11 @@ Format_Context :: struct {
 
 ////////////////////////////////////////////////
 
-@(private="file") temp_buffer:            [1024] u8
+@(private="file") temp_buffer:            [4096] u8
 
-temp_view_allocator: mem.Allocator
+@(private="file") temp_view_arena:     mem.Arena
+@(private="file") temp_view_allocator: mem.Allocator
+
 @(private="file") temp_view_buffer:       [1024] View
 @(private="file") temp_view_inside_block: b32
 @(private="file") temp_view_start_index:  u32
@@ -339,10 +340,9 @@ begin_temp_views :: proc (width: Maybe(u16) = nil) {
     
     if temp_view_allocator.procedure == nil {
         // @todo(viktor): find a better place for this
-        arena  := new(mem.Arena) // Sigh..
         buffer := make([] u8, 64*4096)
-        mem.arena_init(arena, buffer)
-        temp_view_allocator = mem.arena_allocator(arena)
+        mem.arena_init(&temp_view_arena, buffer)
+        temp_view_allocator = mem.arena_allocator(&temp_view_arena)
         assert(temp_view_allocator.procedure != nil)
     }
 }
@@ -389,7 +389,7 @@ format_cstring :: proc (buffer: []u8, format: string, args: ..any, flags := Form
 @(printlike)
 format_string :: proc (buffer: []u8, format: string, args: ..any, flags := Format_Context_Flags{}) -> (result: string) {
     ctx := Format_Context { 
-        dest  = { data = buffer },
+        dest  = make_string_builder_buffer(buffer),
         flags = flags,
         
         indentation = "  ",
@@ -441,8 +441,8 @@ format_string :: proc (buffer: []u8, format: string, args: ..any, flags := Forma
 format_any :: proc (ctx: ^Format_Context, arg: any) {
     if ctx.max_depth <= 0 do return
     
-    // @todo(viktor): write this back into ctx.dest
-    temp := String_Builder { data = temp_buffer[:] }
+    // @todo(viktor): this here doesnt work with nested calls to format any
+    temp := make_string_builder(temp_buffer[:])
     defer {
         // @todo(viktor): Can we avoid this copy? Only if we knew the width of the printed before hand.
         // padding := max(0, cast(i32) view.width - cast(i32) temp.count)
@@ -454,10 +454,10 @@ format_any :: proc (ctx: ^Format_Context, arg: any) {
     
     switch value in arg {
       case any:    format_any(ctx, value)
-      case typeid: format_type(ctx, type_info_of(arg.id))
+      case typeid: draw_type(ctx, type_info_of(arg.id))
       
-      case nil:    format_pointer(ctx, nil)
-      case rawptr: format_pointer(ctx, value)
+      case nil:    draw_pointer(ctx, nil)
+      case rawptr: draw_pointer(ctx, value)
       
       case b8:   append(&temp, value ? "true" : "false")
       case b16:  append(&temp, value ? "true" : "false")
@@ -469,7 +469,7 @@ format_any :: proc (ctx: ^Format_Context, arg: any) {
         // @todo(viktor): maybe do this myself
         buf, count := utf8.encode_rune(value)
         bytes := buf[:count]
-        append(&temp, bytes)
+        append(&temp, ..bytes)
         
       case string:  append(&temp, value)
       case cstring: append(&temp, string(value))
@@ -584,12 +584,12 @@ format_any :: proc (ctx: ^Format_Context, arg: any) {
             
           case runtime.Type_Info_Pointer:
             data := (cast(^pmm) value.data)^
-            format_pointer(ctx, data, variant.elem)
+            draw_pointer(ctx, data, variant.elem)
             
           case runtime.Type_Info_Multi_Pointer:
             data := (cast(^pmm) value.data)^
             format_optional_type(ctx, value.id)
-            format_pointer(ctx, data, variant.elem)
+            draw_pointer(ctx, data, variant.elem)
           
           case runtime.Type_Info_Named:
             // @important @todo(viktor): If the struct is an alias like v4 :: [4]f32 we currently print both types. but we should only print the alias
@@ -626,7 +626,8 @@ format_any :: proc (ctx: ^Format_Context, arg: any) {
           ////////////////////////////////////////////////
           ////////////////////////////////////////////////
           ////////////////////////////////////////////////
-          // unimplemented fallback to fmt
+          // unimplemented - fallback to fmt
+          
           case runtime.Type_Info_Enum:
             append(&temp, fmt.tprint(value))
             
@@ -676,7 +677,7 @@ format_optional_type :: proc (ctx: ^Format_Context, type: typeid) {
     if ctx.max_depth <= 0 do return
     
     if .PrependTypes in ctx.flags {
-        format_type(ctx, type_info_of(type))
+        draw_type(ctx, type_info_of(type))
         format_any(ctx, ' ')
     }
 }
@@ -703,7 +704,7 @@ format_float_with_ryu :: proc (dest: ^String_Builder, view: View) {
     if size == 8 {
         float := view.value.(f64)
         result := d2fixed_buffered(float, precision, buffer)
-        dest.count += auto_cast len(result)
+        set_len(dest, len(dest) + len(result))
     } else if size == 4 {
         float := view.value.(f32)
         when false {
@@ -711,7 +712,7 @@ format_float_with_ryu :: proc (dest: ^String_Builder, view: View) {
         } else {
             result := d2fixed_buffered(cast(f64) float, precision, buffer)
         }
-        dest.count += auto_cast len(result)
+        set_len(dest, len(dest) + len(result))
     } else if size == 2 {
         float := view.value.(f16)
         unimplemented()
@@ -842,7 +843,7 @@ draw_unsigned_integer :: proc (dest: ^String_Builder, view: View) {
 // @todo(viktor): make pointer into view_pointer
 //  - `no_addr(expr)`: Disables explicit address visualization with pointer evaluations in `expr`.
 
-format_pointer :: proc (ctx: ^Format_Context, data: pmm, target_type: ^runtime.Type_Info = nil) {
+draw_pointer :: proc (ctx: ^Format_Context, data: pmm, target_type: ^runtime.Type_Info = nil) {
     if ctx.max_depth <= 0 do return
     
     if target_type != nil {
@@ -992,7 +993,7 @@ format_matrix :: proc (ctx: ^Format_Context, matrix_type: typeid, data: pmm, typ
 }
 
 
-format_type :: proc (ctx: ^Format_Context, type_info: ^runtime.Type_Info) {
+draw_type :: proc (ctx: ^Format_Context, type_info: ^runtime.Type_Info) {
     if ctx.max_depth <= 0 do return
     ctx.max_depth -= 1
     defer ctx.max_depth += 1
@@ -1044,13 +1045,13 @@ format_type :: proc (ctx: ^Format_Context, type_info: ^runtime.Type_Info) {
                 ps := info.params.variant.(runtime.Type_Info_Parameters)
                 for param, i in ps.types {
                     if i != 0 do format_any(ctx, ", ")
-                    format_type(ctx, param)
+                    draw_type(ctx, param)
                 }
                 format_any(ctx, ')')
             }
             if info.results != nil {
                 format_any(ctx, " -> ")
-                format_type(ctx, info.results)
+                draw_type(ctx, info.results)
             }
             
           case runtime.Type_Info_Parameters:
@@ -1064,7 +1065,7 @@ format_type :: proc (ctx: ^Format_Context, type_info: ^runtime.Type_Info) {
                     format_any(ctx, info.names[i])
                     format_any(ctx, ": ")
                 }
-                format_type(ctx, info.types[i])
+                draw_type(ctx, info.types[i])
             }
             
           case runtime.Type_Info_Boolean:
@@ -1086,23 +1087,23 @@ format_type :: proc (ctx: ^Format_Context, type_info: ^runtime.Type_Info) {
                 format_any(ctx, "rawptr")
             } else {
                 format_any(ctx, '^')
-                format_type(ctx, info.elem)
+                draw_type(ctx, info.elem)
             }
             
           case runtime.Type_Info_Multi_Pointer:
             format_any(ctx, "[^]")
-            format_type(ctx, info.elem)
+            draw_type(ctx, info.elem)
             
           case runtime.Type_Info_Soa_Pointer:
             format_any(ctx, "#soa ^")
-            format_type(ctx, info.elem)
+            draw_type(ctx, info.elem)
             
             
           case runtime.Type_Info_Simd_Vector:
             format_any(ctx, "#simd[")
             format_any(ctx, view_integer(info.count))
             format_any(ctx, ']')
-            format_type(ctx, info.elem)
+            draw_type(ctx, info.elem)
             
           case runtime.Type_Info_Matrix:
             if info.layout == .Row_Major do format_any(ctx, "#row_major ")
@@ -1111,28 +1112,28 @@ format_type :: proc (ctx: ^Format_Context, type_info: ^runtime.Type_Info) {
             format_any(ctx, ',')
             format_any(ctx, view_integer(info.column_count))
             format_any(ctx, ']')
-            format_type(ctx, info.elem)
+            draw_type(ctx, info.elem)
                 
           case runtime.Type_Info_Array:
             format_any(ctx, '[')
             format_any(ctx, view_integer(info.count))
             format_any(ctx, ']')
-            format_type(ctx, info.elem)
+            draw_type(ctx, info.elem)
             
           case runtime.Type_Info_Enumerated_Array:
             if info.is_sparse do format_any(ctx, "#sparse ")
             format_any(ctx, '[')
-            format_type(ctx, info.index)
+            draw_type(ctx, info.index)
             format_any(ctx, ']')
-            format_type(ctx, info.elem)
+            draw_type(ctx, info.elem)
             
           case runtime.Type_Info_Dynamic_Array:
             format_any(ctx, "[dynamic]")
-            format_type(ctx, info.elem)
+            draw_type(ctx, info.elem)
             
           case runtime.Type_Info_Slice:
             format_any(ctx, "[]")
-            format_type(ctx, info.elem)
+            draw_type(ctx, info.elem)
             
           case runtime.Type_Info_Struct:
             switch info.soa_kind {
@@ -1141,13 +1142,13 @@ format_type :: proc (ctx: ^Format_Context, type_info: ^runtime.Type_Info) {
                 format_any(ctx, "#soa[")
                 format_any(ctx, view_integer(info.soa_len))
                 format_any(ctx, ']')
-                format_type(ctx, info.soa_base_type)
+                draw_type(ctx, info.soa_base_type)
               case .Slice:
                 format_any(ctx, "#soa[]")
-                format_type(ctx, info.soa_base_type)
+                draw_type(ctx, info.soa_base_type)
               case .Dynamic:
                 format_any(ctx, "#soa[dynamic]")
-                format_type(ctx, info.soa_base_type)
+                draw_type(ctx, info.soa_base_type)
             }
             
             format_any(ctx, "struct ")
@@ -1174,7 +1175,7 @@ format_type :: proc (ctx: ^Format_Context, type_info: ^runtime.Type_Info) {
                 if info.usings[i] do format_any(ctx, "using ")
                 format_any(ctx, info.names[i])
                 format_any(ctx, ": ")
-                format_type(ctx, info.types[i])
+                draw_type(ctx, info.types[i])
             }
             
           case runtime.Type_Info_Union:
@@ -1199,12 +1200,12 @@ format_type :: proc (ctx: ^Format_Context, type_info: ^runtime.Type_Info) {
                 if i != 0 do format_any(ctx, ", ")
                 format_multiline_formatting(ctx, .Linebreak)
             
-                format_type(ctx, variant)
+                draw_type(ctx, variant)
             }
             
           case runtime.Type_Info_Enum:
             format_any(ctx, "enum ")
-            format_type(ctx, info.base)
+            draw_type(ctx, info.base)
             
             format_any(ctx, '{')
             format_multiline_formatting(ctx, .Indent)
@@ -1223,9 +1224,9 @@ format_type :: proc (ctx: ^Format_Context, type_info: ^runtime.Type_Info) {
             
           case runtime.Type_Info_Map:
             format_any(ctx, "map[")
-            format_type(ctx, info.key)
+            draw_type(ctx, info.key)
             format_any(ctx, ']')
-            format_type(ctx, info.value)
+            draw_type(ctx, info.value)
             
           case runtime.Type_Info_Bit_Set:
             is_type :: proc (info: ^runtime.Type_Info, $T: typeid) -> bool {
@@ -1237,7 +1238,7 @@ format_type :: proc (ctx: ^Format_Context, type_info: ^runtime.Type_Info) {
             format_any(ctx, "bit_set[")
             switch {
               case is_type(info.elem, runtime.Type_Info_Enum):
-                format_type(ctx, info.elem)
+                draw_type(ctx, info.elem)
               case is_type(info.elem, runtime.Type_Info_Rune):
                 // @todo(viktor): unicode
                 // io.write_encoded_rune(w, rune(info.lower), true, &n) or_return
@@ -1252,13 +1253,13 @@ format_type :: proc (ctx: ^Format_Context, type_info: ^runtime.Type_Info) {
             
             if info.underlying != nil {
                 format_any(ctx, "; ")
-                format_type(ctx, info.underlying)
+                draw_type(ctx, info.underlying)
             }
             format_any(ctx, ']')
             
           case runtime.Type_Info_Bit_Field:
             format_any(ctx, "bit_field ")
-            format_type(ctx, info.backing_type)
+            draw_type(ctx, info.backing_type)
             
             format_any(ctx, '{')
             format_multiline_formatting(ctx, .Indent)
@@ -1274,21 +1275,10 @@ format_type :: proc (ctx: ^Format_Context, type_info: ^runtime.Type_Info) {
                 
                 format_any(ctx, info.names[i])
                 format_any(ctx, ':')
-                format_type(ctx, info.types[i])
+                draw_type(ctx, info.types[i])
                 format_any(ctx, '|')
                 format_any(ctx, view_integer(info.bit_sizes[i]))
             }
         }
     }
-}
-
-////////////////////////////////////////////////
-
-@(private="file") RawSlice :: struct {
-    data: rawptr,
-    len:  int,
-}
-@(private="file") RawAny :: struct {
-    data: rawptr,
-	id:   typeid,
 }

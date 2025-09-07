@@ -49,7 +49,6 @@ Voronoi_Cell :: struct {
 ////////////////////////////////////////////////
 
 begin_triangulation :: proc(dt: ^Delauney_Triangulation, points: []v2d, allocator := context.allocator) {
-    spall_proc()
     dt.allocator = allocator
     dt.points = points
     
@@ -66,8 +65,6 @@ begin_triangulation :: proc(dt: ^Delauney_Triangulation, points: []v2d, allocato
     dt.super_tri_index = {-3, -2, -1}
     
     { // I ~ O(n): Sort points into a hilbert curve for better locality in the main part
-        spall_scope("Sort points into a hilbert curve")
-        
         point_tree: Quad_Tree(v2d)
         init_quad_tree(&point_tree, rectangle_min_dimension(v2d{}, 2), allocator = context.temp_allocator)
         
@@ -97,7 +94,6 @@ triangulation_append :: proc (dt: ^Delauney_Triangulation, index: TriIndex, tria
 }
 
 complete_triangulation :: proc (dt: ^Delauney_Triangulation) {
-    spall_proc()
     for dt.point_index < auto_cast len(dt.points) {
         step_triangulation(dt)
     }
@@ -117,7 +113,6 @@ step_triangulation :: proc(dt: ^Delauney_Triangulation) {
     rect := rectangle_center_dimension(point, 0)
     
     // II ~ O(n^2): find bad triangles :: lim -> 100%   
-    spall_begin("find bad triangles")
     
     for node := quad_test(&dt.tree, rect); node != nil; node = node.parent {
         for link := node.sentinel.next; link != &node.sentinel; link = link.next {
@@ -131,9 +126,7 @@ step_triangulation :: proc(dt: ^Delauney_Triangulation) {
         }
     }
     
-    spall_end()
     // III ~ O(n): collect polygon edges and remove bad triangles   
-    spall_begin("collect polygon edges and remove bad triangles")
     
     for _, edges in dt.bad_triangles {
         for edge in edges do dt.all_bad_edges[edge]    += 1
@@ -152,9 +145,7 @@ step_triangulation :: proc(dt: ^Delauney_Triangulation) {
         list_push(&dt.tree.first_free_entry, link)
     }
     
-    spall_end()
     // IV ~ O(n): add new egdes    
-    spall_begin("add new egdes")
     
     for edge in dt.polygon {
         index := TriIndex { dt.point_index , edge[0], edge[1] }
@@ -162,8 +153,6 @@ step_triangulation :: proc(dt: ^Delauney_Triangulation) {
         // @todo(viktor): Should we filter degenerate triangles here?
         triangulation_append(dt, index, triangle)
     }
-    
-    spall_end()
 }
 
 triangle_from_index :: proc (dt: ^Delauney_Triangulation, index: TriIndex) -> (result: Triangle) {
@@ -241,7 +230,6 @@ collect_work_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^[dynamic
 }
 
 end_triangulation :: proc(dt: ^Delauney_Triangulation) -> (result: [] Triangle) {
-    spall_proc()
     buffer := make([dynamic] Triangle, 0, dt.triangle_count, dt.allocator)
     
     collect_triangles(&dt.tree.root, &buffer, dt.points, dt)
@@ -271,7 +259,6 @@ bounds_line_intersection :: proc (a, b: $V, bounds: Rectangle(V)) -> (ok: b32, r
 }
 
 end_triangulation_voronoi_cells :: proc(dt: ^Delauney_Triangulation) -> (result: [] Voronoi_Cell) {
-    spall_proc()
     buffer := make([dynamic] Work_Triangle, 0, dt.triangle_count, context.temp_allocator)
     
     collect_work_triangles(&dt.tree.root, &buffer, dt.points, dt)

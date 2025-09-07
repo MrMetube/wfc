@@ -254,3 +254,20 @@ make_by_pointer_soa_dynamic_array_len_cap :: proc(pointer: ^$T/#soa [dynamic]$E,
     pointer ^= value
     return nil
 }
+
+////////////////////////////////////////////////
+
+Raw_Dynamic_Array :: struct {
+    data: rawptr,
+    len:  int,
+    cap:  int,
+    allocator: mem.Allocator,
+}
+RawSlice :: struct {
+    data: rawptr,
+    len:  int,
+}
+RawAny :: struct {
+    data: rawptr,
+	id:   typeid,
+}
