@@ -31,33 +31,30 @@ i32x8 :: #simd[8]i32
 f32x4 :: #simd[4]f32
 i32x4 :: #simd[4]i32
 
-LaneWidth :: 1
+LaneWidth :: 8
 
 when LaneWidth != 1 {
-    lane_f32 :: #simd [LaneWidth]f32
-    lane_u32 :: #simd [LaneWidth]u32
-    lane_i32 :: #simd [LaneWidth]i32
+    lane_f32 :: #simd [LaneWidth] f32
+    lane_u32 :: #simd [LaneWidth] u32
+    lane_i32 :: #simd [LaneWidth] i32
 
-    lane_v2 :: [2]lane_f32
-    lane_v3 :: [3]lane_f32
-    lane_v4 :: [4]lane_f32
-
-    lane_pmm :: #simd [LaneWidth]pmm
-    lane_umm :: #simd [LaneWidth]umm
-    lane_f64 :: #simd [LaneWidth]f64
+    lane_pmm :: #simd [LaneWidth] pmm
+    lane_umm :: #simd [LaneWidth] umm
+    lane_f64 :: #simd [LaneWidth] f64
 } else {
     lane_f32 :: f32
     lane_u32 :: u32
     lane_i32 :: i32
 
-    lane_v2 :: [2]lane_f32
-    lane_v3 :: [3]lane_f32
-    lane_v4 :: [4]lane_f32
-
+    
     lane_pmm :: pmm
     lane_umm :: umm
     lane_f64 :: f64
 }
+
+lane_v2 :: [2] lane_f32
+lane_v3 :: [3] lane_f32
+lane_v4 :: [4] lane_f32
 
 ////////////////////////////////////////////////
 // Constants

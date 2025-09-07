@@ -78,7 +78,7 @@ View :: struct {
         
         View_Struct,
         View_Array,
-    }
+    },
 }
 
 View_Integer :: struct {
@@ -714,7 +714,7 @@ format_float_with_ryu :: proc (dest: ^String_Builder, view: View) {
         }
         set_len(dest, len(dest) + len(result))
     } else if size == 2 {
-        float := view.value.(f16)
+        // float := view.value.(f16)
         unimplemented()
     } else do panic("convert the general algorithm from ryu you laze bum")
     

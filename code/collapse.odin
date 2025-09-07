@@ -10,7 +10,6 @@ N: i32 = 3
 
 Collapse :: struct {
     states:   [dynamic] State,
-    values:   [dynamic] rl.Color,
     supports: [/* State_Id * len(states) + State_Id */] f32x8,
     
     steps: [dynamic] Step,
@@ -18,15 +17,13 @@ Collapse :: struct {
     
     // Extraction
     is_defining_state: bool,
-    temp_state_values: [dynamic] Value_Id,
+    temp_state_values: [dynamic] rl.Color,
 }
 
-Value_Id :: distinct u8
 State_Id :: distinct u32
 Collapse_Step :: distinct i32
 
 Invalid_State         :: max(State_Id)
-Invalid_Value         :: max(Value_Id)
 Invalid_Collapse_Step :: max(Collapse_Step)
 
 Search_Metric :: enum { States, Entropy }
@@ -34,7 +31,7 @@ Search_Metric :: enum { States, Entropy }
 State :: struct {
     id: State_Id,
     
-    middle: Value_Id,
+    middle: rl.Color,
     
     frequency: f32,
     
@@ -91,14 +88,13 @@ State_Entry :: struct {
 ////////////////////////////////////////////////
 
 collapse_reset :: proc (c: ^Collapse) {
-        clear(&c.states)
+    clear(&c.states)
     for step in c.steps do delete_step(step)
     clear(&c.steps)
     
-    clear(&c.values)
     clear(&c.temp_state_values)
     
-        delete(c.supports)
+    delete(c.supports)
     c.supports = nil
     
     c.is_defining_state = false
@@ -110,15 +106,17 @@ get_closeness :: proc (sampling_direction: v2) -> (result: f32x8) {
     sampling_direction := sampling_direction
     sampling_direction = normalize(sampling_direction)
     
+    cosine_closeness, linear_closeness: lane_f32
     for other, index in Direction {
         other_dir := normalize(vec_cast(f32, Deltas[other]))
         // @todo(viktor): now that we have 8 directions the cosine is too generous
-        cosine_closeness := dot(sampling_direction, other_dir)
-        linear_closeness := 1 - acos(cosine_closeness)
-        closeness := linear_blend(cosine_closeness, linear_closeness, view_mode_t)
-        closeness = max(closeness, 0)
-(cast(^[8]f32) &result)[index] = closeness
+        cosine := dot(sampling_direction, other_dir)
+        (cast(^[8]f32) &cosine_closeness)[index] = cosine
+        (cast(^[8]f32) &linear_closeness)[index] = 1 - acos(cosine)
     }
+    closeness := linear_blend(cosine_closeness, linear_closeness, view_mode_t)
+    closeness = simd.max(closeness, 0)
+    result = closeness
     
     return result
 }
@@ -126,19 +124,8 @@ get_closeness :: proc (sampling_direction: v2) -> (result: f32x8) {
 get_support_amount :: proc (c: ^Collapse, from: State_Id, to: State_Id, closeness: f32x8) -> (result: f32) {
     support := c.supports[from * auto_cast len(c.states) + to]
     
-        result = simd.reduce_add_pairs(support * closeness)
-
-    return result
-}
-
-get_support_for_state :: proc (c: ^Collapse, from: State_Id, to: ^Cell, closeness: f32x8, max: Collapse_Step) -> (result: f32) {
-spall_proc()
-    
-    for to in to.states  {
-        amount := get_support_amount(c, from, to.id, closeness)
-        result += to.removed_at > max ? amount : 0
-    }
-
+    result = simd.reduce_add_pairs(support * closeness)
+        
     return result
 }
 
@@ -295,28 +282,30 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
         
         if change == nil && current.changes_cursor == len(current.changes) {
             result = .Rewind
-clear(&current.changes)
+            clear(&current.changes)
             current.changes_cursor = 0
         } else {
             did_change := false
             propagate_remove: for neighbour in change.neighbours do if !neighbour.collapsed {
                 appended := append_change_if_not_already_scheduled(current, neighbour)
-                                
+                
                 closeness := get_closeness(change.p - neighbour.p)
                 
-spall_begin(change.collapsed ? "recalc states - changed collapsed" : "recalc states - changed not collapsed")
+                spall_begin("recalc states")
                 
-                // @todo(viktor): @speed I'd like to do this iteratively by storing the states removed from change and only checking against those but I seem to be too stupid to do so. Also note that we need to store the previous value and that needs to be properly updated when rewinding. Also note that 99% of the time spent here is when changed isnt collapsed but just lost a few states.
                 states_count := 0
-                                for &to in neighbour.states do if to.removed_at > current.step {
-                    current_support := get_support_for_state(c, to.id, change, closeness, current.step)
-                    
-                    if current_support <= 0 {
-                        to.removed_at = current.step
-                        did_change = true
-                    } else {
-                        states_count += 1
+                recalc_states: for &from in neighbour.states do if from.removed_at > current.step {
+                    for to in change.states do if to.removed_at > current.step {
+                        support := c.supports[from.id * auto_cast len(c.states) + to.id]
+                        amount := simd.reduce_add_pairs(support * closeness)
+                        if amount != 0 {
+                            states_count += 1
+                            continue recalc_states
+                        }
                     }
+                    
+                    from.removed_at = current.step
+                    did_change = true
                 }
                 spall_end()
                 
@@ -324,6 +313,7 @@ spall_begin(change.collapsed ? "recalc states - changed collapsed" : "recalc sta
                     neighbour.is_dirty = true
                     if states_count == 0 {
                         result = .Rewind
+                        // @todo(viktor): rewind not once but up until the last step that also effected this neighbour
                         break propagate_remove
                     }
                     
@@ -407,9 +397,8 @@ calculate_average_color :: proc (c: ^Collapse, cell: ^Cell) {
     color: v4
     count: f32
     for state in cell.states do if state.removed_at > viewing_step {
-        state    := c.states[state.id]
-        color_id := state.middle
-        color += rl_color_to_v4(c.values[color_id]) * state.frequency
+        state := c.states[state.id]
+        color += rl_color_to_v4(state.middle) * state.frequency
         count += state.frequency
     }
     
@@ -434,22 +423,7 @@ begin_state :: proc (c: ^Collapse) {
 
 state_append_value :: proc (c: ^Collapse, value: rl.Color) {
     assert(c.is_defining_state)
-    
-    id := Invalid_Value
-    for it, index in c.values {
-        if it == value {
-            id = cast(Value_Id) index
-            break
-        }
-    }
-    
-    if id == Invalid_Value {
-        id = cast(Value_Id) len(c.values)
-        append(&c.values, value)
-    }
-    assert(id != Invalid_Value)
-    
-    append(&c.temp_state_values, id)
+    append(&c.temp_state_values, value)
 }
 
 end_state   :: proc (c: ^Collapse) {
@@ -479,7 +453,8 @@ end_state   :: proc (c: ^Collapse) {
             for dy in r.min.y ..< r.max.y {
                 for dx in r.min.x ..< r.max.x {
                     value := c.temp_state_values[dx + dy * N]
-                    hash = (hash ~ u64(value)) * 0x100000001b3
+                    integer := transmute(u32) value
+                    hash = (hash ~ cast(u64) integer) * 0x100000001b3
                 }
             }
             

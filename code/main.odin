@@ -117,15 +117,15 @@ Frame :: struct {
 desired_N:  i32 = N
 
 main :: proc () {
-when true {
-    track: mem.Tracking_Allocator
-    mem.tracking_allocator_init(&track, context.allocator)
-    defer mem.tracking_allocator_destroy(&track)
-    context.allocator = mem.tracking_allocator(&track)
-    
-    defer for _, leak in track.allocation_map {
-        print("% leaked %\n", leak.location, view_memory_size(leak.size))
-}
+    when true {
+        track: mem.Tracking_Allocator
+        mem.tracking_allocator_init(&track, context.allocator)
+        defer mem.tracking_allocator_destroy(&track)
+        context.allocator = mem.tracking_allocator(&track)
+        
+        defer for _, leak in track.allocation_map {
+            print("% leaked %\n", leak.location, view_memory_size(leak.size))
+        }
     }
     
     rl.SetTraceLogLevel(.WARNING)
@@ -171,7 +171,6 @@ when true {
     
     defer {
         collapse_reset(&collapse)
-        delete(collapse.values)
         delete(collapse.steps)
         delete(collapse.states)
         delete(collapse.temp_state_values)
@@ -223,7 +222,7 @@ when true {
         if viewing_group != nil {
             center := Viewing_Size / 2
             p := vec_cast(f32, center)
-                        
+            
             size := cast(f32) Viewing_Size.x / cast(f32) ((len(color_groups)+1) * 2 + 1) * 0.75
             
             samples :: 250
@@ -231,7 +230,7 @@ when true {
             rads_per_sample := Tau / turns
             
             max_support: f32
-            for comparing_group, group_index in color_groups {
+            for comparing_group in color_groups {
                 for sample in 0..<samples {
                     turn := cast(f32) sample
                     
@@ -256,13 +255,13 @@ when true {
                     
                     sampling_direction := arm(turn * rads_per_sample)
                     closeness := get_closeness(sampling_direction)
-
+                    
                     for vok, vid in viewing_group.ids do if vok {
                         for cok, cid in comparing_group.ids do if cok {
                             total_supports[sample] += get_support_amount(&collapse, cast(State_Id) vid, cast(State_Id) cid, closeness)
                         }
                     }
-                    }
+                }
                 
                 for sample in 0..<samples {
                     ring_size    := 0.9 * size
@@ -294,7 +293,7 @@ when true {
             rl.DrawCircleV(p, size, viewing_group.color)
         }
         rl.EndTextureMode()
-
+        
         {
             image := rl.LoadImageFromTexture(viewing_render_target.texture)
             pixels := slice_from_parts_cast(rl.Color, image.data, image.width * image.height)
@@ -333,9 +332,9 @@ when true {
         for cell in cells {
             color: rl.Color
             
-if render_wavefunction_as_average || cell.collapsed {
-            color = cell.average_color
-                        }
+            if render_wavefunction_as_average || cell.collapsed {
+                color = cell.average_color
+            }
             draw_cell(cell, color)
         }
         spall_end()
@@ -426,8 +425,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             
             // Extract color groups
             for state in c.states {
-                color_id := state.middle
-                color := c.values[color_id]
+                color := state.middle
                 
                 group: ^Color_Group
                 for &it in color_groups {
@@ -470,7 +468,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 
               case .Previous_Choice: 
                 if len(c.steps) > 0 {
-                                        bad_step := pop(&c.steps)
+                    bad_step := pop(&c.steps)
                     delete_step(bad_step)
                 }
                 if len(c.steps) == 0 {
@@ -480,7 +478,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 
               case .Start: 
                 is_restart = true
-                                for step in c.steps {
+                for step in c.steps {
                     delete_step(step)
                 }
                 clear(&c.steps)
@@ -495,8 +493,6 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 spall_scope("Restart")
                 
                 total_duration = 0
-                assert(len(cells[0].states) == len(c.states))
-                
                 for &cell in cells {
                     cell.collapsed = false
                     cell.is_dirty = true
@@ -507,10 +503,10 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 }
             } else {
                 for &cell in cells {
-                    cell.is_dirty = true
                     for &state in cell.states {
                         if state.removed_at != Invalid_Collapse_Step && state.removed_at >= current.step {
                             state.removed_at = Invalid_Collapse_Step
+                            cell.is_dirty = true
                             cell.collapsed = false
                         }
                     }
