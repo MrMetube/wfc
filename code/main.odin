@@ -73,8 +73,7 @@ opposite_direction :: proc (direction: Direction) -> (result: Direction) {
     return result
 }
 
-// 0 Cosine 1 Linear
-// @todo(viktor): even linear seems to overlap too much to get clean output, next after linear would be nearest or something with steeper falloff
+// 0 Cosine 1 Linear ~1.5 cleanly separates the 8 cardinal directions
 view_mode_t: f32 = 1
 
 ////////////////////////////////////////////////
@@ -126,6 +125,8 @@ main :: proc () {
         defer for _, leak in track.allocation_map {
             print("% leaked %\n", leak.location, view_memory_size(leak.size))
         }
+        
+        cells.allocator = context.allocator
     }
     
     rl.SetTraceLogLevel(.WARNING)
@@ -215,85 +216,7 @@ main :: proc () {
         // Render
         
         spall_begin("Render")
-        rl.BeginTextureMode(viewing_render_target)
-        rl.ClearBackground({0x1F, 0x31, 0x4B, 0xFF})
-        
-        // @todo(viktor): Confirm that the directions are correctly mapped to vectors and displayed correctly on the circle
-        if viewing_group != nil {
-            center := Viewing_Size / 2
-            p := vec_cast(f32, center)
-            
-            size := cast(f32) Viewing_Size.x / cast(f32) ((len(color_groups)+1) * 2 + 1) * 0.75
-            
-            samples :: 250
-            turns := cast(f32) samples
-            rads_per_sample := Tau / turns
-            
-            max_support: f32
-            for comparing_group in color_groups {
-                for sample in 0..<samples {
-                    turn := cast(f32) sample
-                    
-                    sampling_direction := arm(turn * rads_per_sample)
-                    closeness := get_closeness(sampling_direction)
-                    
-                    total: f32
-                    for vok, vid in viewing_group.ids do if vok {
-                        for cok, cid in comparing_group.ids do if cok {
-                            total += get_support_amount(&collapse, cast(State_Id) vid, cast(State_Id) cid, closeness)
-                        }
-                    }
-                    max_support = max(max_support, total)
-                }
-            }
-            
-            for comparing_group, group_index in color_groups {
-                total_supports := make([] f32, samples, context.temp_allocator)
-                
-                for sample in 0..<samples {
-                    turn := cast(f32) sample
-                    
-                    sampling_direction := arm(turn * rads_per_sample)
-                    closeness := get_closeness(sampling_direction)
-                    
-                    for vok, vid in viewing_group.ids do if vok {
-                        for cok, cid in comparing_group.ids do if cok {
-                            total_supports[sample] += get_support_amount(&collapse, cast(State_Id) vid, cast(State_Id) cid, closeness)
-                        }
-                    }
-                }
-                
-                for sample in 0..<samples {
-                    ring_size    := 0.9 * size
-                    ring_padding := 0.1 * size
-                    
-                    center_size  := ring_size
-                    
-                    turn := cast(f32) sample
-                    
-                    sampling_direction := arm(turn * rads_per_sample)
-                    
-                    total_support := total_supports[sample]
-                    alpha := safe_ratio_0(total_support, max_support)
-                    color := comparing_group.color
-                    color = rl.ColorAlpha(color, alpha)
-                    
-                    center := direction_to_angles(sampling_direction)
-                    width: f32 = 360. / turns
-                    start := center - width * .5
-                    stop  := center + width * .5
-                    
-                    inner := (center_size +  ring_size) + cast(f32) group_index * ring_size + ring_padding
-                    outer := inner + ring_size
-                    
-                    rl.DrawRing(p, inner, outer, start, stop, 0, color)
-                }
-            }
-            
-            rl.DrawCircleV(p, size, viewing_group.color)
-        }
-        rl.EndTextureMode()
-        
+        render_neighbourhood(&collapse)
         {
             image := rl.LoadImageFromTexture(viewing_render_target.texture)
             pixels := slice_from_parts_cast(rl.Color, image.data, image.width * image.height)
@@ -409,8 +332,6 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             
             setup_grid(c, entropy)
             
-            setup_cells(c)
-            
             restart(this_frame)
         }
         
@@ -459,10 +380,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             switch this_frame.rewind_to {
               case .Viewed:
                 if viewing_step + 1 < auto_cast len(c.steps) {
-                    spall_scope("Cleanup Steps")
-                    for step in c.steps[viewing_step+1:] {
-                        delete_step(step)
-                    }
+                    for step in c.steps[viewing_step+1:] do delete_step(step)
                 }
                 resize_dynamic_array(&c.steps, auto_cast viewing_step + 1)
                 
@@ -471,6 +389,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                     bad_step := pop(&c.steps)
                     delete_step(bad_step)
                 }
+                
                 if len(c.steps) == 0 {
                     is_restart = true
                     append(&c.steps, Step {})
@@ -591,12 +510,13 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries) {
     voronoi_cells := end_triangulation_voronoi_cells(&dt)
     
     for it in voronoi_cells {
+        dim := vec_cast(f64, dimension)
         cell: Cell
-        cell.p = vec_cast(f32, it.center * vec_cast(f64, dimension))
+        cell.p = vec_cast(f32, it.center * dim)
         
         make(&cell.points, len(it.points))
         for point, index in it.points {
-            p := vec_cast(f32, point * vec_cast(f64, dimension))
+            p := vec_cast(f32, point * dim)
             cell.points[index] = p
         }
         
@@ -612,6 +532,11 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries) {
             cell.neighbours[index] = neighbour
         }
     }
+    
+    setup_cells(c)
+    
+    // @note(viktor): without this free_all when the grid is shifted/spiral/noise we get a crash on the frame after this, on which we start by calling free_all when draw_cell wants to append. why?
+    free_all(context.temp_allocator)
 }
 
 generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
@@ -620,6 +545,15 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
     entropy := seed_random_series()
     
     switch generate_kind  {
+      case .Grid:
+        for x in 0 ..< side {
+            for y in 0 ..< side {
+                p := (vec_cast(f64, x, y) + 0.5) / cast(f64) side
+                p += random_bilateral(&entropy, v2d) * 0.00001
+                append(points, p)
+            }
+        }
+        
       case .Shifted_Grid:
         for x in 0 ..< side {
             for y in 0 ..< side {
@@ -630,16 +564,7 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
                 append(points, p)
             }
         }
-        
-      case .Grid:
-        for x in 0 ..< side {
-            for y in 0 ..< side {
-                p := (vec_cast(f64, x, y) + 0.5) / cast(f64) side
-                p += random_bilateral(&entropy, v2d) * 0.00001
-                append(points, p)
-            }
-        }
-        
+           
       case .Diamond_Grid:
         for x in 0 ..< side {
             for y in 0 ..< side {
@@ -771,4 +696,85 @@ world_to_screen_vec :: proc (world: v2) -> (screen: v2) {
 direction_to_angles :: proc(direction: [2]$T) -> (angle: T) {
     angle = atan2(direction.y, direction.x) * DegreesPerRadian
     return angle
+}
+
+render_neighbourhood :: proc (c: ^Collapse) {
+    rl.BeginTextureMode(viewing_render_target)
+    rl.ClearBackground({0x1F, 0x31, 0x4B, 0xFF})
+    
+    // @todo(viktor): Confirm that the directions are correctly mapped to vectors and displayed correctly on the circle
+    if viewing_group != nil {
+        center := Viewing_Size / 2
+        p := vec_cast(f32, center)
+        
+        size := cast(f32) Viewing_Size.x / cast(f32) ((len(color_groups)+1) * 2 + 1) * 0.75
+        
+        samples :: 250
+        turns := cast(f32) samples
+        rads_per_sample := Tau / turns
+        
+        max_support: f32
+        for comparing_group in color_groups {
+            for sample in 0..<samples {
+                turn := cast(f32) sample
+                
+                sampling_direction := arm(turn * rads_per_sample)
+                closeness := get_closeness(sampling_direction)
+                
+                total: f32
+                for vok, vid in viewing_group.ids do if vok {
+                    for cok, cid in comparing_group.ids do if cok {
+                        total += get_support_amount(c, cast(State_Id) vid, cast(State_Id) cid, closeness)
+                    }
+                }
+                max_support = max(max_support, total)
+            }
+        }
+        
+        for comparing_group, group_index in color_groups {
+            total_supports := make([] f32, samples, context.temp_allocator)
+            
+            for sample in 0..<samples {
+                turn := cast(f32) sample
+                
+                sampling_direction := arm(turn * rads_per_sample)
+                closeness := get_closeness(sampling_direction)
+                
+                for vok, vid in viewing_group.ids do if vok {
+                    for cok, cid in comparing_group.ids do if cok {
+                        total_supports[sample] += get_support_amount(c, cast(State_Id) vid, cast(State_Id) cid, closeness)
+                    }
+                }
+            }
+            
+            for sample in 0..<samples {
+                ring_size    := 0.9 * size
+                ring_padding := 0.1 * size
+                
+                center_size  := ring_size
+                
+                turn := cast(f32) sample
+                
+                sampling_direction := arm(turn * rads_per_sample)
+                
+                total_support := total_supports[sample]
+                alpha := safe_ratio_0(total_support, max_support)
+                color := comparing_group.color
+                color = rl.ColorAlpha(color, alpha)
+                
+                center := direction_to_angles(sampling_direction)
+                width: f32 = 360. / turns
+                start := center - width * .5
+                stop  := center + width * .5
+                
+                inner := (center_size +  ring_size) + cast(f32) group_index * ring_size + ring_padding
+                outer := inner + ring_size
+                
+                rl.DrawRing(p, inner, outer, start, stop, 0, color)
+            }
+        }
+        
+        rl.DrawCircleV(p, size, viewing_group.color)
+    }
+    rl.EndTextureMode()
 }

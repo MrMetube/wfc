@@ -321,7 +321,6 @@ Format_Context :: struct {
 
 ////////////////////////////////////////////////
 
-@(private="file") temp_buffer:            [4096] u8
 
 @(private="file") temp_view_arena:     mem.Arena
 @(private="file") temp_view_allocator: mem.Allocator
@@ -441,16 +440,13 @@ format_string :: proc (buffer: []u8, format: string, args: ..any, flags := Forma
 format_any :: proc (ctx: ^Format_Context, arg: any) {
     if ctx.max_depth <= 0 do return
     
-    // @todo(viktor): this here doesnt work with nested calls to format any
-    temp := make_string_builder(temp_buffer[:])
-    defer {
-        // @todo(viktor): Can we avoid this copy? Only if we knew the width of the printed before hand.
-        // padding := max(0, cast(i32) view.width - cast(i32) temp.count)
-        // if       !view.pad_right_side && view.width != 0 do for _ in 0..<padding do append(&ctx.dest, ' ')
-        // defer if  view.pad_right_side && view.width != 0 do for _ in 0..<padding do append(&ctx.dest, ' ')
-        
-        append(&ctx.dest, to_string(temp))
-    }
+    temp := &ctx.dest
+    // @todo(viktor): copy into temp and then apply padding/width 
+    // temp_buffer: [4096] u8
+    // _temp := make_string_builder(temp_buffer[:])
+    // padding := max(0, cast(i32) view.width - cast(i32) temp.count)
+    // if       !view.pad_right_side && view.width != 0 do for _ in 0..<padding do append(&ctx.dest, ' ')
+    // defer if  view.pad_right_side && view.width != 0 do for _ in 0..<padding do append(&ctx.dest, ' ')
     
     switch value in arg {
       case any:    format_any(ctx, value)
@@ -459,40 +455,40 @@ format_any :: proc (ctx: ^Format_Context, arg: any) {
       case nil:    draw_pointer(ctx, nil)
       case rawptr: draw_pointer(ctx, value)
       
-      case b8:   append(&temp, value ? "true" : "false")
-      case b16:  append(&temp, value ? "true" : "false")
-      case b32:  append(&temp, value ? "true" : "false")
-      case b64:  append(&temp, value ? "true" : "false")
-      case bool: append(&temp, value ? "true" : "false")
+      case b8:   append(temp, value ? "true" : "false")
+      case b16:  append(temp, value ? "true" : "false")
+      case b32:  append(temp, value ? "true" : "false")
+      case b64:  append(temp, value ? "true" : "false")
+      case bool: append(temp, value ? "true" : "false")
       
       case rune:
         // @todo(viktor): maybe do this myself
         buf, count := utf8.encode_rune(value)
         bytes := buf[:count]
-        append(&temp, ..bytes)
+        append(temp, ..bytes)
         
-      case string:  append(&temp, value)
-      case cstring: append(&temp, string(value))
+      case string:  append(temp, value)
+      case cstring: append(temp, string(value))
        
-      case u8:      draw_unsigned_integer(&temp, view_integer(value))
-      case u16:     draw_unsigned_integer(&temp, view_integer(value))
-      case u32:     draw_unsigned_integer(&temp, view_integer(value))
-      case u64:     draw_unsigned_integer(&temp, view_integer(value))
-      case uint:    draw_unsigned_integer(&temp, view_integer(value))
-      case uintptr: draw_unsigned_integer(&temp, view_integer(value))
+      case u8:      draw_unsigned_integer(temp, view_integer(value))
+      case u16:     draw_unsigned_integer(temp, view_integer(value))
+      case u32:     draw_unsigned_integer(temp, view_integer(value))
+      case u64:     draw_unsigned_integer(temp, view_integer(value))
+      case uint:    draw_unsigned_integer(temp, view_integer(value))
+      case uintptr: draw_unsigned_integer(temp, view_integer(value))
       case u128:    unimplemented() // @incomplete
         
-      case i8:   draw_signed_integer(&temp, view_integer(value))
-      case i16:  draw_signed_integer(&temp, view_integer(value))
-      case i32:  draw_signed_integer(&temp, view_integer(value))
-      case i64:  draw_signed_integer(&temp, view_integer(value))
-      case int:  draw_signed_integer(&temp, view_integer(value))
+      case i8:   draw_signed_integer(temp, view_integer(value))
+      case i16:  draw_signed_integer(temp, view_integer(value))
+      case i32:  draw_signed_integer(temp, view_integer(value))
+      case i64:  draw_signed_integer(temp, view_integer(value))
+      case int:  draw_signed_integer(temp, view_integer(value))
       case i128: unimplemented() // @incomplete
         
       // @todo(viktor): endianess
-      case f16: format_float(&temp, view_float(value, size = size_of(f16)))
-      case f32: format_float(&temp, view_float(value, size = size_of(f32)))
-      case f64: format_float(&temp, view_float(value, size = size_of(f64)))
+      case f16: format_float(temp, view_float(value, size = size_of(f16)))
+      case f32: format_float(temp, view_float(value, size = size_of(f32)))
+      case f64: format_float(temp, view_float(value, size = size_of(f64)))
       
       case complex32: 
         format_any(ctx, real(value))
@@ -541,11 +537,11 @@ format_any :: proc (ctx: ^Format_Context, arg: any) {
             // @todo(viktor): We are ignoring the other fields for now
             format_any(ctx, value.value)
           case View_Integer:
-            if info.is_signed do draw_signed_integer(&temp,   value)
-            else do              draw_unsigned_integer(&temp, value)
+            if info.is_signed do draw_signed_integer(temp,   value)
+            else do              draw_unsigned_integer(temp, value)
           
           case View_Float:
-            format_float(&temp, value)
+            format_float(temp, value)
             
           case View_Array, View_Struct, View_Pointer:
             unimplemented()
@@ -596,7 +592,7 @@ format_any :: proc (ctx: ^Format_Context, arg: any) {
             if default, ok := Default_Views[value.id]; ok {
                 format_any(ctx, default(value.data))
             } else {
-                append(&temp, variant.name)
+                append(temp, variant.name)
                 format_any(ctx, ' ')
                 format_any(ctx, any{data = value.data, id = variant.base.id})
             }
@@ -629,7 +625,7 @@ format_any :: proc (ctx: ^Format_Context, arg: any) {
           // unimplemented - fallback to fmt
           
           case runtime.Type_Info_Enum:
-            append(&temp, fmt.tprint(value))
+            append(temp, fmt.tprint(value))
             
           /* 
             . enumerated array   [key0 = elem0, key1 = elem1, key2 = elem2, ...]
@@ -637,25 +633,25 @@ format_any :: proc (ctx: ^Format_Context, arg: any) {
             . bit sets           {key0 = elem0, key1 = elem1, ...}
            */  
           case runtime.Type_Info_Enumerated_Array:
-            append(&temp, fmt.tprint(value))
+            append(temp, fmt.tprint(value))
           case runtime.Type_Info_Bit_Set:
-            append(&temp, fmt.tprint(value))
+            append(temp, fmt.tprint(value))
           case runtime.Type_Info_Bit_Field:
-            append(&temp, fmt.tprint(value))
+            append(temp, fmt.tprint(value))
           case runtime.Type_Info_Map:
-            append(&temp, fmt.tprint(value))
+            append(temp, fmt.tprint(value))
             
           case runtime.Type_Info_Parameters:
-            append(&temp, fmt.tprint(value))
+            append(temp, fmt.tprint(value))
           case runtime.Type_Info_Procedure:
-            append(&temp, fmt.tprint(value))
+            append(temp, fmt.tprint(value))
           case runtime.Type_Info_Simd_Vector:
-            append(&temp, fmt.tprint(value))
+            append(temp, fmt.tprint(value))
           case runtime.Type_Info_Soa_Pointer:
-            append(&temp, fmt.tprint(value))
+            append(temp, fmt.tprint(value))
           
           case: 
-            append(&temp, fmt.tprint(value))
+            append(temp, fmt.tprint(value))
             unimplemented("This value is not handled yet")
         }
     }
@@ -840,8 +836,7 @@ draw_unsigned_integer :: proc (dest: ^String_Builder, view: View) {
 ////////////////////////////////////////////////
 ////////////////////////////////////////////////
 
-// @todo(viktor): make pointer into view_pointer
-//  - `no_addr(expr)`: Disables explicit address visualization with pointer evaluations in `expr`.
+// @todo(viktor): `no_addr(expr)`: Disables explicit address visualization with pointer evaluations in `expr`.
 
 draw_pointer :: proc (ctx: ^Format_Context, data: pmm, target_type: ^runtime.Type_Info = nil) {
     if ctx.max_depth <= 0 do return

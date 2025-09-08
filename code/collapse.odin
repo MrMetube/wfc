@@ -107,16 +107,16 @@ get_closeness :: proc (sampling_direction: v2) -> (result: f32x8) {
     sampling_direction = normalize(sampling_direction)
     
     cosine_closeness, linear_closeness: lane_f32
-    for other, index in Direction {
+    for other in Direction {
         other_dir := normalize(vec_cast(f32, Deltas[other]))
         // @todo(viktor): now that we have 8 directions the cosine is too generous
         cosine := dot(sampling_direction, other_dir)
-        (cast(^[8]f32) &cosine_closeness)[index] = cosine
-        (cast(^[8]f32) &linear_closeness)[index] = 1 - acos(cosine)
+        (cast(^[Direction]f32) &cosine_closeness)[other] = cosine
+        (cast(^[Direction]f32) &linear_closeness)[other] = 1 - acos(cosine)
     }
     closeness := linear_blend(cosine_closeness, linear_closeness, view_mode_t)
     closeness = simd.max(closeness, 0)
-    result = closeness
+    result = normalize(closeness)
     
     return result
 }
@@ -537,7 +537,7 @@ extract_states :: proc (c: ^Collapse, pixels: [] rl.Color, width, height: i32) {
                     b_hash := b.subregion_hashes[opposite_direction(d)]
                     
                     if a_hash == b_hash {
-                        support := cast(^[8]f32) &c.supports[a.id * auto_cast len(c.states) + b.id]
+                        support := cast(^[Direction]f32) &c.supports[a.id * auto_cast len(c.states) + b.id]
                         support[d] = 1
                     }
                 }

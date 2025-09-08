@@ -165,7 +165,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         
         imgui.text("Directional Spread")
         imgui.push_item_width(region.x*0.5)
-        if imgui.slider_float("Blend Factor", &view_mode_t, 0, 1) {
+        if imgui.slider_float("Blend Factor", &view_mode_t, 0, 1.5) {
             if viewing_group == nil {
                 restart(this_frame)
             }
@@ -175,6 +175,17 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         imgui.get_content_region_avail(&region)
         imgui.progress_bar(1-view_mode_t, {region.x, 0}, overlay="Cosine")
         imgui.progress_bar(view_mode_t-0, {region.x, 0}, overlay="Linear")
+        
+        
+        @(static) angle: f32
+        imgui.slider_float("Angle", &angle, 0, 360)
+        radians := angle == 0 ? 0 : angle * RadiansPerDegree
+        closeness := transmute([8] f32) get_closeness(arm(radians))
+        
+        imgui.get_content_region_avail(&region)
+        for direction in Direction {
+            imgui.progress_bar(closeness[direction], {region.x, 0}, overlay=tprint("%", direction))
+        }
         
         imgui.text("States")
         {

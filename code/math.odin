@@ -292,9 +292,13 @@ arm :: proc(angle: $T) -> (result: [2]T) {
     return result
 }
 
-dot :: proc(a, b: $V/[$N]$E) -> (result: E) {
-    #unroll for i in 0..<N {
-        result += a[i] * b[i]
+dot :: proc(a, b: $V) -> (result: element_type(V)) {
+    when intrinsics.type_is_simd_vector(V) {
+        result = simd.reduce_add_pairs(a * b)
+    } else {
+        #unroll for i in 0..<len(V) {
+            result += a[i] * b[i]
+        }
     }
     
     return result
@@ -323,14 +327,15 @@ project :: proc(v, axis: $V) -> V {
     return v - 1 * dot(v, axis) * axis
 }
 
-length :: proc(vec: $V/[$N]$T) -> (result: T) {
+length :: proc(vec: $V) -> (result: element_type(V)) {
     length_squared := length_squared(vec)
     result = square_root(length_squared)
     return result
 }
 
-length_squared :: proc(vec: $V/[$N]$T) -> T {
-    return dot(vec, vec)
+length_squared :: proc(vec: $V) -> (result: element_type(V)) {
+    result = dot(vec, vec)
+    return result
 }
 
 normalize :: proc(vec: $V) -> (result: V) {
@@ -592,3 +597,7 @@ has_area_inclusive :: proc(rect: $R/Rectangle($T)) -> (result: b32) {
     result = area != 0
     return result
 }
+
+////////////////////////////////////////////////
+
+element_type :: intrinsics.type_elem_type
