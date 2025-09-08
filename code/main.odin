@@ -534,9 +534,6 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries) {
     }
     
     setup_cells(c)
-    
-    // @note(viktor): without this free_all when the grid is shifted/spiral/noise we get a crash on the frame after this, on which we start by calling free_all when draw_cell wants to append. why?
-    free_all(context.temp_allocator)
 }
 
 generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
@@ -639,12 +636,10 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
 }
 
 draw_cell :: proc (cell: Cell, color: rl.Color) {
-    @(static) buffer: [dynamic] v2
-    buffer.allocator = context.temp_allocator
+    @(static) buffer: [dynamic] v2 // @leak
     clear(&buffer)
     
-    world_p := world_to_screen(cell.p)
-    append(&buffer, world_p)
+    append(&buffer, world_to_screen(cell.p))
     for point in cell.points {
         append(&buffer, world_to_screen(point))
     }
@@ -653,8 +648,7 @@ draw_cell :: proc (cell: Cell, color: rl.Color) {
     rl.DrawTriangleFan(raw_data(buffer), auto_cast len(buffer), color)
 }
 draw_cell_outline :: proc (cell: Cell, color: rl.Color) {
-    @(static) buffer: [dynamic] v2
-    buffer.allocator = context.temp_allocator
+    @(static) buffer: [dynamic] v2 // @leak
     clear(&buffer)
     
     for point in cell.points {
