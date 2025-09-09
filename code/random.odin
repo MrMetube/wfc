@@ -111,8 +111,6 @@ where size_of(T) <= size_of(u32) {
 
 random_between_f32 :: proc(series: ^RandomSeries, min, max: f32) -> (result: f32) {
     value := random_unilateral(series, f32)
-    range := max - min
-    result = min + value * range
-    
+    result = linear_blend(min, max, value)
     return result
 }

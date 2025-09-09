@@ -7,6 +7,7 @@ import "base:runtime"
 import "base:builtin"
 
 import "core:mem"
+import "core:simd"
 
 // ------- Low Contrast
 // #C1B28B gray
@@ -26,42 +27,41 @@ import "core:mem"
 // #e46738 hazel 
 // #ffb433 orange 
 
-Isabelline :: v4{0.96, 0.95, 0.94, 1}
-Jasmine    :: v4{0.95, 0.82, 0.52  , 1}
-DarkGreen  :: v4{0   , 0.07, 0.0353, 1}
-Emerald    :: v4{0.21, 0.82, 0.54, 1}
-Salmon     :: v4{1, 0.49, 0.42, 1}
+Isabelline :: v4{0.96, 0.95, 0.94 , 1}
+Jasmine    :: v4{0.95, 0.82, 0.52 , 1}
+DarkGreen  :: v4{0   , 0.07, 0.035, 1}
+Emerald    :: v4{0.21, 0.82, 0.54 , 1}
+Salmon     :: v4{1   , 0.49, 0.42 , 1}
 
-White     :: v4{1   ,1    ,1      , 1}
-Gray      :: v4{0.5 ,0.5  ,0.5    , 1}
-Black     :: v4{0   ,0    ,0      , 1}
-Blue      :: v4{0.08, 0.49, 0.72  , 1}
-Orange    :: v4{1   , 0.71, 0.2   , 1}
-Green     :: v4{0   , 0.59, 0.28  , 1}
-Red       :: v4{1   , 0.09, 0.24  , 1}
-DarkBlue  :: v4{0.08, 0.08, 0.2   , 1}
+White      :: v4{1   , 1   , 1    , 1}
+Gray       :: v4{0.5 , 0.5 , 0.5  , 1}
+Black      :: v4{0   , 0   , 0    , 1}
+Blue       :: v4{0.08, 0.49, 0.72 , 1}
+Orange     :: v4{1   , 0.71, 0.2  , 1}
+Green      :: v4{0   , 0.59, 0.28 , 1}
+Red        :: v4{1   , 0.09, 0.24 , 1}
+DarkBlue   :: v4{0.08, 0.08, 0.2  , 1}
 
 color_wheel :: [?]v4 {
-    v4{0.3, 0.22, 0.34, 1},
-    v4{0.08, 0.38, 0.43, 1},
-    v4{0.99, 0.96, 0.69, 1},
-    v4{1, 0.5, 0.07, 1},
-    v4{0.92, 0.32, 0.44, 1},
-    v4{0.38, 0.55, 0.28, 1}, 
-    v4{1, 0.56, 0.45, 1},
+    v4{0.3 , 0.22, 0.34, 1}, 
+    v4{0.08, 0.38, 0.43, 1}, 
+    v4{0.99, 0.96, 0.69, 1}, 
+    v4{1   , 0.5 , 0.07, 1}, 
+    v4{0.92, 0.32, 0.44, 1}, 
+    v4{0.38, 0.55, 0.28, 1},  
+    v4{1   , 0.56, 0.45, 1}, 
     
-    v4{0.53, 0.56, 0.6, 1},
-    v4{0.51, 0.2, 0.02, 1},
-    v4{0.83, 0.32, 0.07, 1},
-    v4{0.98, 0.63, 0.25, 1},
-    v4{0.5, 0.81, 0.66, 1},
-    v4{1, 0.62, 0.7, 1},
-    v4{0.49, 0.82, 0.51, 1},
-    v4{1, 0.84, 0.4, 1},
-    v4{0, 0.62, 0.72, 1},
-    v4{0.9, 0.9, 0.92, 1},
+    v4{0.53, 0.56, 0.6 , 1}, 
+    v4{0.51, 0.2 , 0.02, 1}, 
+    v4{0.83, 0.32, 0.07, 1}, 
+    v4{0.98, 0.63, 0.25, 1}, 
+    v4{0.5 , 0.81, 0.66, 1}, 
+    v4{1   , 0.62, 0.7 , 1}, 
+    v4{0.49, 0.82, 0.51, 1}, 
+    v4{1   , 0.84, 0.4 , 1}, 
+    v4{0   , 0.62, 0.72, 1}, 
+    v4{0.9 , 0.9 , 0.92, 1}, 
 }
-
 
 pmm :: rawptr
 umm :: uintptr
@@ -121,6 +121,15 @@ vec_cast :: proc { vcast_2, vcast_3, vcast_4, vcast_vec }
 @(require_results) abs_vec :: proc(a: [$N]$E) -> (result: [N]E) where intrinsics.type_is_numeric(E) {
     #no_bounds_check #unroll for i in 0..<N {
         result[i] = abs(a[i])
+    }
+    return result
+}
+
+vec_max :: proc (a: $T, b: T) -> (result: T) {
+    when intrinsics.type_is_simd_vector(T) {
+        result = simd.max(a, b)
+    } else {
+        result = max(a, b)
     }
     return result
 }

@@ -28,7 +28,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
             
             if imgui.button("Step") {
                 this_frame.tasks += { .update }
-                desired_update_state = cast(Step_State) ((cast(int) current.state + 1) % len(Step_State))
+                wait_until_this_state = cast(Step_State) ((cast(int) current.state + 1) % len(Step_State))
             }
             
             if imgui.button("Rewind one step")  do this_frame.tasks += { .rewind  }
@@ -51,7 +51,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
             viewing_step_detached = viewing_step != current.step
             
             for &cell in cells {
-                calculate_average_color(c, &cell)
+                calculate_average_color(c, &cell, viewing_step)
             }
         }
         imgui.pop_item_width()
@@ -60,7 +60,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
             if imgui.button("View latest step") do viewing_step_detached = false
             if imgui.button("Rewind to viewed step") {
                 this_frame.tasks += { .rewind  }
-                this_frame.rewind_to = .Viewed
+                this_frame.rewind_to = viewing_step
                 viewing_step_detached = false
             }
         } else {
@@ -163,9 +163,9 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
     imgui.begin("Neighbourhood")
         imgui.get_content_region_avail(&region)
         
-        imgui.text("Directional Spread")
+        imgui.text("Directional Strictness")
         imgui.push_item_width(region.x*0.5)
-        if imgui.slider_float("Blend Factor", &view_mode_t, 0, 1.5) {
+        if imgui.slider_float("Factor", &t_directional_strictness, 0, 1.5) {
             if viewing_group == nil {
                 restart(this_frame)
             }
@@ -173,18 +173,20 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         imgui.pop_item_width()
         
         imgui.get_content_region_avail(&region)
-        imgui.progress_bar(1-view_mode_t, {region.x, 0}, overlay="Cosine")
-        imgui.progress_bar(view_mode_t-0, {region.x, 0}, overlay="Linear")
+        imgui.progress_bar(1.5-t_directional_strictness, {region.x, 0}, overlay="Overlapping")
+        imgui.progress_bar(t_directional_strictness-0,   {region.x, 0}, overlay="Separated")
         
-        
-        @(static) angle: f32
-        imgui.slider_float("Angle", &angle, 0, 360)
-        radians := angle == 0 ? 0 : angle * RadiansPerDegree
-        closeness := transmute([8] f32) get_closeness(arm(radians))
-        
-        imgui.get_content_region_avail(&region)
-        for direction in Direction {
-            imgui.progress_bar(closeness[direction], {region.x, 0}, overlay=tprint("%", direction))
+        imgui.checkbox("Preview", &preview_angles)
+        if preview_angles {
+            @(static) angle: f32
+            imgui.slider_float("Angle", &angle, 0, 360)
+            radians := angle == 0 ? 0 : angle * RadiansPerDegree
+            closeness := transmute([8] f32) get_closeness(arm(radians))
+            
+            imgui.get_content_region_avail(&region)
+            for direction in Direction {
+                imgui.progress_bar(closeness[direction], {region.x, 0}, overlay=tprint("%", direction))
+            }
         }
         
         imgui.text("States")
@@ -208,7 +210,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
                 }
                 imgui.same_line(cast(f32) column * group_width + 1 * item_width)
                 
-                imgui.color_button("", rl_color_to_v4(group.color), flags = color_edit_flags_just_display)
+                imgui.color_button("", group.color, flags = color_edit_flags_just_display)
             }
             imgui.pop_item_width()
         }

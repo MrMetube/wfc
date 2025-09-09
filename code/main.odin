@@ -19,7 +19,7 @@ TargetFrameTime :: 1./TargetFps
 total_duration: time.Duration
 
 paused: b32
-desired_update_state: Maybe(Step_State)
+wait_until_this_state: Maybe(Step_State)
 
 cell_size_on_screen: v2
 
@@ -27,12 +27,13 @@ show_neighbours                := false
 show_voronoi_cells             := false
 render_wavefunction_as_average := true
 highlight_step                 := true
+preview_angles                 := false
 
 viewing_render_target: rl.RenderTexture
 viewing_group: ^Color_Group
 color_groups:  [dynamic] Color_Group
 Color_Group :: struct {
-    color: rl.Color,
+    color: v4,
     ids:   [/* State_Id */] b32,
 }
 
@@ -44,7 +45,7 @@ dimension: v2i = {66, 66}
 File :: struct {
     data:    [] u8,
     image:   rl.Image,
-    texture: rl.Texture2D,
+    texture: rl.Texture,
 }
 
 viewing_step_detached: bool
@@ -67,14 +68,24 @@ Deltas := [Direction] v2i {
     .SE = { 1,-1},
 }
 
+normalized_direction :: proc (direction: Direction) -> (result: v2) {
+    @(static) normals: [Direction] v2
+    @(static) initialized: bool
+    if !initialized {
+        initialized = true
+        for d in Direction {
+            normals[d] = normalize(vec_cast(f32, Deltas[d]))
+        }
+    }
+    
+    return normals[direction]
+}
+
 opposite_direction :: proc (direction: Direction) -> (result: Direction) {
     count := len(Direction)
     result = cast(Direction) ((cast(int) direction + count/2) % count)
     return result
 }
-
-// 0 Cosine 1 Linear ~1.5 cleanly separates the 8 cardinal directions
-view_mode_t: f32 = 1
 
 ////////////////////////////////////////////////
 
@@ -110,10 +121,19 @@ Frame :: struct {
     pixels_dimension: v2i,
     
     // rewind
-    rewind_to: enum { Previous_Choice, Viewed, Start },
+    rewind_to: Collapse_Step,
 }
 
 desired_N:  i32 = N
+
+////////////////////////////////////////////////
+
+//    t - description - overlap of the 8 cardinal directions
+//   ~0 - Cosine      - large
+// ~1.5 - Linear      - none
+t_directional_strictness: f32 = .75
+
+////////////////////////////////////////////////
 
 main :: proc () {
     when true {
@@ -215,31 +235,14 @@ main :: proc () {
         ////////////////////////////////////////////////
         // Render
         
-        spall_begin("Render")
         render_neighbourhood(&collapse)
-        {
-            image := rl.LoadImageFromTexture(viewing_render_target.texture)
-            pixels := slice_from_parts_cast(rl.Color, image.data, image.width * image.height)
-            for row in 0..<image.height/2 {
-                rev := image.height-1-row
-                for col in 0..<image.width {
-                    a := &pixels[row * image.width + col]
-                    b := &pixels[rev * image.width + col]
-                    swap(a, b)
-                }
-            }
-            
-            rl.UpdateTexture(viewing_render_target.texture, image.data)
-        }
-        
         
         rl.BeginDrawing()
         rl.ClearBackground({0x54, 0x57, 0x66, 0xFF})
         
         current := len(collapse.steps) != 0 ? peek(collapse.steps)^ : {}
         
-        spall_begin("Prepare Render")
-        {
+        { // Background
             cells_background_hue_t += rl.GetFrameTime() * DegreesPerRadian
             if cells_background_hue_t >= 360 do cells_background_hue_t -= 360
             
@@ -251,16 +254,14 @@ main :: proc () {
             rl.DrawRectangleRec(world_to_screen(background), color)
         }
         
-        spall_begin("render cells")
         for cell in cells {
-            color: rl.Color
+            color: v4
             
-            if render_wavefunction_as_average || cell.collapsed {
+            if render_wavefunction_as_average || .collapsed in cell.flags {
                 color = cell.average_color
             }
             draw_cell(cell, color)
         }
-        spall_end()
         
         if show_voronoi_cells {
             for cell, index in cells {
@@ -301,26 +302,18 @@ main :: proc () {
             }
         }
     
-        rl.DrawTextureEx(viewing_render_target.texture, 0, 0, 0, 255)
-        
-        spall_end(/* Prepare Render */)
-        
-        spall_begin("Execute Render")
         rl_imgui_render()
         rl.EndDrawing()
-        spall_end()
-        
-        spall_end(/* Render */)
     }
 }
 
 restart :: proc (this_frame: ^Frame) {
     this_frame.tasks += { .rewind }
-    this_frame.rewind_to = .Start
+    this_frame.rewind_to = 0
 }
 
 do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSeries) {
-    spall_scope("Update")
+    spall_proc()
     
     next_frame: Frame
     
@@ -376,36 +369,31 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             spall_scope("Rewind")
             this_frame.tasks -= { .rewind }
             
+            assert(this_frame.rewind_to != Invalid_Collapse_Step)
+            
+            when false {
+                current := len(c.steps) > 0 ? peek(c.steps)^ : {}
+                print("Rewinding to % from %\n", this_frame.rewind_to, current.step)
+                assert(this_frame.rewind_to != Invalid_Collapse_Step)
+            }
+            
             is_restart := false
-            switch this_frame.rewind_to {
-              case .Viewed:
-                if viewing_step + 1 < auto_cast len(c.steps) {
-                    for step in c.steps[viewing_step+1:] do delete_step(step)
-                }
-                resize_dynamic_array(&c.steps, auto_cast viewing_step + 1)
-                
-              case .Previous_Choice: 
-                if len(c.steps) > 0 {
-                    bad_step := pop(&c.steps)
-                    delete_step(bad_step)
-                }
-                
-                if len(c.steps) == 0 {
-                    is_restart = true
-                    append(&c.steps, Step {})
-                }
-                
-              case .Start: 
+            if this_frame.rewind_to == 0 {
                 is_restart = true
-                for step in c.steps {
-                    delete_step(step)
-                }
+                for step in c.steps do delete_step(step)
                 clear(&c.steps)
                 append(&c.steps, Step {})
+            } else {
+                limit := cast(int) this_frame.rewind_to + 1
+                if limit < len(c.steps) {
+                    for step in c.steps[limit:] do delete_step(step)
+                    resize(&c.steps, limit)
+                }
             }
             
             current := peek(c.steps)
-            // print("Rewind to %\n", cast(int) current.step)
+            assert(current.step == this_frame.rewind_to)
+            
             // print("Is Restart %\n", is_restart)
             
             if is_restart {
@@ -413,8 +401,9 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 
                 total_duration = 0
                 for &cell in cells {
-                    cell.collapsed = false
-                    cell.is_dirty = true
+                    cell.flags -= { .collapsed }
+                    cell.flags += { .dirty }
+                    
                     for &state, index in cell.states {
                         state.id = cast(State_Id) index
                         state.removed_at = Invalid_Collapse_Step
@@ -425,8 +414,8 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                     for &state in cell.states {
                         if state.removed_at != Invalid_Collapse_Step && state.removed_at >= current.step {
                             state.removed_at = Invalid_Collapse_Step
-                            cell.is_dirty = true
-                            cell.collapsed = false
+                            cell.flags += { .dirty }
+                            cell.flags -= { .collapsed }
                         }
                     }
                 }
@@ -447,13 +436,18 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             // print("Update with %\n", peek(c.steps).state)
             
             if c.states != nil {
+                current := peek(c.steps)
+                
                 this_update_start := time.now()
-                result := step_update(c, entropy)
+                result, rewind_to := step_update(c, entropy)
                 
                 switch result {
-                  case .Done:   break task_loop
-                  case .Rewind: next_frame.tasks += { .rewind }
-                  case .Ok:     next_frame.tasks += { .update }
+                  case .Done: break task_loop
+                  case .Ok:   next_frame.tasks += { .update }
+                  
+                  case .Rewind: 
+                    next_frame.tasks += { .rewind }
+                    next_frame.rewind_to = rewind_to != Invalid_Collapse_Step ? rewind_to : max(0, current.step - 1)
                 }
                 
                 total_duration += time.since(this_update_start)
@@ -464,11 +458,11 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             this_frame ^= next_frame
             next_frame = {}
         } else {
-            if desired_update_state != nil {
-                if desired_update_state != peek(c.steps).state {
+            if wait_until_this_state != nil {
+                if wait_until_this_state != peek(c.steps).state {
                     this_frame ^= next_frame
                 } else {
-                    desired_update_state = nil
+                    wait_until_this_state = nil
                 }
             }
         }
@@ -635,7 +629,7 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
     }
 }
 
-draw_cell :: proc (cell: Cell, color: rl.Color) {
+draw_cell :: proc (cell: Cell, color: v4) {
     @(static) buffer: [dynamic] v2 // @leak
     clear(&buffer)
     
@@ -645,7 +639,7 @@ draw_cell :: proc (cell: Cell, color: rl.Color) {
     }
     append(&buffer, buffer[1])
     
-    rl.DrawTriangleFan(raw_data(buffer), auto_cast len(buffer), color)
+    rl.DrawTriangleFan(raw_data(buffer), auto_cast len(buffer), v4_to_rl_color(color))
 }
 draw_cell_outline :: proc (cell: Cell, color: rl.Color) {
     @(static) buffer: [dynamic] v2 // @leak
@@ -754,7 +748,7 @@ render_neighbourhood :: proc (c: ^Collapse) {
                 total_support := total_supports[sample]
                 alpha := safe_ratio_0(total_support, max_support)
                 color := comparing_group.color
-                color = rl.ColorAlpha(color, alpha)
+                color *= alpha
                 
                 center := direction_to_angles(sampling_direction)
                 width: f32 = 360. / turns
@@ -764,11 +758,26 @@ render_neighbourhood :: proc (c: ^Collapse) {
                 inner := (center_size +  ring_size) + cast(f32) group_index * ring_size + ring_padding
                 outer := inner + ring_size
                 
-                rl.DrawRing(p, inner, outer, start, stop, 0, color)
+                rl.DrawRing(p, inner, outer, start, stop, 0, v4_to_rl_color(color))
             }
         }
         
-        rl.DrawCircleV(p, size, viewing_group.color)
+        rl.DrawCircleV(p, size, v4_to_rl_color(viewing_group.color))
     }
     rl.EndTextureMode()
+    
+    { // Invert y
+        image := rl.LoadImageFromTexture(viewing_render_target.texture)
+        pixels := slice_from_parts_cast(rl.Color, image.data, image.width * image.height)
+        for row in 0..<image.height/2 {
+            rev := image.height-1-row
+            for col in 0..<image.width {
+                a := &pixels[row * image.width + col]
+                b := &pixels[rev * image.width + col]
+                swap(a, b)
+            }
+        }
+        
+        rl.UpdateTexture(viewing_render_target.texture, image.data)
+    }
 }

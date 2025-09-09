@@ -31,7 +31,7 @@ Search_Metric :: enum { States, Entropy }
 State :: struct {
     id: State_Id,
     
-    middle: rl.Color,
+    middle: v4,
     
     frequency: f32,
     
@@ -68,16 +68,15 @@ Step_State :: enum {
 cells: [dynamic] Cell
 Cell :: struct {
     p:          v2, 
-    points:     [] v2, // for rendering the voronoi cell
+    states:     [] State_Entry,
     neighbours: [] ^Cell,
     
-    collapsed: bool,
-    
-    states: [] State_Entry,
-    
-    is_dirty: bool,
+    flags: bit_set[enum { collapsed, dirty }; u8],
     entropy: f32,
-    average_color: rl.Color,
+    
+    // Visual only
+    points:     [] v2, // for rendering the voronoi cell
+    average_color: v4,
 }
 
 State_Entry :: struct {
@@ -103,19 +102,27 @@ collapse_reset :: proc (c: ^Collapse) {
 ////////////////////////////////////////////////
 
 get_closeness :: proc (sampling_direction: v2) -> (result: f32x8) {
-    sampling_direction := sampling_direction
-    sampling_direction = normalize(sampling_direction)
-    
-    cosine_closeness, linear_closeness: lane_f32
-    for other in Direction {
-        other_dir := normalize(vec_cast(f32, Deltas[other]))
-        // @todo(viktor): now that we have 8 directions the cosine is too generous
-        cosine := dot(sampling_direction, other_dir)
-        (cast(^[Direction]f32) &cosine_closeness)[other] = cosine
-        (cast(^[Direction]f32) &linear_closeness)[other] = 1 - acos(cosine)
+    spall_proc()
+    @(static) other_dir: lane_v2
+    @(static) initialized: bool
+    if !initialized {
+        initialized = true
+        for other in Direction {
+            normal := normalized_direction(other)
+            (cast(^[Direction]f32) &other_dir.x)[other] = normal.x
+            (cast(^[Direction]f32) &other_dir.y)[other] = normal.y
+        }
     }
-    closeness := linear_blend(cosine_closeness, linear_closeness, view_mode_t)
-    closeness = simd.max(closeness, 0)
+    
+    normalized_sampling_direction := normalize(sampling_direction)
+    sampling_direction := lane_v2 { normalized_sampling_direction.x, normalized_sampling_direction.y }
+    
+    cosine_closeness := dot(sampling_direction, other_dir)
+    linear_closeness := 1 - acos(cosine_closeness)
+    
+    closeness := linear_blend(cosine_closeness, linear_closeness, t_directional_strictness)
+    closeness = vec_max(closeness, 0)
+    
     result = normalize(closeness)
     
     return result
@@ -132,26 +139,33 @@ get_support_amount :: proc (c: ^Collapse, from: State_Id, to: State_Id, closenes
 ////////////////////////////////////////////////
 
 Update_Result :: enum { Ok, Rewind, Done }
-step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result) {
+step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result, rewind_to: Collapse_Step) {
     spall_proc()
     assert(c.states != nil)
     
+    // @todo(viktor): this return setup is a bit stupid
     result = .Ok
+    rewind_to = Invalid_Collapse_Step
     
     current := peek(c.steps)
+    
     switch current.state {
       case .Search:
         spall_scope("Find next cell to be collapsed")
         
         lowest := +Infinity
-        for &cell in cells {
-            if cell.is_dirty do calculate_average_color(c, &cell)
-            if cell.collapsed do continue
-            if cell.is_dirty && c.search_metric == .Entropy do calculate_entropy(c, &cell)
-            cell.is_dirty = false
+        spall_begin("Dirtyness")
+        for &cell in cells do if .dirty in cell.flags {
+            cell.flags -= { .dirty }
             
+            calculate_average_color(c, &cell, current.step)
+            if c.search_metric == .Entropy do calculate_entropy(c, &cell, current.step)
+        }
+        spall_end()
+        
+        spall_begin("Search metric")
+        for &cell in cells do if .collapsed not_in cell.flags {
             value: f32
-            
             switch c.search_metric {
               case .Entropy: value = cell.entropy
               case .States:  
@@ -169,6 +183,7 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
                 append(&current.found, &cell)
             }
         }
+        spall_end()
         
         if len(current.found) == 0 {
             result = .Done
@@ -188,7 +203,7 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
             current.to_be_collapsed = current.found[index]
             unordered_remove(&current.found, index)
             
-            assert(!current.to_be_collapsed.collapsed)
+            assert(.collapsed not_in current.to_be_collapsed.flags)
             
             clear(&current.pickable_states)
             for &state in current.to_be_collapsed.states do if state.removed_at > current.step {
@@ -207,61 +222,38 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
             result = .Rewind
         } else {
             cell := current.to_be_collapsed
-            assert(!cell.collapsed)
-            cell.is_dirty = true
+            assert(.collapsed not_in cell.flags)
             
-            pick := Invalid_State
             total: f32
             for state in current.pickable_states {
                 assert(state.removed_at > current.step)
                 total += c.states[state.id].frequency
             }
             
-            DoWeights :: true
-            when DoWeights {
-                // @todo(viktor): Figure out if this is even needed or has any effect on the result
-                // @todo(viktor): precompute this weighting per neighbour based on direction
-                weights := make([] f32, len(cell.states), context.temp_allocator)
-                
-                for neighbour in cell.neighbours {
-                    closeness := get_closeness(neighbour.p - cell.p)
-                    // @todo(viktor): @speed this is a lot but it happens once for step.
-                    for from, from_index in current.pickable_states {
-                        for to in neighbour.states do if to.removed_at > current.step {
-                            amount := get_support_amount(c, from.id, to.id, closeness)
-                            weights[from_index] += amount
-                        }
-                    }
-                }
-                
-                for weight in weights do total += weight
-            }
-            
-            target := random_unilateral(entropy, f32) * total
+            target := random_between(entropy, f32, 0, total)
             append_change_if_not_already_scheduled(current, cell)
             
-            pick_index := -1
+            pick := Invalid_State
+            pickable_index := -1
             for &state, index in current.pickable_states {
                 target -= c.states[state.id].frequency
                 
-                when DoWeights do target -= weights[index]
-                
                 if target <= 0 {
                     pick = state.id
-                    pick_index = index
+                    pickable_index = index
                     break
                 }
             }
             
-            for &state in cell.states do if state.removed_at > current.step {
-                if state.id != pick {
-                    state.removed_at = current.step
-                }
-            }
-            
             if pick != Invalid_State {
-                unordered_remove(&current.pickable_states, pick_index)
-                cell.collapsed = true
+                for &state in cell.states do if state.removed_at > current.step {
+                    if state.id != pick {
+                        state.removed_at = current.step
+                    }
+                }
+                
+                unordered_remove(&current.pickable_states, pickable_index)
+                cell.flags += { .collapsed, .dirty }
             } else {
                 result = .Rewind
             }
@@ -285,15 +277,12 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
             clear(&current.changes)
             current.changes_cursor = 0
         } else {
-            did_change := false
-            propagate_remove: for neighbour in change.neighbours do if !neighbour.collapsed {
-                appended := append_change_if_not_already_scheduled(current, neighbour)
-                
+            propagate_remove: for neighbour in change.neighbours do if .collapsed not_in neighbour.flags {
                 closeness := get_closeness(change.p - neighbour.p)
                 
-                spall_begin("recalc states")
-                
                 states_count := 0
+                did_change := false
+                spall_begin("recalc states")
                 recalc_states: for &from in neighbour.states do if from.removed_at > current.step {
                     for to in change.states do if to.removed_at > current.step {
                         support := c.supports[from.id * auto_cast len(c.states) + to.id]
@@ -310,20 +299,26 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
                 spall_end()
                 
                 if did_change {
-                    neighbour.is_dirty = true
+                    append_change_if_not_already_scheduled(current, neighbour)
+                    
                     if states_count == 0 {
+                        the_cause: Collapse_Step
+                        for n in neighbour.neighbours {
+                            for state in n.states {
+                                if state.removed_at != Invalid_Collapse_Step && state.removed_at < current.step {
+                                    the_cause = max(the_cause, state.removed_at)
+                                }
+                            }
+                        }
                         result = .Rewind
-                        // @todo(viktor): rewind not once but up until the last step that also effected this neighbour
+                        rewind_to = the_cause
+                        
                         break propagate_remove
                     }
                     
+                    neighbour.flags += { .dirty }
                     if states_count == 1 {
-                        neighbour.collapsed = true
-                    }
-                } else {
-                    if appended {
-                        // @note(viktor): we optimistically appended it and it didn't actually change
-                        pop(&current.changes)
+                        neighbour.flags += { .collapsed }
                     }
                 }
             }
@@ -337,10 +332,10 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
         }
     }
     
-    return result
+    return result, rewind_to
 }
 
-append_change_if_not_already_scheduled :: proc (current: ^Step, cell: ^Cell) -> (result: bool) {
+append_change_if_not_already_scheduled :: proc (current: ^Step, cell: ^Cell) {
     spall_proc()
     
     scheduled := false
@@ -356,10 +351,7 @@ append_change_if_not_already_scheduled :: proc (current: ^Step, cell: ^Cell) -> 
     
     if !scheduled {
         append(&current.changes, cell)
-        result = true
     }
-    
-    return result
 }
 
 delete_step :: proc (step: Step) {
@@ -370,40 +362,41 @@ delete_step :: proc (step: Step) {
 
 ////////////////////////////////////////////////
 
-calculate_entropy :: proc (c: ^Collapse, cell: ^Cell) {
+calculate_entropy :: proc (c: ^Collapse, cell: ^Cell, step: Collapse_Step) {
     spall_proc()
-    assert(!cell.collapsed)
     
-    current := peek(c.steps)
-    
-    // @todo(viktor): @speed this could be done iteratively if needed, but its fast enough for now
     total_frequency: f32
-    cell.entropy = 0
-    for state in cell.states do if state.removed_at > current.step {
-        total_frequency += c.states[state.id].frequency
+    for state in cell.states do if state.removed_at > step {
+        frequency := c.states[state.id].frequency
+        
+        total_frequency += frequency
     }
     
-    for state in cell.states do if state.removed_at > current.step {
+    entropy: f32
+    for state in cell.states do if state.removed_at > step {
         frequency := c.states[state.id].frequency
+        
         probability := frequency / total_frequency
         
-        cell.entropy -= probability * log2(probability)
+        entropy -= probability * log2(probability)
     }
+    
+    cell.entropy = entropy
 }
 
-calculate_average_color :: proc (c: ^Collapse, cell: ^Cell) {
+calculate_average_color :: proc (c: ^Collapse, cell: ^Cell, step: Collapse_Step) {
     spall_proc()
     
     color: v4
     count: f32
-    for state in cell.states do if state.removed_at > viewing_step {
+    for state in cell.states do if state.removed_at > step {
         state := c.states[state.id]
-        color += rl_color_to_v4(state.middle) * state.frequency
+        color += state.middle * state.frequency
         count += state.frequency
     }
     
     color = safe_ratio_0(color, count)
-    cell.average_color = cast(rl.Color) v4_to_rgba(color)
+    cell.average_color = color
 }
 
 delete_cell :: proc (cell: Cell) {
@@ -480,7 +473,7 @@ end_state   :: proc (c: ^Collapse) {
         state.id = auto_cast len(c.states)
         state.frequency = 1
         
-        state.middle = c.temp_state_values[N/4+N/4*N]
+        state.middle = rl_color_to_v4(c.temp_state_values[N/4+N/4*N])
         
         append(&c.states, state)
     } else {

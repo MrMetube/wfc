@@ -3,6 +3,7 @@ package main
 
 import "base:builtin"
 import "base:intrinsics"
+import "base:runtime"
 
 Array :: struct ($T: typeid) {
     data:  []T,
@@ -116,7 +117,7 @@ set_len :: proc (array: ^[dynamic] $T, len: int) {
     raw.len = len
 }
 
-clear :: proc { array_clear, builtin.clear_dynamic_array, builtin.clear_map, }
+clear :: proc { array_clear, builtin.clear_dynamic_array, builtin.clear_map, runtime.clear_soa_dynamic_array }
 array_clear :: proc(a: ^Array($T)) {
     a.count = 0
 }
@@ -129,7 +130,7 @@ ordered_remove_array :: proc(a: ^Array($T), #any_int index: i64) {
 }
 unordered_remove :: proc { builtin.unordered_remove, unordered_remove_array }
 unordered_remove_array :: proc(a: ^Array($T), #any_int index: i64) {
-    swap(&a.data[index], &a.data[a.count-1])
+    a.data[index] = a.data[a.count-1]
     a.count -= 1
 }
 

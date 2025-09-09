@@ -592,8 +592,9 @@ format_any :: proc (ctx: ^Format_Context, arg: any) {
             if default, ok := Default_Views[value.id]; ok {
                 format_any(ctx, default(value.data))
             } else {
-                append(temp, variant.name)
-                format_any(ctx, ' ')
+                // @todo(viktor): only when in debug mode
+                // append(temp, variant.name)
+                // format_any(ctx, ' ')
                 format_any(ctx, any{data = value.data, id = variant.base.id})
             }
             
