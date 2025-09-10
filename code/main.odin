@@ -7,7 +7,7 @@ import "core:time"
 
 import rl "vendor:raylib"
 
-Screen_Size :: v2i{1600, 900}
+Screen_Size :: v2i{1920, 1080}
 Viewing_Size :: v2i{1024, 1024}
 
 TargetFps       :: 60
@@ -23,12 +23,11 @@ wait_until_this_state: Maybe(Step_State)
 
 cell_size_on_screen: v2
 
-show_neighbours                := false
-show_voronoi_cells             := false
 render_wavefunction_as_average := true
-highlight_step                 := true
+show_neighbours                := false
+show_voronoi_cells             := true
+highlight_step                 := false
 preview_angles                 := false
-
 
 viewing_closeness_mask: Direction_Vector = 1
 viewing_render_target: rl.RenderTexture
@@ -92,17 +91,16 @@ opposite_direction :: proc (direction: Direction) -> (result: Direction) {
 
 ////////////////////////////////////////////////
 
-Generate_Kind :: enum {
-    Grid,
-    Shifted_Grid,
-    Diamond_Grid,
-    Hex_Vertical,
-    Hex_Horizontal,
-    Spiral,
-    Random,
-    BlueNoise,
+generates: [dynamic] Generate_Kind
+Generate_Kind :: union {
+    Generate_Grid,
+    Generate_Circle,
+    Generate_Noise,
 }
-generate_kind: Generate_Kind = .Grid
+
+Generate_Grid   :: struct { center, radius: v2, angle: f32, is_hex: bool }
+Generate_Circle :: struct { spiral_strength: f32 }
+Generate_Noise  :: struct { is_blue: bool }
 
 ////////////////////////////////////////////////
 
@@ -116,9 +114,6 @@ Task :: enum {
 Frame :: struct {
     tasks: bit_set[Task],
     
-    // setup grid
-    desired_dimension:      v2i,
-    
     // extract states
     pixels:           [] rl.Color,
     pixels_dimension: v2i,
@@ -127,7 +122,9 @@ Frame :: struct {
     rewind_to: Collapse_Step,
 }
 
-desired_N:  i32 = N
+desired_N: i32 = N
+desired_dimension     := dimension
+active_generate_index: int
 
 ////////////////////////////////////////////////
 
@@ -190,6 +187,37 @@ main :: proc () {
     collapse: Collapse
     collapse.search_metric = .Entropy
     
+    append(&generates, Generate_Grid {
+        center    = {.5, .5},
+        radius = .5,
+    })
+    append(&generates, Generate_Grid {
+        center    = {.5, .5},
+        radius = .2,
+    })
+    
+    when false {
+        append(&generates, Generate_Grid {
+            center    = {.25, .25},
+            radius = .24,
+        })
+        append(&generates, Generate_Grid {
+            center    = {.25, .75},
+            radius = .24,
+            is_hex = true,
+        })
+        append(&generates, Generate_Grid {
+            center    = {.75, .25},
+            radius = .24,
+            is_hex    = true,
+        })
+        append(&generates, Generate_Grid {
+            center    = {.75, .75},
+            radius = .24,
+        })
+    }
+    active_generate_index = 0
+    
     pre := Frame { tasks = { .setup_grid } }
     do_tasks_in_order(&pre, &collapse, &entropy)
     
@@ -209,7 +237,7 @@ main :: proc () {
     }
     
     viewing_render_target = rl.LoadRenderTexture(Viewing_Size.x, Viewing_Size.y)
-    
+        
     this_frame: Frame
     for !rl.WindowShouldClose() {
         free_all(context.temp_allocator)
@@ -219,16 +247,10 @@ main :: proc () {
         ////////////////////////////////////////////////
         // UI
         
-        this_frame.desired_dimension      = dimension
-        this_frame.pixels                 = nil
-        this_frame.pixels_dimension       = {}
+        this_frame.pixels           = nil
+        this_frame.pixels_dimension = {}
         
         ui(&collapse, images, &this_frame)
-        
-        if dimension != this_frame.desired_dimension {
-            dimension = this_frame.desired_dimension
-            this_frame.tasks += { .setup_grid }
-        }
         
         ////////////////////////////////////////////////
         // Update 
@@ -258,6 +280,7 @@ main :: proc () {
         }
         
         for cell in cells {
+            if .edge in cell.flags do continue
             color: v4
             
             if render_wavefunction_as_average || .collapsed in cell.flags {
@@ -277,14 +300,17 @@ main :: proc () {
         
         if show_neighbours {
             color := v4_to_rl_color(Emerald) 
-            color_alpha := v4_to_rl_color(Emerald * {1,1,1,0.5}) 
             
             for cell in cells {
                 center := world_to_screen(cell.p)
                 rl.DrawCircleV(center, 3, color)
                 for neighbour in cell.neighbours {
+                    color := Emerald
+                    if .edge in neighbour.cell.flags do color = Salmon
+                    
+                    color.a *= 0.5
                     end := world_to_screen(neighbour.cell.p)
-                    rl.DrawLineEx(center, end, 2, color_alpha)
+                    rl.DrawLineEx(center, end, 2, v4_to_rl_color(color))
                 }
             }
         }
@@ -326,9 +352,11 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
         if .setup_grid in this_frame.tasks {
             this_frame.tasks -= { .setup_grid }
             
-            setup_grid(c, entropy)
-            
-            restart(this_frame)
+            if len(generates) != 0 {
+                setup_grid(c, entropy)
+                
+                restart(this_frame)
+            }
         }
         
         if .extract_states in this_frame.tasks {
@@ -473,7 +501,8 @@ setup_cells :: proc (c: ^Collapse) {
             make(&cell.states, len(c.states))
         }
         
-        cell.flags = { .dirty }
+        cell.flags += { .dirty }
+        cell.flags -= { .collapsed }
         
         for &state, index in cell.states {
             state.id = cast(State_Id) index
@@ -499,24 +528,54 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries) {
     
     area := dimension.x * dimension.y
     points := make([dynamic] v2d, 0, area, context.temp_allocator)
-    generate_points(&points, cast(u32) area)
+    for generate in generates {
+        generate_points(&points, area / auto_cast len(generates), generate)
+    }
     
     dt: Delauney_Triangulation
     begin_triangulation(&dt, points[:], allocator = context.temp_allocator)
     complete_triangulation(&dt)
     voronoi_cells := end_triangulation_voronoi_cells(&dt)
     
-    for it in voronoi_cells {
+    for voronoi in voronoi_cells {
         dim := vec_cast(f64, dimension)
         cell: Cell
-        cell.p = vec_cast(f32, it.center * dim)
+        cell.p = vec_cast(f32, voronoi.center * dim)
         
-        make(&cell.points, len(it.points))
-        for point, index in it.points {
+        make(&cell.points, len(voronoi.points))
+        for point, index in voronoi.points {
             p := vec_cast(f32, point * dim)
             cell.points[index] = p
+            
+            inside: b32
+            
+            for generate in generates {
+                switch kind in generate {
+                  case Generate_Grid:
+                    region := rec_cast(f64, rectangle_center_half_dimension(kind.center, kind.radius))
+                    region = scale_radius(region, dim)
+                    inside ||= contains(region, point)
+                  
+                  case Generate_Noise:
+                    dimension := 1.0
+                    region := rectangle_center_dimension(v2d{0.5, 0.5}, dimension)
+                    inside = contains(region, point)
+                        
+                  case Generate_Circle:
+                    center: v2d = 0.5
+                    radius := 0.5 - 0.001
+                    inside = length_squared(point - center) < square(radius)
+                }
+            }
+            
+            if !inside {
+                cell.flags +=  { .edge }
+            }
         }
         
+        if voronoi.is_edge {
+            cell.flags +=  { .edge }
+        }
         append(&cells, cell)
     }
     
@@ -534,96 +593,97 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries) {
     setup_cells(c)
 }
 
-generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
+generate_points :: proc(points: ^[dynamic] v2d, count: i32, kind: Generate_Kind) {
     // @note(viktor): We get numerical instability if points are perfectly vertically or horizontally aligned
-    side := round(u32, square_root(cast(f32) count))
+    side := round(i32, square_root(cast(f32) count))
     entropy := seed_random_series()
     
-    switch generate_kind  {
-      case .Grid:
-        for x in 0 ..< side {
-            for y in 0 ..< side {
-                p := (vec_cast(f64, x, y) + 0.5) / cast(f64) side
-                p += random_bilateral(&entropy, v2d) * 0.00001
-                append(points, p)
-            }
+    switch kind in kind {
+      case Generate_Grid:
+        total_region := rectangle_min_dimension(cast(v2d) 0, 1)
+        
+        radius := vec_cast(f64, kind.radius)
+        angle := cast(f64) kind.angle
+        center := vec_cast(f64, kind.center)
+        rotated_radius := rotate(radius, angle)
+        min := center - rotated_radius
+
+        inv_side := 1. / cast(f64) side
+        delta_x := rotate(v2d {radius.x*2, 0}, angle) * inv_side
+        delta_y := rotate(v2d {0, radius.y*2}, angle) * inv_side
+        
+        y_count := side
+        if kind.is_hex {
+            factor := sin(cast(f64) Tau / 6)
+            y_count = round(i32, cast(f64) y_count * (1 / factor))
+            delta_y *= factor
         }
         
-      case .Shifted_Grid:
-        for x in 0 ..< side {
-            for y in 0 ..< side {
-                p := (vec_cast(f64, x, y) + 0.5) / cast(f64) side
-                offset := random_unilateral(&entropy, v2d) * (0.02 / cast(f64) side)
-                p += next_random_u32(&entropy) % 2 == 0 ? offset : - offset
-                p = clamp(p, 0, 1)
-                append(points, p)
-            }
-        }
-           
-      case .Diamond_Grid:
-        for x in 0 ..< side {
-            for y in 0 ..< side {
-                if (x + y) % 2 == 0 {
-                    p := (vec_cast(f64, x, y) + 0.5) / cast(f64) side
-                    p += random_bilateral(&entropy, v2d) * 0.00001
+        offset := 0.00001
+        for dx in 0..<side {
+            for dy in 0..<y_count {
+                x := cast(f64) dx
+                y := cast(f64) dy
+                if kind.is_hex {
+                    if dy % 2 == 0 do x += cos(cast(f64) Tau / 6)
+                }
+                sp := v2d{x, y}
+                
+                p := min + sp.x * delta_x + sp.y * delta_y
+                
+                p += random_bilateral(&entropy, v2d) * offset
+                
+                if contains_inclusive(total_region, p) {
                     append(points, p)
                 }
             }
         }
         
-      case .Hex_Vertical:
-        for x in 0 ..< side {
-            for y in 0 ..< side {
-                x := cast(f64) x
-                if y % 2 == 0 do x += 0.5
-                y := cast(f64) y
-                p := (v2d{x, y} + 0.25) / cast(f64) side
-                p += random_bilateral(&entropy, v2d) * 0.00001
-                append(points, p)
+      case Generate_Circle:
+        center := 0.5
+        ring_count := cast(f64) side * .5
+        min_count := 3.0
+        max_count := cast(f64) count / ring_count
+        min_radius := 0.01
+        max_radius := 0.5
+        for ring in 0..<ring_count {
+            t := (ring + 1) / ring_count
+            radius := linear_blend(min_radius, max_radius, t)
+            
+            point_count := linear_blend(min_count, max_count, t)
+            point_count = max(3, point_count)
+            for p in 0..<point_count {
+                angle := Tau * p / point_count
+                dir := arm(angle)
+                point := center + dir * radius
+                append(points, point)
             }
         }
         
-      case .Hex_Horizontal:
-        for x in 0 ..< side {
-            for y in 0 ..< side {
-                y := cast(f64) y
-                if x % 2 == 0 do y += 0.5
-                x := cast(f64) x
-                p := (v2d{x, y} + 0.25) / cast(f64) side
-                p += random_bilateral(&entropy, v2d) * 0.00001
-                append(points, p)
-            }
-        }
+    //   case .Spiral:
+    //     center :: 0.5
+    //     for index in 0..<count {
+    //         angle := 1.6180339887 * cast(f64) index
+    //         t := cast(f64) index / cast(f64) count
+    //         radius := 0.5 - linear_blend(f64(0.05), 0.5, square(t))
+    //         append(points, center + arm(angle) * radius)
+    //     }
         
-      case .Spiral:
-        center :: 0.5
-        for index in 0..<count {
-            angle := 1.6180339887 * cast(f64) index
-            t := cast(f64) index / cast(f64) count
-            radius := 0.5 - linear_blend(f64(0.05), 0.5, square(t))
-            append(points, center + arm(angle) * radius)
-        }
-        
-      case .Random:
+      case Generate_Noise:
+        min_dist_squared := 1.0 / (Pi * f64(count))
         for _ in 0..<count {
-            append(points, random_unilateral(&entropy, v2d))
-        }
-        
-      case .BlueNoise:
-        r := square_root(1.0 / (Pi * f64(count)))
-        min_dist_squared := r * r
-        
-        for _ in 0..<count {
-            valid := false
             new_point: v2d
             
+            valid := false
             for !valid {
                 new_point = random_unilateral(&entropy, v2d)
                 valid = true
-                check: for point in points {
-                    if length_squared(point - new_point) < min_dist_squared {
-                        valid = false
-                        break check
+                if kind.is_blue {
+                    check: for point in points {
+                        if length_squared(point - new_point) < min_dist_squared {
+                            valid = false
+                            break check
+                        }
                     }
                 }
             }
@@ -634,10 +694,13 @@ generate_points :: proc(points: ^[dynamic] v2d, count: u32) {
 }
 
 draw_cell :: proc (cell: Cell, color: v4) {
+    if len(cell.points) == 0 do return
+    
     @(static) buffer: [dynamic] v2 // @leak
     clear(&buffer)
     
     append(&buffer, world_to_screen(cell.p))
+    
     for point in cell.points {
         append(&buffer, world_to_screen(point))
     }
@@ -646,6 +709,8 @@ draw_cell :: proc (cell: Cell, color: v4) {
     rl.DrawTriangleFan(raw_data(buffer), auto_cast len(buffer), v4_to_rl_color(color))
 }
 draw_cell_outline :: proc (cell: Cell, color: rl.Color) {
+    if len(cell.points) == 0 do return
+    
     @(static) buffer: [dynamic] v2 // @leak
     clear(&buffer)
     

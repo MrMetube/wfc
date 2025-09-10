@@ -78,30 +78,67 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
             }
         }
         
-        generates := [Generate_Kind] string {
-            .Grid           = "Grid",
-            .Shifted_Grid   = "Wonky Grid",
-            .Diamond_Grid   = "Diamond Grid",
-            .Hex_Vertical   = "Hex Rows",
-            .Hex_Horizontal = "Hex Columns",
-            .Spiral         = "Spiral",
-            .Random         = "White Noise",
-            .BlueNoise      = "Blue Noise",
-        }
-        imgui.text("Grid Kind")
-        imgui.get_content_region_avail(&region)
-        imgui.push_item_width(region.x)
-        imgui.begin_list_box("##generate_kind")
-        for text, kind in generates {
-            if imgui.radio_button(text, &generate_kind, kind) {
-                this_frame.tasks += { .setup_grid }
+        imgui.text("Grid")
+        imgui.slider_int2("Size", &desired_dimension, 3, 300, flags = .Logarithmic)
+        if imgui.button("New") do append(&generates, Generate_Noise {} )
+        {
+            
+            imgui.get_content_region_avail(&region)
+            
+            for &generate, index in generates {
+                
+                is_active := index == active_generate_index
+                if imgui.radio_button(tprint("%", index), is_active) do active_generate_index = index
+                
+                if is_active {
+                    imgui.indent(); defer imgui.unindent()
+                    
+                    grid, is_grid := &generate.(Generate_Grid)
+                    if imgui.radio_button("Square", is_grid) {
+                        generate = Generate_Grid {
+                            radius = 0.5,
+                        }
+                    }
+                    if is_grid {
+                        imgui.indent(); defer imgui.unindent()
+                        imgui.push_item_width(region.x/2); defer imgui.pop_item_width()
+                        
+                        imgui.slider_float("angle", &grid.angle, 0, Tau/4)
+                        imgui.slider_float2("center", &grid.center, 0, 1)
+                        imgui.slider_float2("radius", &grid.radius, 0, 1)
+                        imgui.checkbox("hexagonal", &grid.is_hex)
+                    }
+                    
+                    circle, is_circle := &generate.(Generate_Circle)
+                    if imgui.radio_button("Circular", is_circle) {
+                        generate = Generate_Circle {}
+                    }
+                    if is_circle {
+                        imgui.indent();                    defer imgui.unindent()
+                        imgui.push_item_width(region.x/2); defer imgui.pop_item_width()
+                        
+                        imgui.slider_float("spiral", &circle.spiral_strength, 0, 2)
+                    }
+                    
+                    noise, is_noise := &generate.(Generate_Noise)
+                    if imgui.radio_button("Noise", is_noise) {
+                        generate = Generate_Noise {}
+                    }
+                    if is_noise {
+                        imgui.indent(); defer imgui.unindent()
+                        
+                        imgui.checkbox("blue noise", &noise.is_blue)
+                    }
+                    
+                    if imgui.button("Remove") do ordered_remove(&generates, index)
+                }
             }
         }
-        imgui.end_list_box()
-        imgui.pop_item_width()
-        
-        imgui.slider_int2("Size", &this_frame.desired_dimension, 3, 300, flags = .Logarithmic)
-        
+            
+        if imgui.button("Generate Grid") {
+            this_frame.tasks += { .setup_grid }
+            dimension = desired_dimension
+        }
     imgui.end()
     
     imgui.begin("Visualization")

@@ -310,7 +310,15 @@ end_triangulation_voronoi_cells :: proc(dt: ^Delauney_Triangulation) -> (result:
             point := voronoi.points[point_index]
             if contains_inclusive(bounds, point) {
                 point_index += 1
+                if  absolute_difference(point.x, 0) < 0.001 || 
+                    absolute_difference(point.y, 0) < 0.001 || 
+                    absolute_difference(point.x, 1) < 0.001 || 
+                    absolute_difference(point.y, 1) < 0.001 {
+                    voronoi.is_edge = true
+                }
             } else {
+                voronoi.is_edge = true
+                
                 prev := voronoi.points[(point_index + len(voronoi.points) - 1) % len(voronoi.points)]
                 next := voronoi.points[(point_index + len(voronoi.points) + 1) % len(voronoi.points)]
                 

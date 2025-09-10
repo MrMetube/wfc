@@ -301,6 +301,13 @@ arm :: proc(angle: $T) -> (result: [2]T) {
     return result
 }
 
+rotate :: proc (v: $V/[$N]$T, angle: T) -> (result: V) {
+    rotor := arm(angle)
+    result.x = v.x * rotor.x + v.y * -rotor.y
+    result.y = v.x * rotor.y + v.y *  rotor.x
+    return result
+}
+
 dot :: proc(a, b: $V) -> (result: element_type(V)) {
     when intrinsics.type_is_simd_vector(V) {
         result = simd.reduce_add_pairs(a * b)

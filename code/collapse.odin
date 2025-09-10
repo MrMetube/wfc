@@ -75,7 +75,7 @@ Cell :: struct {
     states:     [] State_Entry,
     neighbours: [] Neighbour,
     
-    flags: bit_set[enum { collapsed, dirty }; u8],
+    flags: bit_set[enum { collapsed, dirty, edge }; u8],
     entropy: f32,
     
     // Visual only
@@ -283,8 +283,9 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
             clear(&current.changes)
             current.changes_cursor = 0
         } else {
-            propagate_remove: for neighbour in change.neighbours do if .collapsed not_in neighbour.cell.flags {
-                cell      := neighbour.cell
+            propagate_remove: for neighbour in change.neighbours {
+                cell := neighbour.cell
+                if cell.flags & {.collapsed, .edge } != {} do continue
                 closeness := neighbour.closeness
                 
                 states_count := 0
