@@ -29,6 +29,8 @@ render_wavefunction_as_average := true
 highlight_step                 := true
 preview_angles                 := false
 
+
+viewing_closeness_mask: Direction_Vector = 1
 viewing_render_target: rl.RenderTexture
 viewing_group: ^Color_Group
 color_groups:  [dynamic] Color_Group
@@ -36,6 +38,7 @@ Color_Group :: struct {
     color: v4,
     ids:   [/* State_Id */] b32,
 }
+
 
 cells_background_color := DarkGreen
 cells_background_hue_t: f32
@@ -278,9 +281,9 @@ main :: proc () {
             
             for cell in cells {
                 center := world_to_screen(cell.p)
-                rl.DrawCircleV(center, 4, color)
+                rl.DrawCircleV(center, 3, color)
                 for neighbour in cell.neighbours {
-                    end := world_to_screen(neighbour.p)
+                    end := world_to_screen(neighbour.cell.p)
                     rl.DrawLineEx(center, end, 2, color_alpha)
                 }
             }
@@ -400,15 +403,9 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 spall_scope("Restart")
                 
                 total_duration = 0
-                for &cell in cells {
-                    cell.flags -= { .collapsed }
-                    cell.flags += { .dirty }
-                    
-                    for &state, index in cell.states {
-                        state.id = cast(State_Id) index
-                        state.removed_at = Invalid_Collapse_Step
-                    }
-                }
+                setup_cells(c)
+                
+                clear(&step_depth)
             } else {
                 for &cell in cells {
                     for &state in cell.states {
@@ -476,9 +473,15 @@ setup_cells :: proc (c: ^Collapse) {
             make(&cell.states, len(c.states))
         }
         
+        cell.flags = { .dirty }
+        
         for &state, index in cell.states {
             state.id = cast(State_Id) index
             state.removed_at = Invalid_Collapse_Step
+        }
+        
+        for &neighbour in cell.neighbours {
+            neighbour.closeness = get_closeness(cell.p - neighbour.cell.p)
         }
     }
 }
@@ -522,8 +525,9 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries) {
         make(&cell.neighbours, len(voronoi.neighbour_indices))
         
         for neighbour_index, index in voronoi.neighbour_indices {
-            neighbour := &cells[neighbour_index]
-            cell.neighbours[index] = neighbour
+            neighbour := &cell.neighbours[index]
+            neighbour.cell = &cells[neighbour_index]
+            neighbour.closeness = get_closeness(cell.p - neighbour.cell.p)
         }
     }
     
@@ -681,11 +685,6 @@ world_to_screen_vec :: proc (world: v2) -> (screen: v2) {
     return screen
 }
 
-direction_to_angles :: proc(direction: [2]$T) -> (angle: T) {
-    angle = atan2(direction.y, direction.x) * DegreesPerRadian
-    return angle
-}
-
 render_neighbourhood :: proc (c: ^Collapse) {
     rl.BeginTextureMode(viewing_render_target)
     rl.ClearBackground({0x1F, 0x31, 0x4B, 0xFF})
@@ -697,42 +696,26 @@ render_neighbourhood :: proc (c: ^Collapse) {
         
         size := cast(f32) Viewing_Size.x / cast(f32) ((len(color_groups)+1) * 2 + 1) * 0.75
         
-        samples :: 250
+        samples := 180
         turns := cast(f32) samples
         rads_per_sample := Tau / turns
-        
-        max_support: f32
-        for comparing_group in color_groups {
-            for sample in 0..<samples {
-                turn := cast(f32) sample
-                
-                sampling_direction := arm(turn * rads_per_sample)
-                closeness := get_closeness(sampling_direction)
-                
-                total: f32
-                for vok, vid in viewing_group.ids do if vok {
-                    for cok, cid in comparing_group.ids do if cok {
-                        total += get_support_amount(c, cast(State_Id) vid, cast(State_Id) cid, closeness)
-                    }
-                }
-                max_support = max(max_support, total)
-            }
-        }
         
         for comparing_group, group_index in color_groups {
             total_supports := make([] f32, samples, context.temp_allocator)
             
+            max_support: f32
             for sample in 0..<samples {
                 turn := cast(f32) sample
                 
                 sampling_direction := arm(turn * rads_per_sample)
                 closeness := get_closeness(sampling_direction)
-                
+                closeness *= viewing_closeness_mask
                 for vok, vid in viewing_group.ids do if vok {
                     for cok, cid in comparing_group.ids do if cok {
                         total_supports[sample] += get_support_amount(c, cast(State_Id) vid, cast(State_Id) cid, closeness)
                     }
                 }
+                max_support = max(max_support, total_supports[sample])
             }
             
             for sample in 0..<samples {
@@ -750,7 +733,7 @@ render_neighbourhood :: proc (c: ^Collapse) {
                 color := comparing_group.color
                 color *= alpha
                 
-                center := direction_to_angles(sampling_direction)
+                center := atan2(-sampling_direction.y, sampling_direction.x) * DegreesPerRadian
                 width: f32 = 360. / turns
                 start := center - width * .5
                 stop  := center + width * .5

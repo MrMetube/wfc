@@ -10,7 +10,7 @@ N: i32 = 3
 
 Collapse :: struct {
     states:   [dynamic] State,
-    supports: [/* State_Id * len(states) + State_Id */] f32x8,
+    supports: [/* State_Id * len(states) + State_Id */] Direction_Vector,
     
     steps: [dynamic] Step,
     search_metric: Search_Metric,
@@ -66,10 +66,14 @@ Step_State :: enum {
 ////////////////////////////////////////////////
 
 cells: [dynamic] Cell
+Neighbour :: struct {
+    cell:      ^Cell,
+    closeness: Direction_Vector,
+}
 Cell :: struct {
     p:          v2, 
     states:     [] State_Entry,
-    neighbours: [] ^Cell,
+    neighbours: [] Neighbour,
     
     flags: bit_set[enum { collapsed, dirty }; u8],
     entropy: f32,
@@ -83,6 +87,8 @@ State_Entry :: struct {
     id: State_Id,
     removed_at: Collapse_Step,
 }
+
+Direction_Vector :: lane_f32
 
 ////////////////////////////////////////////////
 
@@ -101,7 +107,7 @@ collapse_reset :: proc (c: ^Collapse) {
 
 ////////////////////////////////////////////////
 
-get_closeness :: proc (sampling_direction: v2) -> (result: f32x8) {
+get_closeness :: proc (sampling_direction: v2) -> (result: Direction_Vector) {
     spall_proc()
     @(static) other_dir: lane_v2
     @(static) initialized: bool
@@ -128,7 +134,7 @@ get_closeness :: proc (sampling_direction: v2) -> (result: f32x8) {
     return result
 }
 
-get_support_amount :: proc (c: ^Collapse, from: State_Id, to: State_Id, closeness: f32x8) -> (result: f32) {
+get_support_amount :: proc (c: ^Collapse, from: State_Id, to: State_Id, closeness: Direction_Vector) -> (result: f32) {
     support := c.supports[from * auto_cast len(c.states) + to]
     
     result = simd.reduce_add_pairs(support * closeness)
@@ -277,13 +283,14 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
             clear(&current.changes)
             current.changes_cursor = 0
         } else {
-            propagate_remove: for neighbour in change.neighbours do if .collapsed not_in neighbour.flags {
-                closeness := get_closeness(change.p - neighbour.p)
+            propagate_remove: for neighbour in change.neighbours do if .collapsed not_in neighbour.cell.flags {
+                cell      := neighbour.cell
+                closeness := neighbour.closeness
                 
                 states_count := 0
                 did_change := false
                 spall_begin("recalc states")
-                recalc_states: for &from in neighbour.states do if from.removed_at > current.step {
+                recalc_states: for &from in cell.states do if from.removed_at > current.step {
                     for to in change.states do if to.removed_at > current.step {
                         support := c.supports[from.id * auto_cast len(c.states) + to.id]
                         amount := simd.reduce_add_pairs(support * closeness)
@@ -299,12 +306,12 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
                 spall_end()
                 
                 if did_change {
-                    append_change_if_not_already_scheduled(current, neighbour)
+                    append_change_if_not_already_scheduled(current, cell)
                     
                     if states_count == 0 {
                         the_cause: Collapse_Step
-                        for n in neighbour.neighbours {
-                            for state in n.states {
+                        for n in cell.neighbours {
+                            for state in n.cell.states {
                                 if state.removed_at != Invalid_Collapse_Step && state.removed_at < current.step {
                                     the_cause = max(the_cause, state.removed_at)
                                 }
@@ -316,9 +323,9 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
                         break propagate_remove
                     }
                     
-                    neighbour.flags += { .dirty }
+                    cell.flags += { .dirty }
                     if states_count == 1 {
-                        neighbour.flags += { .collapsed }
+                        cell.flags += { .collapsed }
                     }
                 }
             }

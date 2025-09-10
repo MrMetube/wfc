@@ -173,8 +173,9 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         imgui.pop_item_width()
         
         imgui.get_content_region_avail(&region)
-        imgui.progress_bar(1.5-t_directional_strictness, {region.x, 0}, overlay="Overlapping")
-        imgui.progress_bar(t_directional_strictness-0,   {region.x, 0}, overlay="Separated")
+        imgui.progress_bar((1.5 - t_directional_strictness) / 1.5, {region.x * 0.49, 0}, overlay="Overlapping")
+        imgui.same_line()
+        imgui.progress_bar((t_directional_strictness - 0.0) / 1.5, {region.x * 0.49, 0}, overlay="Separated")
         
         imgui.checkbox("Preview", &preview_angles)
         if preview_angles {
@@ -189,8 +190,29 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
             }
         }
         
-        imgui.text("States")
         {
+            imgui.text("Mask")
+            imgui.get_content_region_avail(&region)
+            mask := transmute([Direction] f32) viewing_closeness_mask
+            for &value, direction in mask {
+                if imgui.button(tprint("S##%", direction)) {
+                    for &other, other_direction in mask {
+                        other = other_direction == direction ? 1 : 0
+                    }
+                }
+                imgui.same_line()
+                
+                imgui.push_item_width(region.x/3)
+                imgui.slider_float(tprint("%", direction), &value, 0, 1)
+                imgui.pop_item_width()
+            }
+            
+            if imgui.button("All") {
+                for &value in mask do value = 1
+            }
+            viewing_closeness_mask = transmute(Direction_Vector) mask
+            
+            imgui.text("States")
             imgui.get_content_region_avail(&region)
             group_width: f32 = 60
             group_pad: f32 = 6
