@@ -16,6 +16,8 @@ import rl "vendor:raylib"
  - Get some nice screenshots or process and results
  - simplify code and make an overview of the important parts
  - allow/disallow wrapping in extraction 
+ - debug visualization to show graph as nodes and not voronoi but also with colors
+   - and maybe interpolate between both?
  */
  
 Screen_Size  :: v2i{1920, 1080}
@@ -35,23 +37,11 @@ wait_until_this_state: Maybe(Step_State)
 cell_size_on_screen: v2
 
 show_average_colors := true
-show_neighbours                := false
-show_voronoi_cells             := true
-show_step_details                 := false
-preview_angles                 := false
+show_neighbours     := false
+show_voronoi_cells  := true
+show_step_details   := false
 
-viewing_closeness_mask: Direction_Vector = 1
-viewing_render_target: rl.RenderTexture
-viewing_group: ^Color_Group
-color_groups:  [dynamic] Color_Group
-Color_Group :: struct {
-    color: v4,
-    ids:   [/* State_Id */] b32,
-}
-
-
-cells_background_color := DarkGreen
-cells_background_hue_t: f32
+cells_background_color := SeaGreen
 
 // @todo(viktor): visual dimension vs. point count for generates
 dimension: v2i = {66, 66}
@@ -110,7 +100,7 @@ Generate_Kind :: union {
 }
 
 Generate_Grid   :: struct { center, radius: v2, angle: f32, is_hex: bool }
-Generate_Circle :: struct { spiral_strength: f32 }
+Generate_Circle :: struct { spiral_strength: f32, radius: f32 }
 Generate_Noise  :: struct { is_blue: bool }
 
 ////////////////////////////////////////////////
@@ -133,6 +123,7 @@ Frame :: struct {
     rewind_to: Collapse_Step,
 }
 
+wrap_in_extraction: [2] bool = true
 // @todo(viktor): move into collapse, but also is kinda constant for all my examples
 desired_N: i32 = N
 desired_dimension := dimension
@@ -140,38 +131,7 @@ active_generate_index: int
 
 ////////////////////////////////////////////////
 
-// @todo(viktor): this is just a cutoff for the angle which also just means, as we only have 8 directions, the only angles we cut off besides the ones that are already zeroed by cos are the closest 45° angles to the closest overall angle, so we are actually only saying that we take the nearest, the nearest +1 (and maybe the nearest +2) on each side. so we either get to pick from 1, 3 or 5 state buckets when checking support
-
-//    t - description - overlap of the 8 cardinal directions
-//   ~0 - Cosine      - large
-// ~1.5 - Linear      - none
-// @todo(viktor): rescale this to show 0..1 then multiply by 1.5 internally, also 
-// @todo(viktor): justify 1.5
-/// tau = 6.2831853
-/// DegreesPerRadian = 360 / tau
-/// RadiansPerDegree = tau / 360
-/// 1   * DegreesPerRadian
-/// 1.4 * DegreesPerRadian
-/// 1.5 * DegreesPerRadian
-/// 1.6 * DegreesPerRadian
-/// n = {0, 1}
-/// e = {1, 0}
-/// s = {0, -1}
-/// w = {-1, 0}
-/// ne = normalize({1, 1})
-/// se = normalize({1, -1})
-/// sw = normalize({-1, -1})
-/// nw = normalize({-1, 1})
-/// d = normalize(arm(28 * RadiansPerDegree))
-/// max(0, dot(e,  d)) * DegreesPerRadian
-/// max(0, dot(ne, d)) * DegreesPerRadian
-/// max(0, dot(n,  d)) * DegreesPerRadian
-/// max(0, dot(nw, d)) * DegreesPerRadian
-/// max(0, dot(w,  d)) * DegreesPerRadian
-/// max(0, dot(sw, d)) * DegreesPerRadian
-/// max(0, dot(s,  d)) * DegreesPerRadian
-/// max(0, dot(se, d)) * DegreesPerRadian
-t_directional_strictness: f32 = .75
+strictness: i32
 
 ////////////////////////////////////////////////
 
@@ -273,15 +233,10 @@ main :: proc () {
         
         delete(step_depth)
         
-        for group in color_groups do delete(group.ids)
-        delete(color_groups)
-        
         for cell in cells do delete_cell(cell)
         delete(cells)
     }
     
-    viewing_render_target = rl.LoadRenderTexture(Viewing_Size.x, Viewing_Size.y)
-        
     this_frame: Frame
     for !rl.WindowShouldClose() {
         free_all(context.temp_allocator)
@@ -304,22 +259,13 @@ main :: proc () {
         ////////////////////////////////////////////////
         // Render
         
-        render_neighbourhood(&collapse)
-        
         rl.BeginDrawing()
         rl.ClearBackground({0x54, 0x57, 0x66, 0xFF})
         
         current := len(collapse.steps) != 0 ? peek(collapse.steps)^ : {}
         
         { // Background
-            // @todo(viktor): this is kinda overkill
-            cells_background_hue_t += rl.GetFrameTime() * DegreesPerRadian
-            if cells_background_hue_t >= 360 do cells_background_hue_t -= 360
-            
-            hsv := rl.ColorToHSV(v4_to_rl_color(cells_background_color))
-            hue := hsv.x + cells_background_hue_t
-            color := rl.ColorFromHSV(hue, hsv.y, hsv.z)
-            
+            color := v4_to_rl_color(cells_background_color)
             background := rectangle_min_dimension(v2{}, vec_cast(f32, dimension))
             rl.DrawRectangleRec(world_to_screen(background), color)
         }
@@ -411,28 +357,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             
             N = desired_N
             collapse_reset(c)
-            extract_states(c, this_frame.pixels, this_frame.pixels_dimension.x, this_frame.pixels_dimension.y)
-            
-            // Extract color groups
-            for state in c.states {
-                color := state.middle
-                
-                group: ^Color_Group
-                for &it in color_groups {
-                    if it.color == color {
-                        group = &it
-                        break
-                    }
-                }
-                
-                if group == nil {
-                    append(&color_groups, Color_Group { color = color })
-                    group = &color_groups[len(color_groups)-1]
-                    make(&group.ids, len(c.states))
-                }
-                
-                group.ids[state.id] = true
-            }
+            extract_states(c, this_frame.pixels, this_frame.pixels_dimension.x, this_frame.pixels_dimension.y, wrap_in_extraction)
             
             setup_cells(c)
             
@@ -446,12 +371,6 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             this_frame.tasks -= { .rewind }
             
             assert(this_frame.rewind_to != Invalid_Collapse_Step)
-            
-            when false {
-                current := len(c.steps) > 0 ? peek(c.steps)^ : {}
-                print("Rewinding to % from %\n", this_frame.rewind_to, current.step)
-                assert(this_frame.rewind_to != Invalid_Collapse_Step)
-            }
             
             is_restart := false
             if this_frame.rewind_to == 0 {
@@ -469,8 +388,6 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             
             current := peek(c.steps)
             assert(current.step == this_frame.rewind_to)
-            
-            // print("Is Restart %\n", is_restart)
             
             if is_restart {
                 spall_scope("Restart")
@@ -503,25 +420,23 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
         if .update in this_frame.tasks {
             this_frame.tasks -= { .update }
             
-            // print("Update with %\n", peek(c.steps).state)
+            assert(c.states != nil)
             
-            if c.states != nil {
-                current := peek(c.steps)
+            current := peek(c.steps)
+            
+            this_update_start := time.now()
+            result, rewind_to := step_update(c, entropy)
+            
+            switch result {
+              case .Done: break task_loop
+              case .Ok:   next_frame.tasks += { .update }
                 
-                this_update_start := time.now()
-                result, rewind_to := step_update(c, entropy)
-                
-                switch result {
-                  case .Done: break task_loop
-                  case .Ok:   next_frame.tasks += { .update }
-                  
-                  case .Rewind: 
-                    next_frame.tasks += { .rewind }
-                    next_frame.rewind_to = rewind_to != Invalid_Collapse_Step ? rewind_to : max(0, current.step - 1)
-                }
-                
-                total_duration += time.since(this_update_start)
+              case .Rewind: 
+                next_frame.tasks += { .rewind }
+                next_frame.rewind_to = rewind_to != Invalid_Collapse_Step ? rewind_to : max(0, current.step - 1)
             }
+            
+            total_duration += time.since(this_update_start)
         }
         
         if !paused {
@@ -690,7 +605,7 @@ generate_points :: proc(points: ^[dynamic] v2d, count: i32, kind: Generate_Kind)
         min_count := 3.0
         max_count := cast(f64) count / ring_count
         min_radius := 0.01
-        max_radius := 0.5
+        max_radius := cast(f64) kind.radius
         for ring in 0..<ring_count {
             t := (ring + 1) / ring_count
             radius := linear_blend(min_radius, max_radius, t)
@@ -793,84 +708,4 @@ world_to_screen_vec :: proc (world: v2) -> (screen: v2) {
     screen = grid_min + {1,-1} * (world * cell_size_on_screen)
     
     return screen
-}
-
-render_neighbourhood :: proc (c: ^Collapse) {
-    rl.BeginTextureMode(viewing_render_target)
-    rl.ClearBackground({0x1F, 0x31, 0x4B, 0xFF})
-    
-    // @todo(viktor): Confirm that the directions are correctly mapped to vectors and displayed correctly on the circle
-    if viewing_group != nil {
-        center := Viewing_Size / 2
-        p := vec_cast(f32, center)
-        
-        size := cast(f32) Viewing_Size.x / cast(f32) ((len(color_groups)+1) * 2 + 1) * 0.75
-        
-        samples := 180
-        turns := cast(f32) samples
-        rads_per_sample := Tau / turns
-        
-        for comparing_group, group_index in color_groups {
-            total_supports := make([] f32, samples, context.temp_allocator)
-            
-            max_support: f32
-            for sample in 0..<samples {
-                turn := cast(f32) sample
-                
-                sampling_direction := arm(turn * rads_per_sample)
-                closeness := get_closeness(sampling_direction)
-                closeness *= viewing_closeness_mask
-                for vok, vid in viewing_group.ids do if vok {
-                    for cok, cid in comparing_group.ids do if cok {
-                        total_supports[sample] += get_support_amount(c, cast(State_Id) vid, cast(State_Id) cid, closeness)
-                    }
-                }
-                max_support = max(max_support, total_supports[sample])
-            }
-            
-            for sample in 0..<samples {
-                ring_size    := 0.9 * size
-                ring_padding := 0.1 * size
-                
-                center_size  := ring_size
-                
-                turn := cast(f32) sample
-                
-                sampling_direction := arm(turn * rads_per_sample)
-                
-                total_support := total_supports[sample]
-                alpha := safe_ratio_0(total_support, max_support)
-                color := comparing_group.color
-                color *= alpha
-                
-                center := atan2(-sampling_direction.y, sampling_direction.x) * DegreesPerRadian
-                width: f32 = 360. / turns
-                start := center - width * .5
-                stop  := center + width * .5
-                
-                inner := (center_size +  ring_size) + cast(f32) group_index * ring_size + ring_padding
-                outer := inner + ring_size
-                
-                rl.DrawRing(p, inner, outer, start, stop, 0, v4_to_rl_color(color))
-            }
-        }
-        
-        rl.DrawCircleV(p, size, v4_to_rl_color(viewing_group.color))
-    }
-    rl.EndTextureMode()
-    
-    { // Invert y
-        image := rl.LoadImageFromTexture(viewing_render_target.texture)
-        pixels := slice_from_parts_cast(rl.Color, image.data, image.width * image.height)
-        for row in 0..<image.height/2 {
-            rev := image.height-1-row
-            for col in 0..<image.width {
-                a := &pixels[row * image.width + col]
-                b := &pixels[rev * image.width + col]
-                swap(a, b)
-            }
-        }
-        
-        rl.UpdateTexture(viewing_render_target.texture, image.data)
-    }
 }

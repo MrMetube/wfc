@@ -222,6 +222,7 @@ distance :: proc (to: $T, from: T) -> (result: T) {
 log2 :: math.log2
 sin  :: math.sin
 cos  :: math.cos
+tan  :: math.tan
 acos :: proc (x: $T) -> (result: T) {
     when intrinsics.type_is_simd_vector(T) {
         a := simd.to_array(x)

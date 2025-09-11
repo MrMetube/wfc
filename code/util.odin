@@ -9,6 +9,8 @@ import "base:builtin"
 import "core:mem"
 import "core:simd"
 
+_ :: simd
+
 // ------- Low Contrast
 // #C1B28B gray
 
@@ -41,6 +43,8 @@ Orange     :: v4{1   , 0.71, 0.2  , 1}
 Green      :: v4{0   , 0.59, 0.28 , 1}
 Red        :: v4{1   , 0.09, 0.24 , 1}
 DarkBlue   :: v4{0.08, 0.08, 0.2  , 1}
+
+SeaGreen :: v4{0.18, 0.77, 0.71, 1}
 
 color_wheel :: [?]v4 {
     v4{0.3 , 0.22, 0.34, 1}, 
@@ -130,6 +134,15 @@ vec_max :: proc (a: $T, b: T) -> (result: T) {
         result = simd.max(a, b)
     } else {
         result = max(a, b)
+    }
+    return result
+}
+
+vec_min :: proc (a: $T, b: T) -> (result: T) {
+    when intrinsics.type_is_simd_vector(T) {
+        result = simd.min(a, b)
+    } else {
+        result = min(a, b)
     }
     return result
 }

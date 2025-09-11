@@ -1,6 +1,5 @@
 package main
 
-import "core:time"
 import "core:simd"
 import rl "vendor:raylib"
 
@@ -123,22 +122,12 @@ get_closeness :: proc (sampling_direction: v2) -> (result: Direction_Vector) {
     normalized_sampling_direction := normalize(sampling_direction)
     sampling_direction := lane_v2 { normalized_sampling_direction.x, normalized_sampling_direction.y }
     
-    cosine_closeness := dot(sampling_direction, other_dir)
-    linear_closeness := 1 - acos(cosine_closeness)
+    threshold: Direction_Vector = cos((cast(f32) strictness) / 16 * Tau)
     
-    closeness := linear_blend(cosine_closeness, linear_closeness, t_directional_strictness)
-    closeness = vec_max(closeness, 0)
+    closeness := dot(sampling_direction, other_dir)
+    mask := simd.lanes_ge(closeness, threshold)
+    result = auto_cast simd.bit_and(mask, 1)
     
-    result = normalize(closeness)
-    
-    return result
-}
-
-get_support_amount :: proc (c: ^Collapse, from: State_Id, to: State_Id, closeness: Direction_Vector) -> (result: f32) {
-    support := c.supports[from * auto_cast len(c.states) + to]
-    
-    result = simd.reduce_add_pairs(support * closeness)
-        
     return result
 }
 
@@ -334,7 +323,6 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
         
         if current.changes_cursor == len(current.changes) {
             if result != .Rewind {
-                // print("Next Step\n")
                 append(&c.steps, Step { step = current.step + 1 })
             }
         }
@@ -494,20 +482,17 @@ end_state   :: proc (c: ^Collapse) {
 
 ////////////////////////////////////////////////
 
-extract_states :: proc (c: ^Collapse, pixels: [] rl.Color, width, height: i32) {
+extract_states :: proc (c: ^Collapse, pixels: [] rl.Color, width, height: i32, wrap: [2] bool) {
     spall_proc()
-    
-    for &group in color_groups do delete(group.ids)
-    clear(&color_groups)
-    
-    viewing_group = nil
     
     // @incomplete: Allow for rotations and mirroring here
     {
-        start := time.now()
         spall_scope("State Extraction")
-        for by in 0..<height {
-            for bx in 0..<width {
+        
+        max_x := wrap.x ? width  : width - N
+        max_y := wrap.y ? height : height - N
+        for by in 0..<max_y {
+            for bx in 0..<max_x {
                 begin_state(c)
                 for dy in 0..<N {
                     for dx in 0..<N {
@@ -518,16 +503,12 @@ extract_states :: proc (c: ^Collapse, pixels: [] rl.Color, width, height: i32) {
                 }
                 end_state(c)
             }
-            
-            print("Extraction: State extraction % %%\r", view_percentage(by, height))
         }
-        print("Extraction: State extraction done: %        \n", view_time_duration(time.since(start), precision = 3))
     }
     
     make(&c.supports, square(len(c.states)))
     
     {
-        start := time.now()
         spall_scope("Extraction: Supports generation")
         
         for a, a_index in c.states {
@@ -543,12 +524,6 @@ extract_states :: proc (c: ^Collapse, pixels: [] rl.Color, width, height: i32) {
                     }
                 }
             }
-            print("Extraction: Supports generation % %%\r", view_percentage(a_index, len(c.states)))
-            
         }
-        
-        print("Extraction: Supports generation done: %       \n", view_time_duration(time.since(start), precision = 3))
     }
-    
-    print("Extraction: Done\n")
 }
