@@ -7,7 +7,18 @@ import "core:time"
 
 import rl "vendor:raylib"
 
-Screen_Size :: v2i{1920, 1080}
+/* 
+ - Remove all outdated and unused ideas
+   - Support and Collapse are just boolean after all
+   - Directional Strictness is actually discrete but looks like it is continous
+ - "view closeness" should then be way easier to visualize
+   - do we even need color groups?
+ - Get some nice screenshots or process and results
+ - simplify code and make an overview of the important parts
+ - allow/disallow wrapping in extraction 
+ */
+ 
+Screen_Size  :: v2i{1920, 1080}
 Viewing_Size :: v2i{1024, 1024}
 
 TargetFps       :: 60
@@ -23,10 +34,10 @@ wait_until_this_state: Maybe(Step_State)
 
 cell_size_on_screen: v2
 
-render_wavefunction_as_average := true
+show_average_colors := true
 show_neighbours                := false
 show_voronoi_cells             := true
-highlight_step                 := false
+show_step_details                 := false
 preview_angles                 := false
 
 viewing_closeness_mask: Direction_Vector = 1
@@ -42,6 +53,7 @@ Color_Group :: struct {
 cells_background_color := DarkGreen
 cells_background_hue_t: f32
 
+// @todo(viktor): visual dimension vs. point count for generates
 dimension: v2i = {66, 66}
 
 File :: struct {
@@ -91,7 +103,6 @@ opposite_direction :: proc (direction: Direction) -> (result: Direction) {
 
 ////////////////////////////////////////////////
 
-generates: [dynamic] Generate_Kind
 Generate_Kind :: union {
     Generate_Grid,
     Generate_Circle,
@@ -122,15 +133,44 @@ Frame :: struct {
     rewind_to: Collapse_Step,
 }
 
+// @todo(viktor): move into collapse, but also is kinda constant for all my examples
 desired_N: i32 = N
-desired_dimension     := dimension
+desired_dimension := dimension
 active_generate_index: int
 
 ////////////////////////////////////////////////
 
+// @todo(viktor): this is just a cutoff for the angle which also just means, as we only have 8 directions, the only angles we cut off besides the ones that are already zeroed by cos are the closest 45° angles to the closest overall angle, so we are actually only saying that we take the nearest, the nearest +1 (and maybe the nearest +2) on each side. so we either get to pick from 1, 3 or 5 state buckets when checking support
+
 //    t - description - overlap of the 8 cardinal directions
 //   ~0 - Cosine      - large
 // ~1.5 - Linear      - none
+// @todo(viktor): rescale this to show 0..1 then multiply by 1.5 internally, also 
+// @todo(viktor): justify 1.5
+/// tau = 6.2831853
+/// DegreesPerRadian = 360 / tau
+/// RadiansPerDegree = tau / 360
+/// 1   * DegreesPerRadian
+/// 1.4 * DegreesPerRadian
+/// 1.5 * DegreesPerRadian
+/// 1.6 * DegreesPerRadian
+/// n = {0, 1}
+/// e = {1, 0}
+/// s = {0, -1}
+/// w = {-1, 0}
+/// ne = normalize({1, 1})
+/// se = normalize({1, -1})
+/// sw = normalize({-1, -1})
+/// nw = normalize({-1, 1})
+/// d = normalize(arm(28 * RadiansPerDegree))
+/// max(0, dot(e,  d)) * DegreesPerRadian
+/// max(0, dot(ne, d)) * DegreesPerRadian
+/// max(0, dot(n,  d)) * DegreesPerRadian
+/// max(0, dot(nw, d)) * DegreesPerRadian
+/// max(0, dot(w,  d)) * DegreesPerRadian
+/// max(0, dot(sw, d)) * DegreesPerRadian
+/// max(0, dot(s,  d)) * DegreesPerRadian
+/// max(0, dot(se, d)) * DegreesPerRadian
 t_directional_strictness: f32 = .75
 
 ////////////////////////////////////////////////
@@ -187,6 +227,7 @@ main :: proc () {
     collapse: Collapse
     collapse.search_metric = .Entropy
     
+    generates: [dynamic] Generate_Kind
     append(&generates, Generate_Grid {
         center    = {.5, .5},
         radius = .5,
@@ -218,10 +259,13 @@ main :: proc () {
     }
     active_generate_index = 0
     
+    // @todo(viktor): Can we not rely on this pregen?
     pre := Frame { tasks = { .setup_grid } }
-    do_tasks_in_order(&pre, &collapse, &entropy)
+    do_tasks_in_order(&pre, &collapse, &entropy, &generates)
     
     defer {
+        delete(generates)
+        
         collapse_reset(&collapse)
         delete(collapse.steps)
         delete(collapse.states)
@@ -250,12 +294,12 @@ main :: proc () {
         this_frame.pixels           = nil
         this_frame.pixels_dimension = {}
         
-        ui(&collapse, images, &this_frame)
+        ui(&collapse, images, &this_frame, &generates)
         
         ////////////////////////////////////////////////
         // Update 
         
-        do_tasks_in_order(&this_frame, &collapse, &entropy)
+        do_tasks_in_order(&this_frame, &collapse, &entropy, &generates)
         
         ////////////////////////////////////////////////
         // Render
@@ -268,6 +312,7 @@ main :: proc () {
         current := len(collapse.steps) != 0 ? peek(collapse.steps)^ : {}
         
         { // Background
+            // @todo(viktor): this is kinda overkill
             cells_background_hue_t += rl.GetFrameTime() * DegreesPerRadian
             if cells_background_hue_t >= 360 do cells_background_hue_t -= 360
             
@@ -283,7 +328,7 @@ main :: proc () {
             if .edge in cell.flags do continue
             color: v4
             
-            if render_wavefunction_as_average || .collapsed in cell.flags {
+            if show_average_colors || .collapsed in cell.flags {
                 color = cell.average_color
             }
             draw_cell(cell, color)
@@ -310,12 +355,12 @@ main :: proc () {
                     
                     color.a *= 0.5
                     end := world_to_screen(neighbour.cell.p)
-                    rl.DrawLineEx(center, end, 2, v4_to_rl_color(color))
+                    rl.DrawLineEx(center, end, 1, v4_to_rl_color(color))
                 }
             }
         }
         
-        if highlight_step && len(collapse.steps) > 0 {
+        if show_step_details && len(collapse.steps) > 0 {
             viewed := collapse.steps[min(viewing_step, current.step)]
             for cell in viewed.found {
                 draw_cell_outline(cell^, rl.GREEN)
@@ -341,7 +386,7 @@ restart :: proc (this_frame: ^Frame) {
     this_frame.rewind_to = 0
 }
 
-do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSeries) {
+do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSeries, generates: ^[dynamic] Generate_Kind) {
     spall_proc()
     
     next_frame: Frame
@@ -353,7 +398,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             this_frame.tasks -= { .setup_grid }
             
             if len(generates) != 0 {
-                setup_grid(c, entropy)
+                setup_grid(c, entropy, generates)
                 
                 restart(this_frame)
             }
@@ -515,7 +560,7 @@ setup_cells :: proc (c: ^Collapse) {
     }
 }
 
-setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries) {
+setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, generates: ^[dynamic] Generate_Kind) {
     ratio := vec_cast(f32, Screen_Size-100) / vec_cast(f32, dimension)
     if ratio.x < ratio.y {
         cell_size_on_screen = ratio.x

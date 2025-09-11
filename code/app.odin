@@ -5,7 +5,7 @@ import "lib:imgui"
 
 step_depth: [dynamic] f32
 
-ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
+ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generates: ^[dynamic] Generate_Kind) {
     region: v2
     current := len(c.steps) != 0 ? peek(c.steps)^ : {}
     
@@ -31,8 +31,6 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
                 wait_until_this_state = cast(Step_State) ((cast(int) current.state + 1) % len(Step_State))
             }
             
-            if imgui.button("Rewind one step")  do this_frame.tasks += { .rewind  }
-            
             if imgui.button("Update once") do this_frame.tasks += { .update }
             
             imgui.text(tprint("%", current.state))
@@ -42,8 +40,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         }
         
         if imgui.button("Restart") do restart(this_frame)
-
-            
+        
         imgui.text("Steps")
         imgui.get_content_region_avail(&region)
         imgui.push_item_width(region.x*2/3)
@@ -80,74 +77,74 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
         
         imgui.text("Grid")
         imgui.slider_int2("Size", &desired_dimension, 3, 300, flags = .Logarithmic)
-        if imgui.button("New") do append(&generates, Generate_Noise {} )
-        {
-            
-            imgui.get_content_region_avail(&region)
-            
-            for &generate, index in generates {
-                
-                is_active := index == active_generate_index
-                if imgui.radio_button(tprint("%", index), is_active) do active_generate_index = index
-                
-                if is_active {
-                    imgui.indent(); defer imgui.unindent()
-                    
-                    grid, is_grid := &generate.(Generate_Grid)
-                    if imgui.radio_button("Square", is_grid) {
-                        generate = Generate_Grid {
-                            radius = 0.5,
-                        }
-                    }
-                    if is_grid {
-                        imgui.indent(); defer imgui.unindent()
-                        imgui.push_item_width(region.x/2); defer imgui.pop_item_width()
-                        
-                        imgui.slider_float("angle", &grid.angle, 0, Tau/4)
-                        imgui.slider_float2("center", &grid.center, 0, 1)
-                        imgui.slider_float2("radius", &grid.radius, 0, 1)
-                        imgui.checkbox("hexagonal", &grid.is_hex)
-                    }
-                    
-                    circle, is_circle := &generate.(Generate_Circle)
-                    if imgui.radio_button("Circular", is_circle) {
-                        generate = Generate_Circle {}
-                    }
-                    if is_circle {
-                        imgui.indent();                    defer imgui.unindent()
-                        imgui.push_item_width(region.x/2); defer imgui.pop_item_width()
-                        
-                        imgui.slider_float("spiral", &circle.spiral_strength, 0, 2)
-                    }
-                    
-                    noise, is_noise := &generate.(Generate_Noise)
-                    if imgui.radio_button("Noise", is_noise) {
-                        generate = Generate_Noise {}
-                    }
-                    if is_noise {
-                        imgui.indent(); defer imgui.unindent()
-                        
-                        imgui.checkbox("blue noise", &noise.is_blue)
-                    }
-                    
-                    if imgui.button("Remove") do ordered_remove(&generates, index)
-                }
-            }
-        }
-            
+        
         if imgui.button("Generate Grid") {
             this_frame.tasks += { .setup_grid }
             dimension = desired_dimension
         }
+        
+        {
+            for _, index in generates {
+                is_active := index == active_generate_index
+                if index != 0 do imgui.same_line()
+                if imgui.radio_button(tprint("%", index), is_active) do active_generate_index = index
+            }
+            imgui.same_line()
+            if imgui.button("New") do append(generates, Generate_Noise {} )
+            
+            imgui.get_content_region_avail(&region)
+            if active_generate_index >= 0 && active_generate_index < len(generates) { // Active one
+                generate := &generates[active_generate_index]
+                
+                grid, is_grid := &generate.(Generate_Grid)
+                if imgui.radio_button("Square", is_grid) {
+                    generate ^= Generate_Grid {
+                        radius = 0.5,
+                    }
+                }
+                if is_grid {
+                    imgui.indent(); defer imgui.unindent()
+                    imgui.push_item_width(region.x/2); defer imgui.pop_item_width()
+                    
+                    imgui.slider_float("angle", &grid.angle, 0, Tau/4)
+                    imgui.slider_float2("center", &grid.center, 0, 1)
+                    imgui.slider_float2("radius", &grid.radius, 0, 1)
+                    imgui.checkbox("hexagonal", &grid.is_hex)
+                }
+                
+                circle, is_circle := &generate.(Generate_Circle)
+                if imgui.radio_button("Circular", is_circle) {
+                    generate ^= Generate_Circle {}
+                }
+                if is_circle {
+                    imgui.indent();                    defer imgui.unindent()
+                    imgui.push_item_width(region.x/2); defer imgui.pop_item_width()
+                    
+                    imgui.slider_float("spiral", &circle.spiral_strength, 0, 2)
+                }
+                
+                noise, is_noise := &generate.(Generate_Noise)
+                if imgui.radio_button("Noise", is_noise) {
+                    generate ^= Generate_Noise {}
+                }
+                if is_noise {
+                    imgui.indent(); defer imgui.unindent()
+                    
+                    imgui.checkbox("blue noise", &noise.is_blue)
+                }
+                
+                if imgui.button("Remove") do ordered_remove(generates, active_generate_index)
+            }
+        }
     imgui.end()
     
     imgui.begin("Visualization")
-        imgui.color_edit4("Background", &cells_background_color, flags = .NoInputs | .NoTooltip | .Float | .DisplayHsv )
+        imgui.color_edit4("Background", &cells_background_color, flags = .NoInputs | .NoTooltip | .Float | .DisplayHsv)
         
-        imgui.checkbox("Highlight step", &highlight_step)
+        imgui.checkbox("Show step details", &show_step_details)
         
         imgui.text("Cells")
-        imgui.checkbox("Average Color", &render_wavefunction_as_average)
+        imgui.checkbox("Show Average Colors", &show_average_colors)
         imgui.checkbox("Show Neighbours", &show_neighbours)
         imgui.checkbox("Show Voronoi Cells", &show_voronoi_cells)
     imgui.end()
@@ -170,8 +167,8 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame) {
             image_index := 0
             for _, &image in images {
                 defer image_index += 1
-                column := image_index % columns
-                if column != 0 do imgui.same_line(image_width * cast(f32) column + pad)
+                
+                if image_index % columns != 0 do imgui.same_line()
                 
                 imgui.push_id(&image)
                 if imgui.image_button(auto_cast &image.texture.id, size = image_width*0.8, frame_padding = 1) {
