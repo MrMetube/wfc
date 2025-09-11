@@ -9,13 +9,9 @@ import rl "vendor:raylib"
 
 /* 
  - Remove all outdated and unused ideas
-   - Support and Collapse are just boolean after all
-   - Directional Strictness is actually discrete but looks like it is continous
- - "view closeness" should then be way easier to visualize
-   - do we even need color groups?
+   - Support and Closeness are just boolean after all
  - Get some nice screenshots or process and results
  - simplify code and make an overview of the important parts
- - allow/disallow wrapping in extraction 
  - debug visualization to show graph as nodes and not voronoi but also with colors
    - and maybe interpolate between both?
  */
@@ -38,10 +34,10 @@ cell_size_on_screen: v2
 
 show_average_colors := true
 show_neighbours     := false
-show_voronoi_cells  := true
+show_voronoi_cells  := false
 show_step_details   := false
 
-cells_background_color := SeaGreen
+cells_background_color := Orange
 
 // @todo(viktor): visual dimension vs. point count for generates
 dimension: v2i = {66, 66}
@@ -56,6 +52,8 @@ viewing_step_detached: bool
 viewing_step: Collapse_Step
 
 ////////////////////////////////////////////////
+
+strictness: i32 = 3
 
 Direction :: enum {
     E, NE, N, NW, W, SW, S, SE,
@@ -124,14 +122,9 @@ Frame :: struct {
 }
 
 wrap_in_extraction: [2] bool = true
-// @todo(viktor): move into collapse, but also is kinda constant for all my examples
-desired_N: i32 = N
+
 desired_dimension := dimension
 active_generate_index: int
-
-////////////////////////////////////////////////
-
-strictness: i32
 
 ////////////////////////////////////////////////
 
@@ -192,10 +185,10 @@ main :: proc () {
         center    = {.5, .5},
         radius = .5,
     })
-    append(&generates, Generate_Grid {
-        center    = {.5, .5},
-        radius = .2,
-    })
+    // append(&generates, Generate_Grid {
+    //     center    = {.5, .5},
+    //     radius = .2,
+    // })
     
     when false {
         append(&generates, Generate_Grid {
@@ -271,7 +264,6 @@ main :: proc () {
         }
         
         for cell in cells {
-            if .edge in cell.flags do continue
             color: v4
             
             if show_average_colors || .collapsed in cell.flags {
@@ -297,8 +289,6 @@ main :: proc () {
                 rl.DrawCircleV(center, 3, color)
                 for neighbour in cell.neighbours {
                     color := Emerald
-                    if .edge in neighbour.cell.flags do color = Salmon
-                    
                     color.a *= 0.5
                     end := world_to_screen(neighbour.cell.p)
                     rl.DrawLineEx(center, end, 1, v4_to_rl_color(color))
@@ -355,7 +345,6 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             
             assert(this_frame.pixels != nil)
             
-            N = desired_N
             collapse_reset(c)
             extract_states(c, this_frame.pixels, this_frame.pixels_dimension.x, this_frame.pixels_dimension.y, wrap_in_extraction)
             
@@ -425,15 +414,20 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             current := peek(c.steps)
             
             this_update_start := time.now()
-            result, rewind_to := step_update(c, entropy)
+            result := step_update(c, entropy, current)
             
-            switch result {
-              case .Done: break task_loop
-              case .Ok:   next_frame.tasks += { .update }
+            switch result.kind {
+              case .Complete: break task_loop
+              case .Next:     
+                append(&c.steps, Step { step = current.step + 1 })
+                fallthrough
+              case .Continue: 
+                next_frame.tasks += { .update }
                 
-              case .Rewind: 
+              case .Rewind:
                 next_frame.tasks += { .rewind }
-                next_frame.rewind_to = rewind_to != Invalid_Collapse_Step ? rewind_to : max(0, current.step - 1)
+                next_frame.rewind_to = max(0, result.rewind_to)
+                
             }
             
             total_duration += time.since(this_update_start)
@@ -464,8 +458,7 @@ setup_cells :: proc (c: ^Collapse) {
         cell.flags += { .dirty }
         cell.flags -= { .collapsed }
         
-        for &state, index in cell.states {
-            state.id = cast(State_Id) index
+        for &state in cell.states {
             state.removed_at = Invalid_Collapse_Step
         }
         
@@ -506,36 +499,8 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, generates: ^[dynamic] 
         for point, index in voronoi.points {
             p := vec_cast(f32, point * dim)
             cell.points[index] = p
-            
-            inside: b32
-            
-            for generate in generates {
-                switch kind in generate {
-                  case Generate_Grid:
-                    region := rec_cast(f64, rectangle_center_half_dimension(kind.center, kind.radius))
-                    region = scale_radius(region, dim)
-                    inside ||= contains(region, point)
-                  
-                  case Generate_Noise:
-                    dimension := 1.0
-                    region := rectangle_center_dimension(v2d{0.5, 0.5}, dimension)
-                    inside = contains(region, point)
-                        
-                  case Generate_Circle:
-                    center: v2d = 0.5
-                    radius := 0.5 - 0.001
-                    inside = length_squared(point - center) < square(radius)
-                }
-            }
-            
-            if !inside {
-                cell.flags +=  { .edge }
-            }
         }
         
-        if voronoi.is_edge {
-            cell.flags +=  { .edge }
-        }
         append(&cells, cell)
     }
     
@@ -606,6 +571,7 @@ generate_points :: proc(points: ^[dynamic] v2d, count: i32, kind: Generate_Kind)
         max_count := cast(f64) count / ring_count
         min_radius := 0.01
         max_radius := cast(f64) kind.radius
+        append(points, cast(v2d) center)
         for ring in 0..<ring_count {
             t := (ring + 1) / ring_count
             radius := linear_blend(min_radius, max_radius, t)

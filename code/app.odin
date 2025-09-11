@@ -151,18 +151,14 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
     imgui.end()
     
     imgui.begin("Extraction")
-        imgui.get_content_region_avail(&region)
-        imgui.push_item_width(region.x*2/3)
-        imgui.slider_int("Tile Size", &desired_N, 1, 10)
-        imgui.pop_item_width()
         imgui.checkbox("Wrap X", &wrap_in_extraction.x)
+        imgui.same_line()
         imgui.checkbox("Wrap Y", &wrap_in_extraction.y)
         
-        if len(c.states) == 0 {
-            imgui.text("Select an input image")
-        }
-        
+        imgui.text("Tile Size = 3")
+        imgui.text("Select an input image")
         {
+            imgui.get_content_region_avail(&region)
             image_width: f32 = 60
             pad: f32 = 6
             columns := max(1, round(int, region.x / (image_width+pad)))

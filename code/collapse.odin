@@ -3,9 +3,8 @@ package main
 import "core:simd"
 import rl "vendor:raylib"
 
-
-// @todo(viktor): make these members of collapse
-N: i32 = 3
+// @note(viktor): All images only work with this N anyways and its out of scope to have it differ
+N: i32 : 3
 
 Collapse :: struct {
     states:   [dynamic] State,
@@ -17,9 +16,11 @@ Collapse :: struct {
     // Extraction
     is_defining_state: bool,
     temp_state_values: [dynamic] rl.Color,
+    // @note(viktor): used for checking overlaps
+    temp_subregion_hashes: [dynamic] [Direction] u64,
 }
 
-State_Id :: distinct u32
+State_Id      :: distinct u32
 Collapse_Step :: distinct i32
 
 Invalid_State         :: max(State_Id)
@@ -28,20 +29,15 @@ Invalid_Collapse_Step :: max(Collapse_Step)
 Search_Metric :: enum { States, Entropy }
 
 State :: struct {
-    id: State_Id,
-    
-    middle: v4,
-    
+    id:        State_Id,
     frequency: f32,
-    
-    // @note(viktor): used in extraction when checking overlaps.
-    subregion_hashes: [Direction] u64,
+    middle:    v4,
 }
 
 ////////////////////////////////////////////////
 
 Step :: struct {
-    step: Collapse_Step,
+    step:  Collapse_Step,
     state: Step_State,
     
     // Search
@@ -49,10 +45,10 @@ Step :: struct {
     // Pick
     to_be_collapsed: ^Cell,
     // Collapse
-    pickable_states: [dynamic] ^State_Entry,
+    pickable_indices: [dynamic] int,
     // Propagate
-    changes:         [dynamic] ^Cell,
-    changes_cursor:  int,
+    changes:        [dynamic] ^Cell,
+    changes_cursor: int,
 }
 
 Step_State :: enum {
@@ -62,28 +58,38 @@ Step_State :: enum {
     Propagate,
 }
 
+Step_Result :: struct {
+    kind: enum { Continue, Next, Complete, Rewind },
+    
+    rewind_to: Collapse_Step,
+}
+
 ////////////////////////////////////////////////
 
 cells: [dynamic] Cell
+
+Cell :: struct {
+    p: v2, 
+    
+    states:     [] State_Entry,
+    neighbours: [] Neighbour,
+    
+    flags:   Cell_Flags,
+    entropy: f32,
+    
+    // Visual only
+    average_color: v4,
+    points: [] v2, // for rendering the voronoi cell
+}
+
+Cell_Flags :: bit_set[enum { collapsed, dirty }; u8]
+
 Neighbour :: struct {
     cell:      ^Cell,
     closeness: Direction_Vector,
 }
-Cell :: struct {
-    p:          v2, 
-    states:     [] State_Entry,
-    neighbours: [] Neighbour,
-    
-    flags: bit_set[enum { collapsed, dirty, edge }; u8],
-    entropy: f32,
-    
-    // Visual only
-    points:     [] v2, // for rendering the voronoi cell
-    average_color: v4,
-}
 
 State_Entry :: struct {
-    id: State_Id,
     removed_at: Collapse_Step,
 }
 
@@ -133,16 +139,13 @@ get_closeness :: proc (sampling_direction: v2) -> (result: Direction_Vector) {
 
 ////////////////////////////////////////////////
 
-Update_Result :: enum { Ok, Rewind, Done }
-step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Result, rewind_to: Collapse_Step) {
+step_update :: proc (c: ^Collapse, entropy: ^RandomSeries, current: ^Step) -> (result: Step_Result) {
     spall_proc()
     assert(c.states != nil)
     
-    // @todo(viktor): this return setup is a bit stupid
-    result = .Ok
-    rewind_to = Invalid_Collapse_Step
-    
-    current := peek(c.steps)
+    result.kind = .Continue
+    // @note(viktor): this will only be used if kind == .Rewind
+    result.rewind_to = current.step - 1
     
     switch current.state {
       case .Search:
@@ -181,7 +184,7 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
         spall_end()
         
         if len(current.found) == 0 {
-            result = .Done
+            result.kind = .Complete
         } else {
             current.state = .Pick
         }
@@ -192,7 +195,7 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
         assert(current.to_be_collapsed == nil)
         
         if len(current.found) == 0 {
-            result = .Rewind
+            result.kind = .Rewind 
         } else {
             index := random_index(entropy, current.found)
             current.to_be_collapsed = current.found[index]
@@ -200,9 +203,9 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
             
             assert(.collapsed not_in current.to_be_collapsed.flags)
             
-            clear(&current.pickable_states)
-            for &state in current.to_be_collapsed.states do if state.removed_at > current.step {
-                append(&current.pickable_states, &state)
+            clear(&current.pickable_indices)
+            for &state, index in current.to_be_collapsed.states do if state.removed_at > current.step {
+                append(&current.pickable_indices, index)
             }
             
             current.state = .Collapse
@@ -213,16 +216,16 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
         
         assert(current.to_be_collapsed != nil)
         
-        if len(current.pickable_states) == 0 {
-            result = .Rewind
+        if len(current.pickable_indices) == 0 {
+            result.kind = .Rewind 
         } else {
             cell := current.to_be_collapsed
             assert(.collapsed not_in cell.flags)
             
             total: f32
-            for state in current.pickable_states {
-                assert(state.removed_at > current.step)
-                total += c.states[state.id].frequency
+            for index in current.pickable_indices {
+                assert(cell.states[index].removed_at > current.step)
+                total += c.states[index].frequency
             }
             
             target := random_between(entropy, f32, 0, total)
@@ -230,27 +233,27 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
             
             pick := Invalid_State
             pickable_index := -1
-            for &state, index in current.pickable_states {
-                target -= c.states[state.id].frequency
+            for index, pick_index in current.pickable_indices {
+                target -= c.states[index].frequency
                 
                 if target <= 0 {
-                    pick = state.id
-                    pickable_index = index
+                    pick = cast(State_Id) index
+                    pickable_index = pick_index
                     break
                 }
             }
             
             if pick != Invalid_State {
-                for &state in cell.states do if state.removed_at > current.step {
-                    if state.id != pick {
+                for &state, id in cell.states do if state.removed_at > current.step {
+                    if cast(State_Id) id != pick {
                         state.removed_at = current.step
                     }
                 }
                 
-                unordered_remove(&current.pickable_states, pickable_index)
+                unordered_remove(&current.pickable_indices, pickable_index)
                 cell.flags += { .collapsed, .dirty }
             } else {
-                result = .Rewind
+                result.kind = .Rewind 
             }
         }
         
@@ -268,21 +271,21 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
         }
         
         if change == nil && current.changes_cursor == len(current.changes) {
-            result = .Rewind
+            result.kind = .Rewind
             clear(&current.changes)
             current.changes_cursor = 0
         } else {
             propagate_remove: for neighbour in change.neighbours {
                 cell := neighbour.cell
-                if cell.flags & {.collapsed, .edge } != {} do continue
-                closeness := neighbour.closeness
+                if cell.flags & { .collapsed } != {} do continue
                 
+                closeness := neighbour.closeness
                 states_count := 0
                 did_change := false
                 spall_begin("recalc states")
-                recalc_states: for &from in cell.states do if from.removed_at > current.step {
-                    for to in change.states do if to.removed_at > current.step {
-                        support := c.supports[from.id * auto_cast len(c.states) + to.id]
+                recalc_states: for &from, from_id in cell.states do if from.removed_at > current.step {
+                    for to, to_id in change.states do if to.removed_at > current.step {
+                        support := c.supports[from_id * len(c.states) + to_id]
                         amount := simd.reduce_add_pairs(support * closeness)
                         if amount != 0 {
                             states_count += 1
@@ -307,8 +310,9 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
                                 }
                             }
                         }
-                        result = .Rewind
-                        rewind_to = the_cause
+                        
+                        result.kind = .Rewind
+                        result.rewind_to = the_cause
                         
                         break propagate_remove
                     }
@@ -322,13 +326,13 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries) -> (result: Update_Re
         }
         
         if current.changes_cursor == len(current.changes) {
-            if result != .Rewind {
-                append(&c.steps, Step { step = current.step + 1 })
+            if result.kind != .Rewind {
+                result.kind = .Next
             }
         }
     }
     
-    return result, rewind_to
+    return result
 }
 
 append_change_if_not_already_scheduled :: proc (current: ^Step, cell: ^Cell) {
@@ -352,7 +356,7 @@ append_change_if_not_already_scheduled :: proc (current: ^Step, cell: ^Cell) {
 
 delete_step :: proc (step: Step) {
     delete(step.found)
-    delete(step.pickable_states)
+    delete(step.pickable_indices)
     delete(step.changes)
 }
 
@@ -362,15 +366,15 @@ calculate_entropy :: proc (c: ^Collapse, cell: ^Cell, step: Collapse_Step) {
     spall_proc()
     
     total_frequency: f32
-    for state in cell.states do if state.removed_at > step {
-        frequency := c.states[state.id].frequency
+    for state, id in cell.states do if state.removed_at > step {
+        frequency := c.states[id].frequency
         
         total_frequency += frequency
     }
     
     entropy: f32
-    for state in cell.states do if state.removed_at > step {
-        frequency := c.states[state.id].frequency
+    for state, id in cell.states do if state.removed_at > step {
+        frequency := c.states[id].frequency
         
         probability := frequency / total_frequency
         
@@ -385,8 +389,8 @@ calculate_average_color :: proc (c: ^Collapse, cell: ^Cell, step: Collapse_Step)
     
     color: v4
     count: f32
-    for state in cell.states do if state.removed_at > step {
-        state := c.states[state.id]
+    for state, id in cell.states do if state.removed_at > step {
+        state := c.states[id]
         color += state.middle * state.frequency
         count += state.frequency
     }
@@ -403,6 +407,51 @@ delete_cell :: proc (cell: Cell) {
 
 ////////////////////////////////////////////////
 
+extract_states :: proc (c: ^Collapse, pixels: [] rl.Color, width, height: i32, wrap: [2] bool) {
+    spall_proc()
+    
+    // @incomplete: Allow for rotations and mirroring here
+    spall_begin("State Extraction")
+    max_x := wrap.x ? width  : width  - N
+    max_y := wrap.y ? height : height - N
+    for by in 0..<max_y {
+        for bx in 0..<max_x {
+            begin_state(c)
+            for dy in 0..<N {
+                for dx in 0..<N {
+                    x := (bx + dx) % width
+                    y := (by + dy) % height
+                    state_append_value(c, pixels[x + (height-1-y) * width])
+                }
+            }
+            end_state(c)
+        }
+    }
+    spall_end()
+    
+    spall_begin("Supports generation")
+    make(&c.supports, square(len(c.states)))
+    for a, a_index in c.states {
+        assert(a.id == auto_cast a_index)
+        for d in Direction {
+            a_hashes := c.temp_subregion_hashes[a.id]
+            a_hash := a_hashes[d]
+            for b in c.states {
+                b_hashes := c.temp_subregion_hashes[b.id]
+                b_hash := b_hashes[opposite_direction(d)]
+                
+                if a_hash == b_hash {
+                    support := cast(^[Direction] f32) &c.supports[a.id * auto_cast len(c.states) + b.id]
+                    support[d] = 1
+                }
+            }
+        }
+    }
+    
+    clear(&c.temp_subregion_hashes)
+    spall_end()
+}
+
 begin_state :: proc (c: ^Collapse) {
     assert(!c.is_defining_state)
     assert(len(c.temp_state_values) == 0)
@@ -416,13 +465,12 @@ state_append_value :: proc (c: ^Collapse, value: rl.Color) {
 }
 
 end_state   :: proc (c: ^Collapse) {
-    spall_proc()
-    
     assert(c.is_defining_state)
     assert(len(c.temp_state_values) != 0)
     c.is_defining_state = false
     
     state := State { id = Invalid_State }
+    subregion_hashes: [Direction] u64
     {
         subsections := [Direction] Rectangle2i {
             .E  = { { 1, 0 }, {   N,   N } },
@@ -447,15 +495,14 @@ end_state   :: proc (c: ^Collapse) {
                 }
             }
             
-            state.subregion_hashes[direction] = hash
+            subregion_hashes[direction] = hash
         }
     }
     
-    // @speed this linear search is the dominant part of this function
-    spall_begin("search")
     search: for other in c.states {
-        for value, direction in other.subregion_hashes {
-            if value != state.subregion_hashes[direction] {
+        other_subregion_hashes := c.temp_subregion_hashes[other.id]
+        for value, direction in other_subregion_hashes {
+            if value != subregion_hashes[direction] {
                 continue search
             }
         }
@@ -463,7 +510,6 @@ end_state   :: proc (c: ^Collapse) {
         state.id = other.id
         break search
     }
-    spall_end()
     
     if state.id == Invalid_State {
         state.id = auto_cast len(c.states)
@@ -472,58 +518,12 @@ end_state   :: proc (c: ^Collapse) {
         state.middle = rl_color_to_v4(c.temp_state_values[N/4+N/4*N])
         
         append(&c.states, state)
+        append(&c.temp_subregion_hashes, subregion_hashes)
+        assert(len(c.states) == len(c.temp_subregion_hashes))
     } else {
         c.states[state.id].frequency += 1
     }
     assert(state.id != Invalid_State)
     
     clear(&c.temp_state_values)
-}
-
-////////////////////////////////////////////////
-
-extract_states :: proc (c: ^Collapse, pixels: [] rl.Color, width, height: i32, wrap: [2] bool) {
-    spall_proc()
-    
-    // @incomplete: Allow for rotations and mirroring here
-    {
-        spall_scope("State Extraction")
-        
-        max_x := wrap.x ? width  : width - N
-        max_y := wrap.y ? height : height - N
-        for by in 0..<max_y {
-            for bx in 0..<max_x {
-                begin_state(c)
-                for dy in 0..<N {
-                    for dx in 0..<N {
-                        x := (bx + dx) % width
-                        y := (by + dy) % height
-                        state_append_value(c, pixels[x + (height-1-y) * width])
-                    }
-                }
-                end_state(c)
-            }
-        }
-    }
-    
-    make(&c.supports, square(len(c.states)))
-    
-    {
-        spall_scope("Extraction: Supports generation")
-        
-        for a, a_index in c.states {
-            assert(a.id == auto_cast a_index)
-            for d in Direction {
-                a_hash := a.subregion_hashes[d]
-                for b in c.states {
-                    b_hash := b.subregion_hashes[opposite_direction(d)]
-                    
-                    if a_hash == b_hash {
-                        support := cast(^[Direction]f32) &c.supports[a.id * auto_cast len(c.states) + b.id]
-                        support[d] = 1
-                    }
-                }
-            }
-        }
-    }
 }
