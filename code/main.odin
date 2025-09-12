@@ -179,7 +179,21 @@ main :: proc () {
     collapse.search_metric = .Entropy
     
     generates: [dynamic] Generate_Kind
+    
+    defer {
+        delete(generates)
         
+        collapse_reset(&collapse)
+        delete(collapse.steps)
+        delete(collapse.states)
+        delete(collapse.temp_state_values)
+        
+        delete(step_depth)
+        
+        for cell in collapse.cells do delete_cell(cell)
+        delete(collapse.cells)
+    }
+    
     when false {
         append(&generates, Generate_Grid {
             center    = {.25, .25},
@@ -199,7 +213,7 @@ main :: proc () {
             center    = {.75, .75},
             radius = .24,
         })
-} else {
+    } else {
         append(&generates, Generate_Grid {
             center    = {.5, .5},
             radius = .51,
@@ -210,20 +224,6 @@ main :: proc () {
     // @todo(viktor): Can we not rely on this pregen?
     pre := Frame { tasks = { .setup_grid } }
     do_tasks_in_order(&pre, &collapse, &entropy, &generates)
-    
-    defer {
-        delete(generates)
-        
-        collapse_reset(&collapse)
-        delete(collapse.steps)
-        delete(collapse.states)
-        delete(collapse.temp_state_values)
-        
-        delete(step_depth)
-        
-        for cell in collapse.cells do delete_cell(cell)
-        delete(collapse.cells)
-    }
     
     this_frame: Frame
     for !rl.WindowShouldClose() {
@@ -445,21 +445,21 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
 
 setup_cells :: proc (c: ^Collapse) {
     for &cell in c.cells {
-        if len(cell.states) != len(c.states) {
-            delete(cell.states)
-            make(&cell.states, len(c.states))
-        }
-    
         cell.flags += { .dirty }
         cell.flags -= { .collapsed }
-
-        for &state in cell.states {
-            state.removed_at = Invalid_Collapse_Step
-        }
         
         for &neighbour in cell.neighbours {
             neighbour.closeness = get_closeness(cell.p - neighbour.cell.p)
         }
+        if len(cell.states) != len(c.states) {
+            delete(cell.states)
+            make(&cell.states, len(c.states))
+        }
+        
+        for &state in cell.states {
+            state.removed_at = Invalid_Collapse_Step
+        }
+        
     }
 }
 

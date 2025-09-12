@@ -1,6 +1,5 @@
 package main
 
-import "core:simd"
 import rl "vendor:raylib"
 
 // @note(viktor): All images only work with this N anyways and its out of scope to have it differ
@@ -8,7 +7,7 @@ N: i32 : 3
 
 Collapse :: struct {
     states:   [dynamic] State,
-    supports: [/* State_Id * len(states) + State_Id */] Direction_Vector,
+    supports: [/* State_Id * len(states) + State_Id */] Direction_Mask,
     
     steps: [dynamic] Step,
     search_metric: Search_Metric,
@@ -84,16 +83,16 @@ Cell :: struct {
 
 Cell_Flags :: bit_set[enum { collapsed, dirty }; u8]
 
+Direction_Mask :: bit_set[Direction; u8]
+
 Neighbour :: struct {
     cell:      ^Cell,
-    closeness: Direction_Vector,
+    closeness: Direction_Mask,
 }
 
 State_Entry :: struct {
     removed_at: Collapse_Step,
 }
-
-Direction_Vector :: lane_f32
 
 ////////////////////////////////////////////////
 
@@ -112,34 +111,27 @@ collapse_reset :: proc (c: ^Collapse) {
 
 ////////////////////////////////////////////////
 
-get_closeness :: proc (sampling_direction: v2) -> (result: Direction_Vector) {
+get_closeness :: proc (sampling_direction: v2) -> (result: Direction_Mask) {
     spall_proc()
-    @(static) other_dir: lane_v2
-    @(static) initialized: bool
-    if !initialized {
-        initialized = true
-        for other in Direction {
-            normal := normalized_direction(other)
-            (cast(^[Direction]f32) &other_dir.x)[other] = normal.x
-            (cast(^[Direction]f32) &other_dir.y)[other] = normal.y
+    
+    threshold := cos((cast(f32) strictness) / 16 * Tau)
+    
+    for other in Direction {
+        sampling_normal := normalize(sampling_direction)
+        other_normal    := normalized_direction(other)
+        
+        closeness := dot(sampling_normal, other_normal)
+        if closeness >= threshold {
+            result += { other }
         }
     }
-    
-    normalized_sampling_direction := normalize(sampling_direction)
-    sampling_direction := lane_v2 { normalized_sampling_direction.x, normalized_sampling_direction.y }
-    
-    threshold: Direction_Vector = cos((cast(f32) strictness) / 16 * Tau)
-    
-    closeness := dot(sampling_direction, other_dir)
-    mask := simd.lanes_ge(closeness, threshold)
-    result = auto_cast simd.bit_and(mask, 1)
     
     return result
 }
 
 ////////////////////////////////////////////////
 
-step_update :: proc (c: ^Collapse, entropy: ^RandomSeries, current: ^Step) -> (result: Step_Result) {
+step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, current: ^Step) -> (result: Step_Result) {
     spall_proc()
     assert(c.states != nil)
     
@@ -277,17 +269,18 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries, current: ^Step) -> (r
         } else {
             propagate_remove: for neighbour in change.neighbours {
                 cell := neighbour.cell
-                if cell.flags & { .collapsed } != {} do continue
+                if .collapsed in cell.flags do continue
                 
                 closeness := neighbour.closeness
                 states_count := 0
                 did_change := false
+                
                 spall_begin("recalc states")
                 recalc_states: for &from, from_id in cell.states do if from.removed_at > current.step {
                     for to, to_id in change.states do if to.removed_at > current.step {
                         support := c.supports[from_id * len(c.states) + to_id]
-                        amount := simd.reduce_add_pairs(support * closeness)
-                        if amount != 0 {
+                        masked := support & closeness
+                        if masked != {} {
                             states_count += 1
                             continue recalc_states
                         }
@@ -441,8 +434,8 @@ extract_states :: proc (c: ^Collapse, pixels: [] rl.Color, width, height: i32, w
                 b_hash := b_hashes[opposite_direction(d)]
                 
                 if a_hash == b_hash {
-                    support := cast(^[Direction] f32) &c.supports[a.id * auto_cast len(c.states) + b.id]
-                    support[d] = 1
+                    support := &c.supports[a.id * auto_cast len(c.states) + b.id]
+                    support^ += { d }
                 }
             }
         }

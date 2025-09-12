@@ -203,14 +203,15 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         }
         imgui.pop_item_width()
         
+        // // @todo(viktor): its a boolean value, so no f32s
         @(static) angle: f32
         imgui.slider_float("Angle", &angle, 0, 360)
         radians := angle == 0 ? 0 : angle * RadiansPerDegree
-        closeness := transmute([8] f32) get_closeness(arm(radians))
+        closeness := get_closeness(arm(radians))
         
         imgui.get_content_region_avail(&region)
         for direction in Direction {
-            imgui.progress_bar(closeness[direction], {region.x, 0}, overlay=tprint("%", direction))
+            imgui.progress_bar(direction in closeness ? 1 : 0, {region.x, 0}, overlay=tprint("%", direction))
         }
     imgui.end()
 }
