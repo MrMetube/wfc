@@ -13,6 +13,8 @@ Collapse :: struct {
     steps: [dynamic] Step,
     search_metric: Search_Metric,
     
+    cells: [dynamic] Cell,
+    
     // Extraction
     is_defining_state: bool,
     temp_state_values: [dynamic] rl.Color,
@@ -65,8 +67,6 @@ Step_Result :: struct {
 }
 
 ////////////////////////////////////////////////
-
-cells: [dynamic] Cell
 
 Cell :: struct {
     p: v2, 
@@ -153,7 +153,7 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries, current: ^Step) -> (r
         
         lowest := +Infinity
         spall_begin("Dirtyness")
-        for &cell in cells do if .dirty in cell.flags {
+        for &cell in c.cells do if .dirty in cell.flags {
             cell.flags -= { .dirty }
             
             calculate_average_color(c, &cell, current.step)
@@ -162,7 +162,7 @@ step_update :: proc (c: ^Collapse, entropy: ^RandomSeries, current: ^Step) -> (r
         spall_end()
         
         spall_begin("Search metric")
-        for &cell in cells do if .collapsed not_in cell.flags {
+        for &cell in c.cells do if .collapsed not_in cell.flags {
             value: f32
             switch c.search_metric {
               case .Entropy: value = cell.entropy
@@ -389,7 +389,7 @@ calculate_average_color :: proc (c: ^Collapse, cell: ^Cell, step: Collapse_Step)
     
     color: v4
     count: f32
-    for state, id in cell.states do if state.removed_at > step {
+        for state, id in cell.states do if state.removed_at > step {
         state := c.states[id]
         color += state.middle * state.frequency
         count += state.frequency

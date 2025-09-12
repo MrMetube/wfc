@@ -47,7 +47,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         if imgui.slider_int("View Step", auto_cast &viewing_step, 0, auto_cast current.step) {
             viewing_step_detached = viewing_step != current.step
             
-            for &cell in cells {
+            for &cell in c.cells {
                 calculate_average_color(c, &cell, viewing_step)
             }
         }

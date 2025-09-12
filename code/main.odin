@@ -138,8 +138,6 @@ main :: proc () {
         defer for _, leak in track.allocation_map {
             print("% leaked %\n", leak.location, view_memory_size(leak.size))
         }
-        
-        cells.allocator = context.allocator
     }
     
     rl.SetTraceLogLevel(.WARNING)
@@ -181,15 +179,7 @@ main :: proc () {
     collapse.search_metric = .Entropy
     
     generates: [dynamic] Generate_Kind
-    append(&generates, Generate_Grid {
-        center    = {.5, .5},
-        radius = .5,
-    })
-    // append(&generates, Generate_Grid {
-    //     center    = {.5, .5},
-    //     radius = .2,
-    // })
-    
+        
     when false {
         append(&generates, Generate_Grid {
             center    = {.25, .25},
@@ -209,6 +199,11 @@ main :: proc () {
             center    = {.75, .75},
             radius = .24,
         })
+} else {
+        append(&generates, Generate_Grid {
+            center    = {.5, .5},
+            radius = .51,
+        })
     }
     active_generate_index = 0
     
@@ -226,8 +221,8 @@ main :: proc () {
         
         delete(step_depth)
         
-        for cell in cells do delete_cell(cell)
-        delete(cells)
+        for cell in collapse.cells do delete_cell(cell)
+        delete(collapse.cells)
     }
     
     this_frame: Frame
@@ -263,7 +258,7 @@ main :: proc () {
             rl.DrawRectangleRec(world_to_screen(background), color)
         }
         
-        for cell in cells {
+        for cell in collapse.cells {
             color: v4
             
             if show_average_colors || .collapsed in cell.flags {
@@ -273,7 +268,7 @@ main :: proc () {
         }
         
         if show_voronoi_cells {
-            for cell, index in cells {
+            for cell, index in collapse.cells {
                 color_wheel := color_wheel
                 color := v4_to_rl_color(color_wheel[(index) % len(color_wheel)])
                 rl.DrawCircleV(world_to_screen(cell.p), 1, color)
@@ -284,7 +279,7 @@ main :: proc () {
         if show_neighbours {
             color := v4_to_rl_color(Emerald) 
             
-            for cell in cells {
+            for cell in collapse.cells {
                 center := world_to_screen(cell.p)
                 rl.DrawCircleV(center, 3, color)
                 for neighbour in cell.neighbours {
@@ -386,7 +381,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 
                 clear(&step_depth)
             } else {
-                for &cell in cells {
+                for &cell in c.cells {
                     for &state in cell.states {
                         if state.removed_at != Invalid_Collapse_Step && state.removed_at >= current.step {
                             state.removed_at = Invalid_Collapse_Step
@@ -449,15 +444,15 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
 }
 
 setup_cells :: proc (c: ^Collapse) {
-    for &cell in cells {
+    for &cell in c.cells {
         if len(cell.states) != len(c.states) {
             delete(cell.states)
             make(&cell.states, len(c.states))
         }
-        
+    
         cell.flags += { .dirty }
         cell.flags -= { .collapsed }
-        
+
         for &state in cell.states {
             state.removed_at = Invalid_Collapse_Step
         }
@@ -476,8 +471,8 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, generates: ^[dynamic] 
         cell_size_on_screen = ratio.y 
     }
     
-    for cell in cells do delete_cell(cell)
-    clear(&cells)
+    for cell in c.cells do delete_cell(cell)
+    clear(&c.cells)
     
     area := dimension.x * dimension.y
     points := make([dynamic] v2d, 0, area, context.temp_allocator)
@@ -501,16 +496,16 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, generates: ^[dynamic] 
             cell.points[index] = p
         }
         
-        append(&cells, cell)
+        append(&c.cells, cell)
     }
     
-    for &cell, cell_index in cells {
+    for &cell, cell_index in c.cells {
         voronoi := voronoi_cells[cell_index]
         make(&cell.neighbours, len(voronoi.neighbour_indices))
         
         for neighbour_index, index in voronoi.neighbour_indices {
             neighbour := &cell.neighbours[index]
-            neighbour.cell = &cells[neighbour_index]
+            neighbour.cell = &c.cells[neighbour_index]
             neighbour.closeness = get_closeness(cell.p - neighbour.cell.p)
         }
     }

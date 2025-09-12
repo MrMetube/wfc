@@ -61,6 +61,11 @@ spall_scope :: proc (name: string, location := #caller_location) {
     spall_begin(name, location)
 }
 
+spall_hit :: proc (name: string, location := #caller_location) {
+    spall_begin(name)
+    spall_end()
+}
+
 spall_begin :: proc (name: string, location := #caller_location) {
 	spall._buffer_begin(&spall_ctx, &spall_buffer, name, "", location)
 }
