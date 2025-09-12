@@ -22,7 +22,7 @@ Collapse :: struct {
 }
 
 State_Id      :: distinct u32
-Collapse_Step :: distinct i32
+Collapse_Step :: distinct i16
 
 Invalid_State         :: max(State_Id)
 Invalid_Collapse_Step :: max(Collapse_Step)
@@ -81,7 +81,7 @@ Cell :: struct {
     points: [] v2, // for rendering the voronoi cell
 }
 
-Cell_Flags :: bit_set[enum { collapsed, dirty }; u8]
+Cell_Flags :: bit_set[enum { collapsed, dirty, edge }; u8]
 
 Direction_Mask :: bit_set[Direction; u8]
 
@@ -90,7 +90,7 @@ Neighbour :: struct {
     closeness: Direction_Mask,
 }
 
-State_Entry :: struct {
+State_Entry :: struct #align(64) {
     removed_at: Collapse_Step,
 }
 
@@ -262,14 +262,11 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
             current.changes_cursor += 1
         }
         
-        if change == nil && current.changes_cursor == len(current.changes) {
-            result.kind = .Rewind
-            clear(&current.changes)
-            current.changes_cursor = 0
-        } else {
+        if change != nil {
             propagate_remove: for neighbour in change.neighbours {
                 cell := neighbour.cell
                 if .collapsed in cell.flags do continue
+                if .edge in cell.flags do continue
                 
                 closeness := neighbour.closeness
                 states_count := 0
@@ -277,12 +274,14 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
                 
                 spall_begin("recalc states")
                 recalc_states: for &from, from_id in cell.states do if from.removed_at > current.step {
-                    for to, to_id in change.states do if to.removed_at > current.step {
-                        support := c.supports[from_id * len(c.states) + to_id]
-                        masked := support & closeness
-                        if masked != {} {
-                            states_count += 1
-                            continue recalc_states
+                    for to, to_id in change.states {
+                        if to.removed_at > current.step {
+                            support := c.supports[from_id * len(c.states) + to_id]
+                            masked := support & closeness
+                            if masked != {} {
+                                states_count += 1
+                                continue recalc_states
+                            }
                         }
                     }
                     
@@ -316,12 +315,12 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
                     }
                 }
             }
-        }
-        
-        if current.changes_cursor == len(current.changes) {
-            if result.kind != .Rewind {
+            
+            if current.changes_cursor == len(current.changes) {
                 result.kind = .Next
             }
+        } else {
+            result.kind = .Rewind
         }
     }
     
