@@ -100,6 +100,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
                 if imgui.radio_button("Square", is_grid) {
                     generate ^= Generate_Grid {
                         radius = 0.5,
+                        center = 0.5,
                     }
                 }
                 if is_grid {
@@ -114,7 +115,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
                 
                 circle, is_circle := &generate.(Generate_Circle)
                 if imgui.radio_button("Circular", is_circle) {
-                    generate ^= Generate_Circle { radius = .25 }
+                    generate ^= Generate_Circle { radius = .5 }
                 }
                 if is_circle {
                     imgui.indent();                    defer imgui.unindent()
@@ -146,8 +147,14 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         
         imgui.text("Cells")
         imgui.checkbox("Show Average Colors", &show_average_colors)
-        imgui.checkbox("Show Neighbours", &show_neighbours)
         imgui.checkbox("Show Voronoi Cells", &show_voronoi_cells)
+        imgui.text("Show Neighbours")
+        shows := [Show_Neighbour] string {
+            .None = "off", .Neighbour_Count = "neighbour count", .Direction_Fit = "direction fit",
+        }
+        for text, mode in shows {
+            if imgui.radio_button(text, show_neighbours == mode) do show_neighbours = mode
+        }
     imgui.end()
     
     imgui.begin("Extraction")
@@ -203,7 +210,6 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         }
         imgui.pop_item_width()
         
-        // // @todo(viktor): its a boolean value, so no f32s
         @(static) angle: f32
         imgui.slider_float("Angle", &angle, 0, 360)
         radians := angle == 0 ? 0 : angle * RadiansPerDegree

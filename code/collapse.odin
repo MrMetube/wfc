@@ -112,10 +112,11 @@ collapse_reset :: proc (c: ^Collapse) {
 ////////////////////////////////////////////////
 
 get_closeness :: proc (sampling_direction: v2) -> (result: Direction_Mask) {
-    spall_proc()
-    
     threshold := cos((cast(f32) strictness) / 16 * Tau)
-    
+    result = get_closeness_with_threshold(sampling_direction, threshold)
+    return result
+}
+get_closeness_with_threshold :: proc (sampling_direction: v2, threshold: f32) -> (result: Direction_Mask) {
     for other in Direction {
         sampling_normal := normalize(sampling_direction)
         other_normal    := normalized_direction(other)

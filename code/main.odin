@@ -7,9 +7,8 @@ import "core:time"
 
 import rl "vendor:raylib"
 
-/* 
+/* @todo(viktor):
  - Remove all outdated and unused ideas
-   - Support and Closeness are just boolean after all
  - Get some nice screenshots or process and results
  - simplify code and make an overview of the important parts
  - debug visualization to show graph as nodes and not voronoi but also with colors
@@ -33,11 +32,12 @@ wait_until_this_state: Maybe(Step_State)
 cell_size_on_screen: v2
 
 show_average_colors := true
-show_neighbours     := false
 show_voronoi_cells  := false
 show_step_details   := false
+show_neighbours: Show_Neighbour = .Neighbour_Count
+Show_Neighbour :: enum { None, Neighbour_Count, Direction_Fit }
 
-cells_background_color := Orange
+cells_background_color := V4_xyz_w(cast(v3) 0.4, 1)
 
 // @todo(viktor): visual dimension vs. point count for generates
 dimension: v2i = {66, 66}
@@ -277,17 +277,60 @@ main :: proc () {
             }
         }
         
-        if show_neighbours {
-            color := v4_to_rl_color(Emerald) 
-            
+        if show_neighbours != .None {
+            // @todo(viktor): Find a way to determine if a lattice is "solveable" or if it has cells that will need "areal" rules, rules that allow same states in all or most directions
             for cell in collapse.cells {
+                color := Emerald
+                count_color: v4
+                switch len(cell.neighbours) {
+                  case 0..<4: count_color = Emerald // under constraint
+                  case 4..<8: count_color = Orange  // medium
+                  case:       count_color = Red     // over constraint
+                }
+                if show_neighbours == .Neighbour_Count {
+                    color = count_color
+                    if color == Red {
+                        draw_cell_outline(cell, v4_to_rl_color(color))
+                    }
+                    color = 0
+                }
+                
                 center := world_to_screen(cell.p)
-                rl.DrawCircleV(center, 3, color)
                 for neighbour in cell.neighbours {
-                    color := Emerald
-                    color.a *= 0.5
                     end := world_to_screen(neighbour.cell.p)
-                    rl.DrawLineEx(center, end, 1, v4_to_rl_color(color))
+                    if show_neighbours == .Direction_Fit {
+                        fits_perfect := false
+                        fits_ok := false
+                        sampling_normal := normalize(neighbour.cell.p - cell.p)
+                        threshold_perfect := cos(cast(f32) 1./64. * Tau)  
+                        threshold_ok      := cos(cast(f32) 1./32. * Tau) 
+                        threshold_3       := cos(cast(f32) 1./16. * Tau) 
+                        // 1/64 ~ 5.625°
+                        // 1/32 ~ 11.25° 
+                        // 1/16 ~ 22.5° 
+                        for direction in Direction {
+                            normal := normalized_direction(direction)
+                            closeness := dot(sampling_normal, normal)
+                            if closeness >= threshold_perfect {
+                                fits_perfect = true
+                                break
+                            }
+                            if closeness >= threshold_ok {
+                                fits_ok = true
+                                break
+                            }
+                        }
+                        if count_color == Red {
+                            color = Red
+                            if fits_ok do color = Orange
+                            if fits_perfect do color = Emerald
+                            draw_cell_outline(cell, v4_to_rl_color(color))
+                            color = 0
+                        } else {
+                            color = 0
+                        }
+                    }
+                    rl.DrawLineEx(center, end, 2, v4_to_rl_color(color))
                 }
             }
         }
