@@ -9,7 +9,7 @@ import "core:time"
 ////////////////////////////////////////////////
 
 @(init)
-default_views :: proc() {
+default_views :: proc "contextless" () {
     Default_Views[time.Duration] = proc (raw: pmm) -> (result: View_Proc_Result) {
         value := (cast(^time.Duration) raw)^
         result = view_time_duration(value)

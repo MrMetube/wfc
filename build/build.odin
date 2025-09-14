@@ -1,3 +1,4 @@
+
 package build
 
 import "base:intrinsics"
@@ -9,7 +10,7 @@ import "core:time"
 import win "core:sys/windows"
 
 optimizations := false ? `-o:speed` : `-o:none`
-Pedantic      :: !false
+Pedantic      :: false
 windows       := !true ? `-subsystem:windows` : `-subsystem:console`
 
 debug    :: `-debug`

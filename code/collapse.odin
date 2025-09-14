@@ -86,8 +86,8 @@ Cell_Flags :: bit_set[enum { collapsed, dirty, edge }; u8]
 Direction_Mask :: bit_set[Direction; u8]
 
 Neighbour :: struct {
-    cell:      ^Cell,
-    closeness: Direction_Mask,
+    cell: ^Cell,
+    mask: Direction_Mask,
 }
 
 State_Entry :: struct #align(64) {
@@ -111,12 +111,12 @@ collapse_reset :: proc (c: ^Collapse) {
 
 ////////////////////////////////////////////////
 
-get_closeness :: proc (sampling_direction: v2) -> (result: Direction_Mask) {
+get_direction_mask :: proc (sampling_direction: v2) -> (result: Direction_Mask) {
     threshold := cos((cast(f32) strictness) / 16 * Tau)
-    result = get_closeness_with_threshold(sampling_direction, threshold)
+    result = get_direction_mask_with_threshold(sampling_direction, threshold)
     return result
 }
-get_closeness_with_threshold :: proc (sampling_direction: v2, threshold: f32) -> (result: Direction_Mask) {
+get_direction_mask_with_threshold :: proc (sampling_direction: v2, threshold: f32) -> (result: Direction_Mask) {
     for other in Direction {
         sampling_normal := normalize(sampling_direction)
         other_normal    := normalized_direction(other)
@@ -137,7 +137,7 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
     assert(c.states != nil)
     
     result.kind = .Continue
-    // @note(viktor): this will only be used if kind == .Rewind
+    // @note(viktor): this will only be used if result.kind == .Rewind
     result.rewind_to = current.step - 1
     
     switch current.state {
@@ -188,7 +188,7 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
         assert(current.to_be_collapsed == nil)
         
         if len(current.found) == 0 {
-            result.kind = .Rewind 
+            result.kind = .Rewind
         } else {
             index := random_index(entropy, current.found)
             current.to_be_collapsed = current.found[index]
@@ -269,7 +269,6 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
                 if .collapsed in cell.flags do continue
                 if .edge in cell.flags do continue
                 
-                closeness := neighbour.closeness
                 states_count := 0
                 did_change := false
                 
@@ -278,7 +277,7 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
                     for to, to_id in change.states {
                         if to.removed_at > current.step {
                             support := c.supports[from_id * len(c.states) + to_id]
-                            masked := support & closeness
+                            masked := support & neighbour.mask
                             if masked != {} {
                                 states_count += 1
                                 continue recalc_states

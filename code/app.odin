@@ -213,7 +213,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         @(static) angle: f32
         imgui.slider_float("Angle", &angle, 0, 360)
         radians := angle == 0 ? 0 : angle * RadiansPerDegree
-        closeness := get_closeness(arm(radians))
+        closeness := get_direction_mask(arm(radians))
         
         imgui.get_content_region_avail(&region)
         for direction in Direction {

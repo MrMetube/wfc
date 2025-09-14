@@ -437,7 +437,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 
                 switch current.state {
                   case .Search, .Pick: unreachable() // Can't rewind in this state.
-                  case .Collapse:      current.state = .Pick
+                  case .Collapse:      unreachable() // current.state = .Pick
                   case .Propagate:     current.state = .Collapse
                 }
             }
@@ -494,7 +494,7 @@ setup_cells :: proc (c: ^Collapse) {
         cell.flags -= { .collapsed }
         
         for &neighbour in cell.neighbours {
-            neighbour.closeness = get_closeness(cell.p - neighbour.cell.p)
+            neighbour.mask = get_direction_mask(cell.p - neighbour.cell.p)
         }
         if len(cell.states) != len(c.states) {
             delete(cell.states)
@@ -580,7 +580,7 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, generates: ^[dynamic] 
         for neighbour_index, index in voronoi.neighbour_indices {
             neighbour := &cell.neighbours[index]
             neighbour.cell = &c.cells[neighbour_index]
-            neighbour.closeness = get_closeness(cell.p - neighbour.cell.p)
+            neighbour.mask = get_direction_mask(cell.p - neighbour.cell.p)
         }
     }
     
