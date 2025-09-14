@@ -1,8 +1,29 @@
 \documentclass{article}
 \usepackage[ngerman]{babel}
 
+\newcommand{\todo}[1][]{ \begin{center}  \textbf{TODO} \textit{#1}  \end{center} }
+
 \begin{document}
 % \input{Einleitung} % als Gedächtnisstütze
+
+\section{Dinge die besprochen werden müssen}
+\begin{enumerate}
+\item model synthesis
+\item wfc
+
+\item regelmäßige gitter
+\item unregelmäßige gitter
+  \subitem townscaper grid
+  \subitem allgemeine mit voronoi
+\item nachbarschaft 
+
+\item regelmengen / direction buckets
+\item constraint solving
+\item backtracking
+  \subitem entropy vs state count für effizienz
+\end{enumerate}
+
+\pagebreak
 
 \section{Einleitung}
 \subsection{Motivation}
@@ -18,22 +39,9 @@
 \subsubsection{Paul Merrell - model synthesis}
 \subsubsection{Maxim Gumin - wfc - overlapping und entropy}
 \subsubsection{Oskar Stålberg - 3D - aperiodic infinite deterministic irregular relaxed quadrilateral grids}
-\section{Konzept}
-\subsection{Einschränkung des Algorithmus}
-\subsection{Kernidee - WFC kann auf Graphen aller Art laufen}
-\subsection{Erweiterung des Algorithmus}
+\input{Konzept}
 \pagebreak
-\section{Umsetzung}
-\subsection{Ablauf}
-\subsubsection{State Extraction}
-\subsubsection{Support Lookup Table}
-\subsubsection{Generate and Setup Grid - Voronoi}
-\subsubsection{Collapse Grid}
-\subsection{Datenstrukturen und Algorithmen}
-\subsubsection{Support - Closeness}
-\subsubsection{Cell - Search, Collapse, Propagate}
-\subsubsection{Step - Backtracking}
-\subsection{vielleicht was zur App}
+\input{Umsetzung}
 \section{Ergebnisse}
 \subsection{Bilder}
 \subsection{Base Case - reguläres Gitter}

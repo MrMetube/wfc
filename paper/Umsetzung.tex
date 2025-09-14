@@ -1,0 +1,56 @@
+\section{Umsetzung}
+
+\subsection{Ablauf}
+\subsubsection{State Extraction}
+\begin{itemize}
+    \item NxN sliding window over the input with overlap
+    \item wrap edges for tiling patterns or dont for example top and bottom for "vertical" patterns
+\end{itemize}
+\subsubsection{Support Lookup Table}
+\begin{itemize}
+    \item what is a state 
+    \item what is a direction
+    \item for a in states
+    \item for b in states 
+    \item for d in direction
+    \item if a matches (b shifted in d) 
+    \item support at (a, b, d) = true
+\end{itemize}
+\subsubsection{Generate and Setup Grid - Voronoi}
+\begin{itemize}
+    \item what do we need for a grid
+    \item what do we need for a cell
+    \item when generating a grid
+    \subitem generate a point cloud with or without an intrisic pattern in any way you like
+    \subitem generate a delaunay triangulation out of those points 
+    \subitem find the dual graph, the voronoi graph, of the triangulation
+    \subitem note down all neighbouring cells for each cell
+    \subitem each voronoi cell becomes a cell of the grid for the wfc
+    \item otherwise just manually setup a bunch of cells
+    \subitem a cell needs a list of neighbouring cells
+    \item for each cell initialize its states and member variables
+\end{itemize}
+\subsubsection{Collapse Grid}
+\begin{itemize}
+    \item what are steps?
+    \item the step control flow diagram?
+    \subitem add "loop until the grid is fully collapsed"
+\end{itemize}
+
+\subsection{Datenstrukturen und Algorithmen}
+\subsubsection{Support - Direction Mask / State Buckets?}
+\begin{itemize}
+    \item the lookup table per state a, state b, direction d
+    \item how we measure the closeness and how does strictness effect things
+\end{itemize}
+\subsubsection{Cell - Search, Collapse, Propagate}
+
+\subsubsection{Step - Backtracking}
+\begin{itemize}
+    \item Goal, dont restart when reaching a contradiction, most of the time most of the cells are fine, only a small number of cells cause a contradiction
+    \item Key Observation: for each cell the set of possible states only ever shrinks, as more and more constraints are placed on it. So we dont need to remove entry from the list, we can just store at which step in time each state became impossible and whenever we check all remaining states we ignore states that where "removed" before the current step happened
+    \item Implementation: for each state in a cell store a sentinel value as the step index of removal. in the context store the current step index. after each step increment the step index and for each state removed in a step store the current steps index. when we rewind decrement the current step index by the desired amount and then go through all cells and all states and if the noted step index is in the future of the now current step index remove this mark.
+    \item Also what is stored in a step
+\end{itemize}
+
+\subsection{vielleicht was zur App}

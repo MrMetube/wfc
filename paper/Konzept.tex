@@ -1,0 +1,24 @@
+\section{Konzept}
+
+\subsection{Einschränkung des Algorithmus}
+\begin{itemize}
+\item bisher nur auf regelmäßigen gittern
+\item was ist mit Townscaper? lies das Paper zum Gitter!
+\end{itemize}
+
+\subsection{Kernidee: WFC kann auf Graphen aller Art laufen}
+\begin{itemize}
+\item wfc prüft regeln nur lokal und propagiert die entscheidungen auch nur immer an die nächsten nachbar zellen
+\item somit ist die topologie des zellennetz in der propagierung egal
+\item nur beim prüfen der zellen muss auf die nun auf die frei variierende richtung zum nachbar geachtet werden
+\item vorher war klar welcher nachbar in nswo liegt, da regelmäßiges gitter, daraus war klar welche regeln zum prüfen relevant waren
+\item nun muss die menge an relevanten regeln je nach zellen paar / nachbarschaft ermessen werden
+\end{itemize}
+
+\subsection{Erweiterung des Algorithmus}
+\begin{itemize}
+\item extraktion nun mit diagonalen regeln
+\item warum? besseres sampling des inputs also der 2d funktion die die eingabe darstellt
+
+\item beim prüfen wird nun möglicherweise mehr als eine Regelmenge betrachtet
+\end{itemize}
