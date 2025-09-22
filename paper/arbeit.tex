@@ -1,10 +1,7 @@
 \documentclass{article}
 \usepackage[ngerman]{babel}
 
-\newcommand{\todo}[1][]{ \begin{center}  \textbf{TODO} \textit{#1}  \end{center} }
-
 \begin{document}
-% \input{Einleitung} % als Gedächtnisstütze
 
 \section{Dinge die besprochen werden müssen}
 \begin{enumerate}
@@ -24,37 +21,59 @@
 \end{enumerate}
 
 \pagebreak
+\tableofcontents
+\pagebreak
+
+
 
 \section{Einleitung}
-\subsection{Motivation}
-\subsection{Problemstellung und Ziel}
-\subsection{Problemlösung}
-\subsection{Aufbau der Arbeit}
-\section{Hintergrund - Wave Function Collapse}
-\subsection{Begriffe}
-\subsubsection{Wave Function Collapse}
-\subsubsection{Delaunay Triangulation - Voronoi Diagramme}
-\subsubsection{Constraint Solving}
-\subsection{Stand der Technik}
-\subsubsection{Paul Merrell - model synthesis}
-\subsubsection{Maxim Gumin - wfc - overlapping und entropy}
-\subsubsection{Oskar Stålberg - 3D - aperiodic infinite deterministic irregular relaxed quadrilateral grids}
+% \subsection{Motivation}
+% \subsection{Problemstellung und Ziel}
+% \subsection{Problemlösung}
+% \subsection{Aufbau der Arbeit}
+
+\input{Hintergrund}
+
 \input{Konzept}
-\pagebreak
+
 \input{Umsetzung}
+
 \section{Ergebnisse}
+
+
+
 \subsection{Bilder}
 \subsection{Base Case - reguläres Gitter}
 \subsection{Lokale Ähnlichkeit}
 \subsection{Lösbarkeit von Gittern und Striktheit}
 \subsection{Laufzeit und Speicher}
+
+
 \section{Fazit}
+
+
+
 \subsection{Vergleich zum Original}
+
+
+
 \subsection{Anwendungsbereiche}
+
+
+
 \subsection{Ausblick und zukünftige Forschung}
+
 \subsubsection{Auf 3D anwenden}
 \subsubsection{Kompatiblität mit anderen Graph-Arten}
+
+
+
 \section{Literaturverzeichnis}
+
+
+
 \section{Selbstständigkeitserklärung}
+
+
 
 \end{document}

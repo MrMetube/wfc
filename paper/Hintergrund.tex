@@ -1,0 +1,63 @@
+\section{Hintergrund}
+
+\subsection{Stand der Technik - Geschichte - Hintergrund}
+
+\subsubsection{Paul Merrell - model synthesis}
+\begin{itemize}
+    \item Original Idea based on texture synthesis
+    \item Rough overview of the methodology
+    \item Key advantages over previous methods
+\end{itemize}
+
+\subsubsection{Maxim Gumin}
+\begin{itemize}
+    \item WFC - Renaming and popularization
+    \item Overlapping tiles in extraction and for support checking
+    \item search for lowest entropy (find explaination for added noise in code)
+\end{itemize}
+
+\subsubsection{Oskar Stålberg}
+\begin{itemize}
+    \item successful application for 3D use case
+    \item aperiodic infinite deterministic irregular relaxed quadrilateral grids
+    \item but still mostly regular grids of quads and not fully irregular
+\end{itemize}
+
+
+
+\subsection{Begriffe}
+
+@todo(viktor): Hier Visualisierungen für
+\begin{itemize}
+\item regelmäßig vs unregelmäßiges Gitter
+\item Delaunay Triangulierung
+\item Voronoi Diagramme
+\end{itemize}
+
+\subsubsection{Wave Function Collapse}
+\begin{itemize}
+\item wfc arbeitet ursprünglich mit quadratgittern hierbei sind die position jeder zelle und dessen nachbar zellen durch das gitter definiert und können zB. mittels 2D Indizes identifiziert werden. Die Nachbar sind dann über je einen schritt in eine der 4 Richtungen im Gitter, siehe 2 Achsen je positiv oder negativ, erreicht werden
+\item allgemeiner kann jeder zelle eine 2D Koordinate zugewiesen werden und nun sind die nachbar stets durch je einen der zwei Basisvektoren des Koordinatensystems zu erreichen, auch hier positiv oder negativ
+\item Nun auf unregelmäßigen gittern sind zellen frei in der Ebene des 2D Koordinatensystems angeordnet. Nun muss die Menge der Nachbarn für jede Zelle berechnet werden
+\item Wie im regelmäßigen gitter wollen wir, dass wenn zwei Zellen benachbart sind, dass sie eine Kante Teilen, also tatsächlich eine Verbindung besteht. für unregelmäßige gitter können wir ein Voronoi Diagramm erstellen, wodurch die Ebene in Regionen aufgeteilt wird die je alle Punkte umfässt die einer unserer Zelle am nächsten sind. 
+\item Um dieses Voronoi diagramm zu erstellen gibt es mehrere Wege. Einer ist, eine Delaunay Triangulierung zu generieren, da dies die Inverse des Voronoi Diagramm darstellt. Die Zellen im Voronoi Diagramm entsprechen den Ecken in der Delaunay Triangulierung und die Kanten den Seitenhalbierenden der Kanten zwischen den Ecken. Aus der Delaunay Triangulierung lassen sich auch die Nachbarn einer Zelle direkt auslesen, da es einfach alle Punkte sind die mit dem Mittelpunkte der Zelle eine Kante teilen.
+\end{itemize}
+
+\subsubsection{Delaunay Triangulation - Bowyer-Watson Algorithmus}
+\begin{itemize}
+    \item Defintion der Triangulierung
+    \item Algorithmus kurz erklären
+    \item Umwandlung zu Voronoi Diagramm
+    \item Voronoi wie - vertices -> cell centers, edges -> perpendicular bisector as vertex, edges between in (clockwise) order
+\end{itemize}
+
+\subsubsection{Voronoi Diagramm}
+\begin{itemize}
+    \item Defintion
+    \item nützliche Eigenschaften
+    \item unendliche Randzellen begrenzen
+\end{itemize}
+
+\subsubsection{Constraint Solving}
+??? Will ich das wirklich mit einbringen ???
+
