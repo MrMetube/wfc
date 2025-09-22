@@ -41,6 +41,8 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         
         if imgui.button("Restart") do restart(this_frame)
         
+        imgui.slider_float("t", &voronoi_shape_t, 0, 1)
+        
         imgui.text("Steps")
         imgui.get_content_region_avail(&region)
         imgui.push_item_width(region.x*2/3)

@@ -689,16 +689,31 @@ generate_points :: proc(points: ^[dynamic] v2d, count: i32, kind: Generate_Kind)
     }
 }
 
+voronoi_shape_t: f32 = .5
+
 draw_cell :: proc (cell: Cell, color: v4) {
     if len(cell.points) == 0 do return
     
     @(static) buffer: [dynamic] v2 // @leak
     clear(&buffer)
     
+    min_radius := +Infinity
+    for point in cell.points {
+        radius := length(point - cell.p)
+        if radius < min_radius {
+            min_radius = radius
+        }
+    }
+    min_radius *= 0.5
+    
     append(&buffer, world_to_screen(cell.p))
     
     for point in cell.points {
-        append(&buffer, world_to_screen(point))
+        p := point
+        
+        p_min := cell.p + normalize(p - cell.p) * min_radius
+        p = linear_blend(p_min, p, voronoi_shape_t)
+        append(&buffer, world_to_screen(p))
     }
     append(&buffer, buffer[1])
     
