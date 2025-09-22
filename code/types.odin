@@ -61,22 +61,13 @@ append_string :: proc(a: ^String_Builder, value: string) -> (result: string) {
     return cast(string) a[:]
 }
 
-make_string_builder :: proc { make_string_builder_buffer, make_string_builder_arena }
+make_string_builder :: proc { make_string_builder_buffer }
 make_string_builder_buffer :: proc(buffer: []u8) -> (result: String_Builder) {
     raw: Raw_Dynamic_Array
     raw.data = raw_data(buffer)
     raw.cap  = len(buffer)
     
     result = transmute(String_Builder) raw
-    return result
-}
-make_string_builder_arena :: proc(arena: ^Arena, #any_int len: i32, params := DefaultPushParams) -> (result: String_Builder) {
-    buffer := push_slice(arena, u8, len, params)
-    result = make_string_builder_buffer(buffer)
-    return result
-}
-make_array :: proc(arena: ^Arena, $T: typeid, #any_int len: i32, params := DefaultPushParams) -> (result: Array(T)) {
-    result.data = push_slice(arena, T, len, params)
     return result
 }
 
@@ -132,49 +123,6 @@ unordered_remove :: proc { builtin.unordered_remove, unordered_remove_array }
 unordered_remove_array :: proc(a: ^Array($T), #any_int index: i64) {
     a.data[index] = a.data[a.count-1]
     a.count -= 1
-}
-
-////////////////////////////////////////////////
-// [First] <- [..] ... <- [..] <- [Last] 
-Deque :: struct($L: typeid) {
-    first, last: ^L,
-}
-
-deque_prepend :: proc(deque: ^Deque($L), element: ^L) {
-    if deque.first == nil {
-        assert(deque.last == nil)
-        deque.last  = element
-        deque.first = element
-    }  else {
-        element.next = deque.last
-        deque.last   = element
-    }
-}
-
-deque_append :: proc(deque: ^Deque($L), element: ^L) {
-    if deque.first == nil {
-        assert(deque.last == nil)
-        deque.last  = element
-        deque.first = element
-    }  else {
-        deque.first.next = element
-        deque.first      = element
-    }
-}
-
-deque_remove_from_end :: proc(deque: ^Deque($L)) -> (result: ^L) {
-    result = deque.last
-    
-    if result != nil {
-        deque.last = result.next
-
-        if result == deque.first {
-            assert(result.next == nil)
-            deque.first = nil
-        }
-    }
-    
-    return result
 }
 
 ////////////////////////////////////////////////

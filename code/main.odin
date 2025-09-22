@@ -305,6 +305,7 @@ main :: proc () {
                         threshold_perfect := cos(cast(f32) 1./64. * Tau)  
                         threshold_ok      := cos(cast(f32) 1./32. * Tau) 
                         threshold_3       := cos(cast(f32) 1./16. * Tau) 
+                        _ = threshold_3
                         // 1/64 ~ 5.625°
                         // 1/32 ~ 11.25° 
                         // 1/16 ~ 22.5° 

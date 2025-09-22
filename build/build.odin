@@ -11,7 +11,6 @@ import win "core:sys/windows"
 
 optimizations := false ? `-o:speed` : `-o:none`
 Pedantic      :: false
-windows       := !true ? `-subsystem:windows` : `-subsystem:console`
 
 debug    :: `-debug`
 check    :: `-custom-attribute:printlike`
@@ -100,7 +99,6 @@ main :: proc() {
             append(&cmd, flags_for_imgui)
             append(&cmd, check)
             append(&cmd, lib)
-            append(&cmd, windows)
             append(&cmd, optimizations)
             when Pedantic do append(&cmd, ..pedantic)
             

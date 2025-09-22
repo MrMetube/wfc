@@ -13,7 +13,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         imgui.text(tprint("Total time %",  view_time_duration(total_duration, precision = 3)))
         
         tile_count := len(c.states)
-        imgui.text_colored(tile_count > 200 ? Red : White, tprint("Tile count %", tile_count))
+        imgui.text(tprint("Tile count %", tile_count))
         
         if len(step_depth) == 0 || (cast(f32) current.step != peek(step_depth)^) {
             append(&step_depth, cast(f32) current.step)
