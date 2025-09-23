@@ -16,7 +16,7 @@
     \item visuelle darstellung der überlappung
     \item Rules are always symmetric but this fact was not used. so the half the support table is not needed technically
 \end{itemize}
-\section{Generate and Setup Grid - Voronoi}
+\section{Generate and Setup Grid}
 \begin{itemize}
     \item what do we need for a grid
     \item what do we need for a cell
@@ -52,12 +52,15 @@
 \end{itemize}
 \section{Cell - Search, Collapse, Propagate}
 
-\section{Step - Backtracking}
+\section{Backtracking}
 \begin{itemize}
     \item Goal, dont restart when reaching a contradiction, most of the time most of the cells are fine, only a small number of cells cause a contradiction
-    \item Key Observation: for each cell the set of possible states only ever shrinks, as more and more constraints are placed on it. So we dont need to remove entry from the list, we can just store at which step in time each state became impossible and whenever we check all remaining states we ignore states that where "removed" before the current step happened
-    \item Implementation: for each state in a cell store a sentinel value as the step index of removal. in the context store the current step index. after each step increment the step index and for each state removed in a step store the current steps index. when we rewind decrement the current step index by the desired amount and then go through all cells and all states and if the noted step index is in the future of the now current step index remove this mark.
-    \item Also what is stored in a step
+    \item Key Observation: for each cell the set of possible states only ever shrinks, as more and more constraints are placed on it. We never need to add back a state.
+    \item For each state there is only ever one point in time when it is removed. all we need to know to advance is know which steps are removed right now.
+    \item the naiive implementation creates a set of states and removes each state when it becomes impossible
+    \item but We dont need to remove entries from this set, we can just store at which step in time each state became impossible and whenever we check all remaining states we ignore states that where "removed" before the current step happened
+    \item Implementation: for each state in a cell store a sentinel value as the step index of removal. in the context store the current step index. after each step, increment the step index. then when propagating changes whenever a state is removed, store the current steps index as its removal timestamp. 
+    \item Now we can rewind by only changing the context current step by some desired amount. the condition that checks if a state is removed now ensures that rewound removals can be detected and ignored.
 \end{itemize}
 
 \section{vielleicht was zur App}
