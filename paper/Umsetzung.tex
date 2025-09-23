@@ -1,12 +1,10 @@
-\section{Umsetzung}
-
-\subsection{Ablauf}
-\subsubsection{State Extraction}
+\section{State Extraction}
 \begin{itemize}
     \item NxN sliding window over the input with overlap
+    \item Deduplication and weighting by frequency in input
     \item wrap edges for tiling patterns or dont for example top and bottom for "vertical" patterns
 \end{itemize}
-\subsubsection{Support Lookup Table}
+\section{Support Lookup Table}
 \begin{itemize}
     \item what is a state 
     \item what is a direction
@@ -16,8 +14,9 @@
     \item if a matches (b shifted in d) 
     \item support at (a, b, d) = true
     \item visuelle darstellung der überlappung
+    \item Rules are always symmetric but this fact was not used. so the half the support table is not needed technically
 \end{itemize}
-\subsubsection{Generate and Setup Grid - Voronoi}
+\section{Generate and Setup Grid - Voronoi}
 \begin{itemize}
     \item what do we need for a grid
     \item what do we need for a cell
@@ -31,22 +30,29 @@
     \subitem a cell needs a list of neighbouring cells
     \item for each cell initialize its states and member variables
 \end{itemize}
-\subsubsection{Collapse Grid}
+\section{Collapse Grid}
 \begin{itemize}
     \item what are steps?
     \item the step control flow diagram?
     \subitem add "loop until the grid is fully collapsed"
 \end{itemize}
 
-\subsection{Datenstrukturen und Algorithmen}
-\subsubsection{Support - Direction Mask / State Buckets?}
+\section{Datenstrukturen und Algorithmen}
+\section{Support - Direction Mask / State Buckets?}
 \begin{itemize}
     \item the lookup table per state a, state b, direction d
-    \item how we measure the closeness and how does strictness effect things
+    \item Da nachbarn nun in beliebigen Richtungen zu finden sind, gibt es kein direktes mapping zu den Supportregeln, welche ja je eine Menge pro Richtung sind.
+    \item Dabei können wir entscheiden ob jeweils nur eine Menge oder mehrere Mengen betrachtet werden
+    \item Ob eine Menge erlaubt ist, messen wir indem wir berechnen wir nahe die tatsächliche Richtung zu den Mengenrichtungen ist. Nun wählen wir die x-nähesten Mengen aus. Bei einer Strenge von 1 also die beste, bei 2 die zwei besten und so weiter.
+    \item Die Strenge kann maximal 8 betrangen, da wir nur 8 "Himmelsrichtungen`` in der Extraktion genutzt haben. 
+    \item Insgesamt bedeutet dies, dass ein Nachbar als z.B. im Norden oder im Nordosten betrachtet werden kann. Dadurch ist die menge an kompatiblen zuständen weniger eingeschränkt und es ist weniger wahrscheinlich, dass alle Zustände einer Zelle unmöglich werden
+    \item Es folgt aber auch, dass nun Nachbar mit fast oder gar perfekter \\ übereinstimmung mit einer der Himmelsrichtung als nicht nur diese gelten, wodurch es zu einer Verzerrung im Output kommt.
+    \item Wenn zuvor ein Muster im Input z.B. stehts N-S ausgerichtet war kann es ab einer Strenge vom 3 auch als (NW, N, NO)-(SW, S, SO) betrachtet werden. es könnte also auch als NW-SW betrachtet werden und aus einem Geradlinigen muster wird ein geknicktes oder zackiges.
+    \item Aber genau diese auflockerung ist nötig, damit der Algorithmus mit \\ höherer Wahrscheinlichkeit eine Lösung findet
 \end{itemize}
-\subsubsection{Cell - Search, Collapse, Propagate}
+\section{Cell - Search, Collapse, Propagate}
 
-\subsubsection{Step - Backtracking}
+\section{Step - Backtracking}
 \begin{itemize}
     \item Goal, dont restart when reaching a contradiction, most of the time most of the cells are fine, only a small number of cells cause a contradiction
     \item Key Observation: for each cell the set of possible states only ever shrinks, as more and more constraints are placed on it. So we dont need to remove entry from the list, we can just store at which step in time each state became impossible and whenever we check all remaining states we ignore states that where "removed" before the current step happened
@@ -54,4 +60,4 @@
     \item Also what is stored in a step
 \end{itemize}
 
-\subsection{vielleicht was zur App}
+\section{vielleicht was zur App}
