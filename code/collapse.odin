@@ -22,7 +22,7 @@ Collapse :: struct {
 }
 
 State_Id      :: distinct u32
-Collapse_Step :: distinct i16
+Collapse_Step :: distinct i32
 
 Invalid_State         :: max(State_Id)
 Invalid_Collapse_Step :: max(Collapse_Step)

@@ -24,6 +24,8 @@ TargetFrameTime :: 1./TargetFps
 ////////////////////////////////////////////////
 // App
 
+voronoi_shape_t: f32 = 1
+
 total_duration: time.Duration
 
 paused: b32
@@ -34,13 +36,13 @@ cell_size_on_screen: v2
 show_average_colors := true
 show_voronoi_cells  := false
 show_step_details   := false
-show_neighbours: Show_Neighbour = .Neighbour_Count
-Show_Neighbour :: enum { None, Neighbour_Count, Direction_Fit }
-
-cells_background_color := V4_xyz_w(cast(v3) 0.4, 1)
+show_neighbours: Show_Neighbour = .None // .Neighbour_Count
+Show_Neighbour :: enum { None, Neighbour_Count, Direction_Fit, Picked }
 
 // @todo(viktor): visual dimension vs. point count for generates
 dimension: v2i = {66, 66}
+
+cells_background_color := V4_xyz_w(cast(v3) 0.4, 1)
 
 File :: struct {
     data:    [] u8,
@@ -53,7 +55,7 @@ viewing_step: Collapse_Step
 
 ////////////////////////////////////////////////
 
-strictness: i32 = 3
+strictness: i32 = 1
 
 Direction :: enum {
     E, NE, N, NW, W, SW, S, SE,
@@ -277,8 +279,34 @@ main :: proc () {
             }
         }
         
-        if show_neighbours != .None {
-            // @todo(viktor): Find a way to determine if a lattice is "solveable" or if it has cells that will need "areal" rules, rules that allow same states in all or most directions
+        // @todo(viktor): Find a way to determine if a lattice is "solveable" or if it has cells that will need "areal" rules, rules that allow same states in all or most directions
+        if show_neighbours == .Picked {
+            for &cell in collapse.cells {
+                if .collapsed not_in cell.flags || .edge in cell.flags do continue
+                
+                get_state :: proc (cell: ^Cell, at: Collapse_Step) -> (result: State_Id) {
+                    count: int
+                    for state, index in cell.states {
+                        if state.removed_at > at {
+                            result = auto_cast index
+                            count += 1
+                        }
+                    }
+                    assert(count == 1)
+                    return result
+                }
+                
+                cell_state := get_state(&cell, current.step)
+                for neighbour in cell.neighbours {
+                    if .collapsed not_in neighbour.cell.flags || .edge in neighbour.cell.flags do continue
+                    neighbour_state := get_state(neighbour.cell, current.step)
+                    
+                    entry := collapse.supports[neighbour_state * auto_cast len(collapse.states) + cell_state]
+                    
+                    assert(entry & neighbour.mask != {})
+                }
+            }
+        } else if show_neighbours != .None {
             for cell in collapse.cells {
                 color := Emerald
                 count_color: v4
@@ -688,8 +716,6 @@ generate_points :: proc(points: ^[dynamic] v2d, count: i32, kind: Generate_Kind)
         }
     }
 }
-
-voronoi_shape_t: f32 = .5
 
 draw_cell :: proc (cell: Cell, color: v4) {
     if len(cell.points) == 0 do return

@@ -152,7 +152,10 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         imgui.checkbox("Show Voronoi Cells", &show_voronoi_cells)
         imgui.text("Show Neighbours")
         shows := [Show_Neighbour] string {
-            .None = "off", .Neighbour_Count = "neighbour count", .Direction_Fit = "direction fit",
+            .None = "off", 
+            .Neighbour_Count = "neighbour count", 
+            .Direction_Fit = "direction fit",
+            .Picked = "final pick",
         }
         for text, mode in shows {
             if imgui.radio_button(text, show_neighbours == mode) do show_neighbours = mode
