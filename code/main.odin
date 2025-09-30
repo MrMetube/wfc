@@ -11,8 +11,6 @@ import rl "vendor:raylib"
  - Remove all outdated and unused ideas
  - Get some nice screenshots or process and results
  - simplify code and make an overview of the important parts
- - debug visualization to show graph as nodes and not voronoi but also with colors
-   - and maybe interpolate between both?
  */
  
 Screen_Size  :: v2i{1920, 1080}
@@ -73,16 +71,9 @@ Deltas := [Direction] v2i {
 }
 
 normalized_direction :: proc (direction: Direction) -> (result: v2) {
-    @(static) normals: [Direction] v2
-    @(static) initialized: bool
-    if !initialized {
-        initialized = true
-        for d in Direction {
-            normals[d] = normalize(vec_cast(f32, Deltas[d]))
-        }
-    }
-    
-    return normals[direction]
+    delta := vec_cast(f32, Deltas[direction])
+    result = normalize(delta)
+    return result
 }
 
 opposite_direction :: proc (direction: Direction) -> (result: Direction) {
@@ -188,7 +179,6 @@ main :: proc () {
         collapse_reset(&collapse)
         delete(collapse.steps)
         delete(collapse.states)
-        delete(collapse.temp_state_values)
         
         delete(step_depth)
         
@@ -260,15 +250,16 @@ main :: proc () {
             rl.DrawRectangleRec(world_to_screen(background), color)
         }
         
-        for cell in collapse.cells {
+        spall_begin("draw cells")
+        for &cell in collapse.cells {
             if .edge in cell.flags do continue
-            color: v4
             
             if show_average_colors || .collapsed in cell.flags {
-                color = cell.average_color
+                color := calculate_average_color(&collapse, &cell)
+                draw_cell(cell, color)
             }
-            draw_cell(cell, color)
         }
+        spall_end()
         
         if show_voronoi_cells {
             for cell, index in collapse.cells {
@@ -287,7 +278,7 @@ main :: proc () {
                 get_state :: proc (cell: ^Cell, at: Collapse_Step) -> (result: State_Id) {
                     count: int
                     for state, index in cell.states {
-                        if state.removed_at > at {
+                        if state.at > at {
                             result = auto_cast index
                             count += 1
                         }
@@ -427,8 +418,6 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             spall_scope("Rewind")
             this_frame.tasks -= { .rewind }
             
-            assert(this_frame.rewind_to != Invalid_Collapse_Step)
-            
             is_restart := false
             if this_frame.rewind_to == 0 {
                 is_restart = true
@@ -456,8 +445,8 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             } else {
                 for &cell in c.cells {
                     for &state in cell.states {
-                        if state.removed_at != Invalid_Collapse_Step && state.removed_at >= current.step {
-                            state.removed_at = Invalid_Collapse_Step
+                        if state.removed && state.at >= current.step {
+                            state = {}
                             cell.flags += { .dirty }
                             cell.flags -= { .collapsed }
                         }
@@ -487,7 +476,6 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             switch result.kind {
               case .Complete: break task_loop
               case .Next:     
-                assert(current.step + 1 != Invalid_Collapse_Step)
                 append(&c.steps, Step { step = current.step + 1 })
                 fallthrough
               case .Continue: 
@@ -531,7 +519,7 @@ setup_cells :: proc (c: ^Collapse) {
         }
         
         for &state in cell.states {
-            state.removed_at = Invalid_Collapse_Step
+            state = {}
         }
         
     }

@@ -212,3 +212,9 @@ RawAny :: struct {
     data: rawptr,
 	id:   typeid,
 }
+
+////////////////////////////////////////////////
+
+zero :: proc (s: [] $T) {
+    for &it in s do it = {}
+}

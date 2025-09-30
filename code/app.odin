@@ -48,10 +48,6 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         imgui.push_item_width(region.x*2/3)
         if imgui.slider_int("View Step", auto_cast &viewing_step, 0, auto_cast current.step) {
             viewing_step_detached = viewing_step != current.step
-            
-            for &cell in c.cells {
-                calculate_average_color(c, &cell, viewing_step)
-            }
         }
         imgui.pop_item_width()
         
@@ -74,6 +70,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         for text, metric in metrics {
             if imgui.radio_button(text, metric == c.search_metric) {
                 c.search_metric = metric
+                restart(this_frame)
             }
         }
         
