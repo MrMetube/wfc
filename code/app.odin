@@ -15,9 +15,6 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         tile_count := len(c.states)
         imgui.text(tprint("Tile count %", tile_count))
         
-        if len(step_depth) == 0 || (cast(f32) current.step != peek(step_depth)^) {
-            append(&step_depth, cast(f32) current.step)
-        }
         imgui.plot_lines_float_ptr("Depth", raw_data(step_depth), auto_cast len(step_depth), graph_size = {0, 100})
         
     imgui.end()
@@ -114,14 +111,14 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
                 
                 circle, is_circle := &generate.(Generate_Circle)
                 if imgui.radio_button("Circular", is_circle) {
-                    generate ^= Generate_Circle { radius = .5 }
+                    generate ^= Generate_Circle { radius = .5, spiral_size = 0 }
                 }
                 if is_circle {
                     imgui.indent();                    defer imgui.unindent()
                     imgui.push_item_width(region.x/2); defer imgui.pop_item_width()
                     
                     imgui.slider_float("radius", &circle.radius, 0, 1)
-                    imgui.slider_float("spiral", &circle.spiral_strength, 0, 2)
+                    imgui.slider_float("spiral", &circle.spiral_size, 0, 2)
                 }
                 
                 noise, is_noise := &generate.(Generate_Noise)
@@ -145,6 +142,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         imgui.checkbox("Show step details", &show_step_details)
         
         imgui.text("Cells")
+        imgui.checkbox("Show Cells", &show_cells)
         imgui.checkbox("Show Average Colors", &show_average_colors)
         imgui.checkbox("Show Voronoi Cells", &show_voronoi_cells)
         imgui.text("Show Neighbours")
@@ -153,6 +151,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
             .Neighbour_Count = "neighbour count", 
             .Direction_Fit = "direction fit",
             .Picked = "final pick",
+            .Strictness = "strictness",
         }
         for text, mode in shows {
             if imgui.radio_button(text, show_neighbours == mode) do show_neighbours = mode
@@ -207,7 +206,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         
         imgui.text("Directional Strictness")
         imgui.push_item_width(region.x*0.5)
-        if imgui.slider_int("Bucket Count", &strictness, 1, 8) {
+        if imgui.slider_int("Base Strictness", &base_strictness, 1, 8) {
             restart(this_frame)
         }
         imgui.pop_item_width()
@@ -215,7 +214,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         @(static) angle: f32
         imgui.slider_float("Angle", &angle, 0, 360)
         radians := angle == 0 ? 0 : angle * RadiansPerDegree
-        closeness := get_direction_mask(arm(radians))
+        closeness := get_direction_mask(arm(radians), cast(u8) base_strictness)
         
         imgui.get_content_region_avail(&region)
         for direction in Direction {

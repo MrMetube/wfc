@@ -31,11 +31,12 @@ wait_until_this_state: Maybe(Step_State)
 
 cell_size_on_screen: v2
 
+show_cells          := true
 show_average_colors := true
 show_voronoi_cells  := false
 show_step_details   := false
-show_neighbours: Show_Neighbour = .None // .Neighbour_Count
-Show_Neighbour :: enum { None, Neighbour_Count, Direction_Fit, Picked }
+show_neighbours: Show_Neighbour = .Strictness
+Show_Neighbour :: enum { None, Neighbour_Count, Direction_Fit, Picked, Strictness }
 
 // @todo(viktor): visual dimension vs. point count for generates
 dimension: v2i = {66, 66}
@@ -53,7 +54,7 @@ viewing_step: Collapse_Step
 
 ////////////////////////////////////////////////
 
-strictness: i32 = 1
+base_strictness: i32 = 1
 
 Direction :: enum {
     E, NE, N, NW, W, SW, S, SE,
@@ -91,7 +92,7 @@ Generate_Kind :: union {
 }
 
 Generate_Grid   :: struct { center, radius: v2, angle: f32, is_hex: bool }
-Generate_Circle :: struct { spiral_strength: f32, radius: f32 }
+Generate_Circle :: struct { radius: f32, spiral_size: f32, }
 Generate_Noise  :: struct { is_blue: bool }
 
 ////////////////////////////////////////////////
@@ -250,16 +251,18 @@ main :: proc () {
             rl.DrawRectangleRec(world_to_screen(background), color)
         }
         
-        spall_begin("draw cells")
-        for &cell in collapse.cells {
-            if .edge in cell.flags do continue
-            
-            if show_average_colors || .collapsed in cell.flags {
-                color := calculate_average_color(&collapse, &cell)
-                draw_cell(cell, color)
+        if show_cells {
+            spall_begin("draw cells")
+            for &cell in collapse.cells {
+                if .edge in cell.flags do continue
+                
+                if show_average_colors || .collapsed in cell.flags {
+                    color := calculate_average_color(&collapse, &cell)
+                    draw_cell(cell, color)
+                }
             }
+            spall_end()
         }
-        spall_end()
         
         if show_voronoi_cells {
             for cell, index in collapse.cells {
@@ -271,7 +274,26 @@ main :: proc () {
         }
         
         // @todo(viktor): Find a way to determine if a lattice is "solveable" or if it has cells that will need "areal" rules, rules that allow same states in all or most directions
-        if show_neighbours == .Picked {
+        if show_neighbours == .Strictness {
+            for cell in collapse.cells {
+                center := world_to_screen(cell.p)
+                
+                for neighbour in cell.neighbours {
+                    color := Emerald
+                    
+                    if neighbour.strictness > cast(u8) base_strictness {
+                        color = Orange
+                    }
+                    
+                    if neighbour.strictness > 5 {
+                        color = Red
+                    }
+                    
+                    end := world_to_screen(neighbour.cell.p)
+                    rl.DrawLineEx(center, end, 2, v4_to_rl_color(color))
+                }
+            }
+        } else if show_neighbours == .Picked {
             for &cell in collapse.cells {
                 if .collapsed not_in cell.flags || .edge in cell.flags do continue
                 
@@ -292,7 +314,7 @@ main :: proc () {
                     if .collapsed not_in neighbour.cell.flags || .edge in neighbour.cell.flags do continue
                     neighbour_state := get_state(neighbour.cell, current.step)
                     
-                    entry := collapse.supports[neighbour_state * auto_cast len(collapse.states) + cell_state]
+                    entry := collapse.overlaps[neighbour_state * auto_cast len(collapse.states) + cell_state]
                     
                     assert(entry & neighbour.mask != {})
                 }
@@ -373,6 +395,7 @@ main :: proc () {
     
         rl_imgui_render()
         rl.EndDrawing()
+        spall_flush()
     }
 }
 
@@ -397,8 +420,9 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 
                 restart(this_frame)
             }
+            clear(&step_depth)
         }
-        
+        /// 0.475 / (3.1415 * 2 ) * 360
         if .extract_states in this_frame.tasks {
             this_frame.tasks -= { .extract_states }
             
@@ -410,6 +434,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             setup_cells(c)
             
             restart(this_frame)
+            clear(&step_depth)
         }
         
         if len(c.states) == 0 do break task_loop
@@ -418,12 +443,28 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             spall_scope("Rewind")
             this_frame.tasks -= { .rewind }
             
+            current := len(c.steps) > 0 ? peek(c.steps) : {}
+            
             is_restart := false
             if this_frame.rewind_to == 0 {
                 is_restart = true
                 for step in c.steps do delete_step(step)
                 clear(&c.steps)
                 append(&c.steps, Step {})
+            } else if this_frame.rewind_to == current.step {
+                switch current.state {
+                  case .Search: unreachable()
+                  case .Pick:
+                    current.state = .Search
+                    
+                  case .Collapse:
+                    current.state = .Pick
+                    
+                  case .Propagate:
+                    clear(&current.changes)
+                    current.changes_cursor = 0
+                    current.state = .Collapse
+                }
             } else {
                 limit := cast(int) this_frame.rewind_to + 1
                 if limit < len(c.steps) {
@@ -432,7 +473,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 }
             }
             
-            current := peek(c.steps)
+            current = peek(c.steps)
             assert(current.step == this_frame.rewind_to)
             
             if is_restart {
@@ -440,8 +481,6 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 
                 total_duration = 0
                 setup_cells(c)
-                
-                clear(&step_depth)
             } else {
                 for &cell in c.cells {
                     for &state in cell.states {
@@ -453,11 +492,9 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                     }
                 }
                 
-                switch current.state {
-                  case .Search, .Pick: unreachable() // Can't rewind in this state.
-                  case .Collapse:      unreachable() // current.state = .Pick
-                  case .Propagate:     current.state = .Collapse
-                }
+                // @note(viktor): There are no choices in Propagation so be back one state
+                if current.state == .Propagate do current.state = .Collapse
+                else do unreachable()
             }
             
             next_frame.tasks += { .update }
@@ -477,6 +514,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
               case .Complete: break task_loop
               case .Next:     
                 append(&c.steps, Step { step = current.step + 1 })
+                append(&step_depth, cast(f32) current.step)
                 fallthrough
               case .Continue: 
                 next_frame.tasks += { .update }
@@ -484,7 +522,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
               case .Rewind:
                 next_frame.tasks += { .rewind }
                 next_frame.rewind_to = max(0, result.rewind_to)
-                
+                append(&step_depth, cast(f32) current.step)
             }
             
             total_duration += time.since(this_update_start)
@@ -502,6 +540,8 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 }
             }
         }
+        
+        spall_flush()
     }
 }
 
@@ -511,7 +551,8 @@ setup_cells :: proc (c: ^Collapse) {
         cell.flags -= { .collapsed }
         
         for &neighbour in cell.neighbours {
-            neighbour.mask = get_direction_mask(cell.p - neighbour.cell.p)
+            neighbour.strictness = max(neighbour.strictness, cast(u8) base_strictness)
+            neighbour.mask = get_direction_mask(cell.p - neighbour.cell.p, neighbour.strictness)
         }
         if len(cell.states) != len(c.states) {
             delete(cell.states)
@@ -521,7 +562,6 @@ setup_cells :: proc (c: ^Collapse) {
         for &state in cell.states {
             state = {}
         }
-        
     }
 }
 
@@ -597,7 +637,7 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, generates: ^[dynamic] 
         for neighbour_index, index in voronoi.neighbour_indices {
             neighbour := &cell.neighbours[index]
             neighbour.cell = &c.cells[neighbour_index]
-            neighbour.mask = get_direction_mask(cell.p - neighbour.cell.p)
+            neighbour.strictness = cast(u8) base_strictness
         }
     }
     
@@ -609,10 +649,9 @@ generate_points :: proc(points: ^[dynamic] v2d, count: i32, kind: Generate_Kind)
     side := round(i32, square_root(cast(f32) count))
     entropy := seed_random_series()
     
+    total_region := rectangle_min_dimension(cast(v2d) 0, 1)
     switch kind in kind {
       case Generate_Grid:
-        total_region := rectangle_min_dimension(cast(v2d) 0, 1)
-        
         radius := vec_cast(f64, kind.radius)
         angle := cast(f64) kind.angle
         center := vec_cast(f64, kind.center)
@@ -659,27 +698,22 @@ generate_points :: proc(points: ^[dynamic] v2d, count: i32, kind: Generate_Kind)
         max_radius := cast(f64) kind.radius
         append(points, cast(v2d) center)
         for ring in 0..<ring_count {
-            t := (ring + 1) / ring_count
+            t := (ring) / ring_count
+            next_t := (ring + 1) / ring_count
             radius := linear_blend(min_radius, max_radius, t)
+            next_radius := linear_blend(min_radius, max_radius, next_t * cast(f64) kind.spiral_size)
             
             point_count := linear_blend(min_count, max_count, t)
             point_count = max(3, point_count)
             for p in 0..<point_count {
                 angle := Tau * p / point_count
                 dir := arm(angle)
-                point := center + dir * radius
-                append(points, point)
+                point := center + dir * linear_blend_e(radius, next_radius, p / point_count)
+                if contains_inclusive(total_region, point) {
+                    append(points, point)
+                }
             }
         }
-        
-    //   case .Spiral:
-    //     center :: 0.5
-    //     for index in 0..<count {
-    //         angle := 1.6180339887 * cast(f64) index
-    //         t := cast(f64) index / cast(f64) count
-    //         radius := 0.5 - linear_blend(f64(0.05), 0.5, square(t))
-    //         append(points, center + arm(angle) * radius)
-    //     }
         
       case Generate_Noise:
         min_dist_squared := 1.0 / (Pi * f64(count))

@@ -1,5 +1,6 @@
 package main
 
+import "base:intrinsics"
 import rl "vendor:raylib"
 
 // @note(viktor): All images only work with this N anyways and its out of scope to have it differ
@@ -7,7 +8,7 @@ N: i32 : 3
 
 Collapse :: struct {
     states:   [dynamic] State,
-    supports: [/* State_Id * len(states) + State_Id */] Direction_Mask,
+    overlaps: [/* State_Id * len(states) + State_Id */] Direction_Mask,
     
     steps: [dynamic] Step,
     search_metric: Search_Metric,
@@ -23,7 +24,7 @@ Invalid_State :: max(State_Id)
 Search_Metric :: enum { States, Entropy }
 
 State :: struct {
-    id:        State_Id,
+    _id:        State_Id,
     frequency: f32,
     middle:    v4,
 }
@@ -66,7 +67,7 @@ Cell :: struct {
     states:     [] State_Entry,
     neighbours: [] Neighbour,
     
-    flags:   Cell_Flags,
+    flags:  Cell_Flags,
     metric: f32,
     
     // Visual only
@@ -80,6 +81,7 @@ Direction_Mask :: bit_set[Direction; u8]
 Neighbour :: struct {
     cell: ^Cell,
     mask: Direction_Mask,
+    strictness: u8
 }
 
 State_Entry :: bit_field i32 {
@@ -94,13 +96,13 @@ collapse_reset :: proc (c: ^Collapse) {
     for step in c.steps do delete_step(step)
     clear(&c.steps)
     
-    delete(c.supports)
-    c.supports = nil
+    delete(c.overlaps)
+    c.overlaps = nil
 }
 
 ////////////////////////////////////////////////
 
-get_direction_mask :: proc (sampling_direction: v2) -> (result: Direction_Mask) {
+get_direction_mask :: proc (sampling_direction: v2, strictness: u8) -> (result: Direction_Mask) {
     threshold := cos((cast(f32) strictness) / 16 * Tau)
     result = get_direction_mask_with_threshold(sampling_direction, threshold)
     return result
@@ -126,8 +128,6 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
     assert(c.states != nil)
     
     result.kind = .Continue
-    // @note(viktor): this will only be used if result.kind == .Rewind
-    result.rewind_to = current.step - 1
     
     switch current.state {
       case .Search:
@@ -197,6 +197,7 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
         
         if len(current.found) == 0 {
             result.kind = .Rewind
+            result.rewind_to = current.step - 1
         } else {
             index := random_index(entropy, current.found)
             current.to_be_collapsed = current.found[index]
@@ -255,6 +256,7 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
                 unordered_remove(&current.pickable_indices, pickable_index)
                 cell.flags += { .collapsed, .dirty }
             } else {
+                result.rewind_to = current.step
                 result.kind = .Rewind 
             }
         }
@@ -272,8 +274,20 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
             current.changes_cursor += 1
         }
         
+        assert(change != nil)
         if change != nil {
-            propagate_remove: for neighbour in change.neighbours {
+            DoBits :: false
+            when DoBits {
+                change_states_ := make([] u64, 1 + len(change.states) / 64, context.temp_allocator)
+                
+                for state, state_index in change.states do if !state.removed {
+                    index := state_index / 64
+                    bit_index := cast(u64) state_index % 64
+                    change_states_[index] |= 1 << bit_index
+                }
+            }
+            
+            propagate_remove: for &neighbour in change.neighbours {
                 cell := neighbour.cell
                 if .collapsed in cell.flags do continue
                 if .edge in cell.flags do continue
@@ -281,20 +295,86 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
                 states_count := 0
                 did_change := false
                 
+                when DoBits {
+                    cell_states_ := make([] u64, 1 + len(cell.states) / 64, context.temp_allocator)
+                    
+                    for state, state_index in cell.states do if !state.removed {
+                        index := state_index / 64
+                        bit_index := cast(u64) state_index % 64
+                        cell_states_[index] |= 1 << bit_index
+                    }
+                }
+                
                 spall_begin("recalc states")
-                recalc_states: for &from, from_id in cell.states do if !from.removed {
-                    for to, to_id in change.states do if !to.removed {
-                        support := c.supports[from_id * len(c.states) + to_id]
-                        masked := support & neighbour.mask
-                        if masked != {} {
-                            states_count += 1
-                            continue recalc_states
+                when !DoBits {
+                    count := len(c.states)
+                    recalc_states: for &from, from_id in cell.states do if !from.removed {
+                        supported := false
+                        inner: for to, to_id in change.states do if !to.removed {
+                            #no_bounds_check overlap := c.overlaps[from_id * count + to_id]
+                            masked := overlap & neighbour.mask
+                            if masked != {} {
+                                states_count += 1
+                                supported = true
+                                break inner
+                            }
+                        }
+                        
+                        if !supported {
+                            from.removed = true
+                            from.at = current.step
+                            did_change = true
                         }
                     }
+                } else {
+                    count_trailing_zeros :: intrinsics.count_trailing_zeros
                     
-                    from.removed = true
-                    from.at = current.step
-                    did_change = true
+                    #no_bounds_check for from, from_removed_index in cell_states_ {
+                        from_it := from
+                        from_index := from_removed_index * 64
+                        recalc_states: for from_it != 0 {
+                            from_zeros := count_trailing_zeros(from_it)
+                            
+                            from_it >>= from_zeros
+                            if from_it & 1 == 0 do continue
+                            
+                            from_index += cast(int) from_zeros
+                            if from_index >= len(c.states) do break recalc_states
+                            
+                            defer from_it >>= 1
+                            defer from_index += 1
+                            
+                            tos: for to, to_removed_index in change_states_ {
+                                to_it := to
+                                
+                                to_index := to_removed_index * 64
+                                for to_it != 0 {
+                                    to_zeros := count_trailing_zeros(to_it)
+                                    
+                                    to_it >>= to_zeros
+                                    if to_it & 1 == 0 do continue
+                                    
+                                    to_index += cast(int) to_zeros
+                                    if to_index >= len(c.states) do break tos
+                                    
+                                    defer to_it >>= 1
+                                    defer to_index += 1
+                                    
+                                    overlap := c.overlaps[from_index * len(c.states) + to_index]
+                                    masked := overlap & neighbour.mask
+                                    if masked != {} {
+                                        states_count += 1
+                                        continue recalc_states
+                                    }
+                                }
+                            }
+                            
+                            state := &cell.states[from_index]
+                            state.removed = true
+                            state.at = current.step
+                            did_change = true
+                        }
+                    }
                 }
                 spall_end()
                 
@@ -302,8 +382,19 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
                     append_change_if_not_already_scheduled(current, cell)
                     
                     if states_count == 0 {
+                        // @note(viktor): reduce strictness
+                        for &n in change.neighbours {
+                            n.strictness += 1
+                            n.mask = get_direction_mask(change.p - n.cell.p, n.strictness)
+                        }
+                        
+                        for &n in cell.neighbours {
+                            n.strictness += 1
+                            n.mask = get_direction_mask(cell.p - n.cell.p, n.strictness)
+                        }
+                            
                         the_cause: Collapse_Step
-                        for n in cell.neighbours {
+                        for &n in cell.neighbours {
                             for state in n.cell.states {
                                 if state.removed && state.at < current.step {
                                     the_cause = max(the_cause, state.at)
@@ -315,11 +406,11 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
                         result.rewind_to = the_cause
                         
                         break propagate_remove
-                    }
-                    
-                    cell.flags += { .dirty }
-                    if states_count == 1 {
-                        cell.flags += { .collapsed }
+                    } else {
+                        cell.flags += { .dirty }
+                        if states_count == 1 {
+                            cell.flags += { .collapsed }
+                        }
                     }
                 }
             }
@@ -363,8 +454,6 @@ delete_step :: proc (step: Step) {
 ////////////////////////////////////////////////
 
 calculate_average_color :: proc (c: ^Collapse, cell: ^Cell) -> (result: v4) {
-    spall_proc()
-    
     count: f32
     for state, id in cell.states do if !state.removed || state.at > viewing_step {
         state := c.states[id]
@@ -440,36 +529,33 @@ extract_states :: proc (c: ^Collapse, pixels: [] rl.Color, width, height: i32, w
                     }
                 }
                 
-                state_id := Invalid_State
-                search: for other in c.states {
-                    other_hashes := subregion_hashes[other.id]
+                found := false
+                search: for &other, other_id in c.states {
+                    other_hashes := subregion_hashes[other_id]
                     if other_hashes != hashes do continue search
                     
-                    state_id = other.id
+                    other.frequency += 1
+                    found = true
                     break search
                 }
                 
-                if state_id == Invalid_State {
-                    state_id = auto_cast len(c.states)
+                if !found {
                     state := State {
-                        id     = state_id,
-                        middle = rl_color_to_v4(temp_values[N/4+N/4*N]),
+                        middle    = rl_color_to_v4(temp_values[N/4+N/4*N]),
+                        frequency = 1,
                     }
                     
                     append(&c.states, state)
                     append(&subregion_hashes, hashes)
                     assert(len(c.states) == len(subregion_hashes))
                 }
-                assert(state_id != Invalid_State)
-                
-                c.states[state_id].frequency += 1
             }
         }
     }
     spall_end()
     
-    spall_begin("Supports generation")
-    make(&c.supports, square(len(c.states)))
+    spall_begin("Overlaps generation")
+    make(&c.overlaps, square(len(c.states)))
     
     for a_hashes, ai in subregion_hashes {
         for b_hashes, bi in subregion_hashes {
@@ -478,7 +564,7 @@ extract_states :: proc (c: ^Collapse, pixels: [] rl.Color, width, height: i32, w
                 b_hash := b_hashes[opposite_direction(d)]
                 
                 if a_hash == b_hash {
-                    c.supports[ai * len(c.states) + bi] += { d }
+                    c.overlaps[ai * len(c.states) + bi] += { d }
                 }
             }
         }
