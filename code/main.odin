@@ -23,6 +23,8 @@ TargetFrameTime :: 1./TargetFps
 // App
 
 voronoi_shape_t: f32 = 1
+cooling_chance: f32 = 0.1
+heating_chance: f32 = 0.1
 
 total_duration: time.Duration
 
@@ -93,7 +95,7 @@ Generate_Kind :: union {
 
 Generate_Grid   :: struct { center, radius: v2, angle: f32, is_hex: bool }
 Generate_Circle :: struct { radius: f32, spiral_size: f32, }
-Generate_Noise  :: struct { is_blue: bool }
+Generate_Noise  :: struct { center, radius: v2, is_blue: bool  }
 
 ////////////////////////////////////////////////
 
@@ -113,6 +115,7 @@ Frame :: struct {
     
     // rewind
     rewind_to: Collapse_Step,
+    reset_strictness: bool,
 }
 
 wrap_in_extraction: [2] bool = true
@@ -212,6 +215,13 @@ main :: proc () {
             radius = .51,
         })
     }
+    
+    when true {
+        append(&generates, Generate_Noise {
+            center = .5,
+            radius = {0.15, 0.51},
+        })
+    }
     active_generate_index = 0
     
     // @todo(viktor): Can we not rely on this pregen?
@@ -281,12 +291,12 @@ main :: proc () {
                 for neighbour in cell.neighbours {
                     color := Emerald
                     
-                    if neighbour.strictness > cast(u8) base_strictness {
-                        color = Orange
+                    if neighbour.strictness > 1 {
+                        color = linear_blend(Emerald, Orange, cast(f32) (neighbour.strictness - 1) / (5-1))
                     }
                     
                     if neighbour.strictness > 5 {
-                        color = Red
+                        color = linear_blend(Orange, Red, cast(f32) (neighbour.strictness - 5) / (8-5))
                     }
                     
                     end := world_to_screen(neighbour.cell.p)
@@ -399,9 +409,10 @@ main :: proc () {
     }
 }
 
-restart :: proc (this_frame: ^Frame) {
+restart :: proc (this_frame: ^Frame, reset_strictness := false) {
     this_frame.tasks += { .rewind }
     this_frame.rewind_to = 0
+    this_frame.reset_strictness = reset_strictness
 }
 
 do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSeries, generates: ^[dynamic] Generate_Kind) {
@@ -431,7 +442,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             collapse_reset(c)
             extract_states(c, this_frame.pixels, this_frame.pixels_dimension.x, this_frame.pixels_dimension.y, wrap_in_extraction)
             
-            setup_cells(c)
+            setup_cells(c, true)
             
             restart(this_frame)
             clear(&step_depth)
@@ -480,7 +491,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 spall_scope("Restart")
                 
                 total_duration = 0
-                setup_cells(c)
+                setup_cells(c, this_frame.reset_strictness)
             } else {
                 for &cell in c.cells {
                     for &state in cell.states {
@@ -545,13 +556,15 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
     }
 }
 
-setup_cells :: proc (c: ^Collapse) {
+setup_cells :: proc (c: ^Collapse, is_total_reset: bool) {
     for &cell in c.cells {
         cell.flags += { .dirty }
         cell.flags -= { .collapsed }
         
         for &neighbour in cell.neighbours {
-            neighbour.strictness = max(neighbour.strictness, cast(u8) base_strictness)
+            if is_total_reset {
+                neighbour.strictness = cast(u8) base_strictness
+            }
             neighbour.mask = get_direction_mask(cell.p - neighbour.cell.p, neighbour.strictness)
         }
         if len(cell.states) != len(c.states) {
@@ -579,7 +592,7 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, generates: ^[dynamic] 
     area := dimension.x * dimension.y
     points := make([dynamic] v2d, 0, area, context.temp_allocator)
     for generate in generates {
-        generate_points(&points, area / auto_cast len(generates), generate)
+        generate_points(&points, area, generate)
     }
     
     dt: Delauney_Triangulation
@@ -641,15 +654,17 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, generates: ^[dynamic] 
         }
     }
     
-    setup_cells(c)
+    setup_cells(c, true)
 }
 
 generate_points :: proc(points: ^[dynamic] v2d, count: i32, kind: Generate_Kind) {
     // @note(viktor): We get numerical instability if points are perfectly vertically or horizontally aligned
-    side := round(i32, square_root(cast(f32) count))
     entropy := seed_random_series()
     
+    count := count
+    
     total_region := rectangle_min_dimension(cast(v2d) 0, 1)
+    
     switch kind in kind {
       case Generate_Grid:
         radius := vec_cast(f64, kind.radius)
@@ -657,7 +672,18 @@ generate_points :: proc(points: ^[dynamic] v2d, count: i32, kind: Generate_Kind)
         center := vec_cast(f64, kind.center)
         rotated_radius := rotate(radius, angle)
         min := center - rotated_radius
-
+        
+        count = round(i32, cast(f64) count * (radius.x * radius.y))
+        side := round(i32, square_root(cast(f32) count))
+        
+        #reverse for p, index in points {
+            delta := p - center
+            delta = rotate(delta, angle)
+            if abs(delta.x) < radius.x && abs(delta.y) < radius.y {
+                unordered_remove(points, index)
+            }
+        }
+        
         inv_side := 1. / cast(f64) side
         delta_x := rotate(v2d {radius.x*2, 0}, angle) * inv_side
         delta_y := rotate(v2d {0, radius.y*2}, angle) * inv_side
@@ -690,13 +716,24 @@ generate_points :: proc(points: ^[dynamic] v2d, count: i32, kind: Generate_Kind)
         }
         
       case Generate_Circle:
+        min_radius := 0.01
+        max_radius := cast(f64) kind.radius
+        count = round(i32, cast(f64) count * (square(max_radius)*Pi))
+        side := round(i32, square_root(cast(f32) count))
+        
         center := 0.5
         ring_count := cast(f64) side * .5
         min_count := 3.0
         max_count := cast(f64) count / ring_count
-        min_radius := 0.01
-        max_radius := cast(f64) kind.radius
         append(points, cast(v2d) center)
+        
+        #reverse for p, index in points {
+            delta := p - center
+            if length_squared(delta) < square(max_radius) {
+                unordered_remove(points, index)
+            }
+        }
+        
         for ring in 0..<ring_count {
             t := (ring) / ring_count
             next_t := (ring + 1) / ring_count
@@ -716,14 +753,20 @@ generate_points :: proc(points: ^[dynamic] v2d, count: i32, kind: Generate_Kind)
         }
         
       case Generate_Noise:
+        radius := vec_cast(f64, kind.radius)
+        center := vec_cast(f64, kind.center)
+        count = round(i32, cast(f64) count * (radius.x * radius.y))
+        
         min_dist_squared := 1.0 / (Pi * f64(count))
         for _ in 0..<count {
             new_point: v2d
             
             valid := false
-            for !valid {
-                new_point = random_unilateral(&entropy, v2d)
+            attemps := 100
+            for !valid && attemps > 0 {
+                new_point = center + random_bilateral(&entropy, v2d) * radius
                 valid = true
+                
                 if kind.is_blue {
                     check: for point in points {
                         if length_squared(point - new_point) < min_dist_squared {
@@ -732,6 +775,8 @@ generate_points :: proc(points: ^[dynamic] v2d, count: i32, kind: Generate_Kind)
                         }
                     }
                 }
+                
+                attemps -= 1
             }
             
             append(points, new_point)

@@ -10,7 +10,7 @@ import "core:time"
 import win "core:sys/windows"
 
 optimizations := !false ? `-o:speed` : `-o:none`
-Pedantic      :: false
+Pedantic      :: !false
 
 debug    :: `-debug`
 check    :: `-custom-attribute:printlike`
@@ -86,7 +86,7 @@ main :: proc() {
     if handle_running_exe_gracefully(debug_exe, .Kill) {
         build := true
         if (tasks & {.debugger, .renderdoc }) != {} {
-            if !did_change(debug_exe_path, code_dir) {
+            if !did_change(debug_exe_path, code_dir, `.\`) {
                 fmt.println("INFO: No changes detected. Skipping build.")
                 build = false
             }

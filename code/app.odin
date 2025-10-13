@@ -86,7 +86,13 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
                 if imgui.radio_button(tprint("%", index), is_active) do active_generate_index = index
             }
             imgui.same_line()
-            if imgui.button("New") do append(generates, Generate_Noise {} )
+            if imgui.button("New") {
+                active_generate_index = len(generates)
+                append(generates, Generate_Noise {
+                    center = .5,
+                    radius = .51,
+                })
+            }
             
             imgui.get_content_region_avail(&region)
             if active_generate_index >= 0 && active_generate_index < len(generates) { // Active one
@@ -95,7 +101,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
                 grid, is_grid := &generate.(Generate_Grid)
                 if imgui.radio_button("Square", is_grid) {
                     generate ^= Generate_Grid {
-                        radius = 0.5,
+                        radius = 0.51,
                         center = 0.5,
                     }
                 }
@@ -123,11 +129,16 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
                 
                 noise, is_noise := &generate.(Generate_Noise)
                 if imgui.radio_button("Noise", is_noise) {
-                    generate ^= Generate_Noise {}
+                    generate ^= Generate_Noise {
+                        radius = 0.51,
+                        center = 0.5,
+                    }
                 }
                 if is_noise {
                     imgui.indent(); defer imgui.unindent()
                     
+                    imgui.slider_float2("center", &noise.center, 0, 1)
+                    imgui.slider_float2("radius", &noise.radius, 0, 1)
                     imgui.checkbox("blue noise", &noise.is_blue)
                 }
                 
@@ -207,9 +218,16 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         imgui.text("Directional Strictness")
         imgui.push_item_width(region.x*0.5)
         if imgui.slider_int("Base Strictness", &base_strictness, 1, 8) {
-            restart(this_frame)
+            restart(this_frame, true)
+        }
+        if imgui.slider_float("cooling chance", &cooling_chance, 0, 1, flags = .Logarithmic) {
+            restart(this_frame, true)
+        }
+        if imgui.slider_float("heating chance", &heating_chance, 0, 1, flags = .Logarithmic) {
+            restart(this_frame, true)
         }
         imgui.pop_item_width()
+        
         
         @(static) angle: f32
         imgui.slider_float("Angle", &angle, 0, 360)

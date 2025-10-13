@@ -329,8 +329,9 @@ end_triangulation_voronoi_cells :: proc(dt: ^Delauney_Triangulation) -> (result:
                 for it in voronoi.points do if length(it - p) < 0.01 { p_ok = false; break }
                 for it in voronoi.points do if length(it - n) < 0.01 { n_ok = false; break }
                 
-                if p_ok do append(&voronoi.points, p)
-                if n_ok do append(&voronoi.points, n)
+                if p_ok do inject_at(&voronoi.points, 0, p)
+                if n_ok do inject_at(&voronoi.points, 0, n)
+                 
                 point_index = 0
                 
                 sort_points_counterclockwise_around_center(&voronoi.center, voronoi.points[:], &foos)

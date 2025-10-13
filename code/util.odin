@@ -1,4 +1,5 @@
 #+no-instrumentation
+#+vet !unused-procedures
 package main
 
 import "base:intrinsics"

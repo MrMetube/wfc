@@ -81,7 +81,7 @@ Direction_Mask :: bit_set[Direction; u8]
 Neighbour :: struct {
     cell: ^Cell,
     mask: Direction_Mask,
-    strictness: u8
+    strictness: u8,
 }
 
 State_Entry :: bit_field i32 {
@@ -382,15 +382,35 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
                     append_change_if_not_already_scheduled(current, cell)
                     
                     if states_count == 0 {
-                        // @note(viktor): reduce strictness
-                        for &n in change.neighbours {
-                            n.strictness += 1
-                            n.mask = get_direction_mask(change.p - n.cell.p, n.strictness)
+                        entropy := seed_random_series()
+                        // @note(viktor): maybe increase strictness for solved cells
+                        for &cell in c.cells {
+                            for &n in cell.neighbours {
+                                if .collapsed in n.cell.flags {
+                                        if random_between(&entropy, f32, 0, 1) < cooling_chance {
+                                        if n.strictness > 1 {
+                                            n.strictness -= 1
+                                            n.mask = get_direction_mask(cell.p - n.cell.p, n.strictness)
+                                        }
+                                    }
+                                } else {
+                                    if n.strictness < 8 {
+                                        if random_between(&entropy, f32, 0, 1) < heating_chance {
+                                            n.strictness += 1
+                                            n.mask = get_direction_mask(cell.p - n.cell.p, n.strictness)
+                                        }
+                                    }
+                                }
+                            }
                         }
-                        
-                        for &n in cell.neighbours {
-                            n.strictness += 1
-                            n.mask = get_direction_mask(cell.p - n.cell.p, n.strictness)
+                        // @note(viktor): reduce strictness
+                        for it in current.changes {
+                            for &n in it.neighbours {
+                                if n.strictness < 8 {
+                                    n.strictness += 1
+                                }
+                                n.mask = get_direction_mask(it.p - n.cell.p, n.strictness)
+                            }
                         }
                             
                         the_cause: Collapse_Step
