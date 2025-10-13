@@ -1,32 +1,61 @@
 \section{Einschränkung und Idee zur Erweiterung}
 
 Die ursprüngliche Form des Wave Function Collapse nimmt in 2D Pixelmuster und Tilesets als Eingabe und produziert darauß wieder 2D Muster. 
-Pixel liegen stets auf einem quadratischen Gitter.
-Bei Tilesets ist die grafische Gestaltung des Tiles uneingeschränkt. Dennoch sind die Tiles selbst quadratisch. Dies schränkt die Gestaltung des Inhalts der Tiles in sofern ein, dass die Kanten zu anderen Kanten passen müssen.
-Auch bei 3D Inputs werden die Modelle in blockförmige Bausteine zerschnitten, damit der Collapse auf einem 3D Gitter von Würfeln arbeiten kann.
+Pixel liegen stets auf einem quadratischen Gitter. Bei Tilesets ist die grafische Gestaltung des Tiles uneingeschränkt. Dennoch sind die Tiles selbst quadratisch. Dies schränkt die Gestaltung des Inhalts der Tiles in sofern ein, dass die Kanten zu anderen Kanten passen müssen. Auch bei 3D Inputs werden die Modelle in blockförmige Bausteine zerschnitten, damit der Collapse auf einem 3D Gitter von Würfeln arbeiten kann.
 
 Man beschränkt sich auf regelmäßige quadratische Gitter, da ihre Struktur bestimmte Vorteile mit sich bringt. Benachbarung von Zellen ist implizit durch die Struktur des Gitters mitgeliefert. Eine Zelle des Ausgabegitters ist durch seine Koordinaten im Gitter definiert und seine Nachbarn lassen sich einfach durch Schritte in vier festen Richtungen in 2D oder sechs Richtungen in 3D finden. Diese Eigenschaft gilt durch die Regelmäßigkeit des Gitters für alle Zellen gleichermaßen. Dies ist nützlich, da die Benachbarungsregeln, die aus der Eingabe herausgezogen werden, eben auch auf einem regelmäßigem Gitter basieren und direkt im Algorithmus verwendet werden können.
 
-Der Nachteil dadurch, dass die Generierung immer auf einem regelmäßigem quadratischen Gitter läuft, ist, dass die Ausgabe im ganzen Artefakte des Gitter aufweist. Bei Pixelmustern sind vertikale und horizontale Linien
+Der Nachteil dadurch, dass die Generierung immer auf einem regelmäßigem quadratischen Gitter läuft, ist, dass die Ausgabe im Ganzen Artefakte des Gitter aufweist. Vertikale und horizontale Linien können im Pixelgitter dargestellt werden, aber bei diagonalen oder frei geformte Kurven und Linien müsste eine Zelle des Ausgabegitters anteilmäßig ausgefüllt sein, was aber nicht möglich ist. Eine Zelle kann immer nur einen diskreten finalen Zustand wählen. Es kommt zu Aliasing.
 
-\begin{itemize}
-\item bisher nur auf regelmäßigen gittern
-\item was ist mit Townscaper? lies das Paper zum Gitter!
-\end{itemize}
+Wenn man sich den Kern des Wave Function Collapse Algorithmus genauer anguckt, erkennt man, dass die Entscheidung, welchen Zustand eine Zelle erhällt, nur von den möglichen Zuständen ihrer Nachbarn abhängt. Deren Zuständ geschränken die Menge aller in der Eingabe existierenden Zustände, auf genau diese, die in der Eingabe nebeneinander gefunden wurden. Dabei ist auf dem Gitter immer eindeutig, dass z.B. die Zelle N nördlich einer betrachteten Zelle M, nur Zustände wählen kann die in der Eingabe nördlich von einem von M's Zuständen gefunden wurde. Damit der Algorithmus die Menge an möglichen Zuständen einer Zelle finden kann, braucht es also nur eine Funktion die aus der tatsächlichen Richtung von M zu N die betrachtete Richtung der Benachbarungregeln ergibt. Im Gitter ist gibt diese Funktion meißt die Identität; die Richtung zum Nachbarn ist die Richtung für die Regeln. 
+\newline
+Die Funktion:
+$$f(\text{cell}, \text{neighbour}) \rightarrow \text{direction}$$
+Für das Gitter:
+$$Gitter(\text{c}, \text{n}) =  
+\begin{cases}  
+    \text{Osten} & \text{wenn } x_n - x_c = 1 \text{ und } y_n - y_c = 0 \\
+    \text{Norden} & \text{wenn } x_n - x_c = 0 \text{ und } y_n - y_c = 1 \\
+    \text{Westen} & \text{wenn } x_n - x_c = -1 \text{ und } y_n - y_c = 0 \\
+    \text{Süden} & \text{wenn } x_n - x_c = 0 \text{ und } y_n - y_c = -1
+\end{cases}$$
 
-\section{Kernidee: WFC kann auf Graphen aller Art laufen}
-\begin{itemize}
-\item wfc prüft regeln nur lokal und propagiert die entscheidungen auch nur immer an die nächsten nachbar zellen
-\item somit ist die topologie des zellennetz in der propagierung egal
-\item nur beim prüfen der zellen muss auf die nun auf die frei variierende richtung zum nachbar geachtet werden
-\item vorher war klar welcher nachbar in nswo liegt, da regelmäßiges gitter, daraus war klar welche regeln zum prüfen relevant waren
-\item nun muss die menge an relevanten regeln je nach zellen paar / nachbarschaft ermessen werden
-\end{itemize}
+////////////////////////////////////////////////
 
-\section{Erweiterung des Algorithmus}
-\begin{itemize}
-\item extraktion nun mit diagonalen regeln
-\item warum? besseres sampling des inputs also der 2d funktion die die eingabe darstellt
+Für das normal quadratische Gitter:
+$$\mathbf{d} \;=\; \text{neighbour} - \text{cell} = (x_n-x_c,\; y_n-y_c)$$
 
-\item beim prüfen wird nun möglicherweise mehr als eine Regelmenge betrachtet
-\end{itemize}
+$$Gitter(\text{cell},\text{neighbour}) = 
+\begin{cases} 
+    \text{Osten} & \text{falls } d_x = 1,\ d_y = 0 \\
+    \text{Norden} & \text{falls } d_x = 0,\ d_y = 1 \\
+    \text{Westen} & \text{falls } d_x = -1,\ d_y = 0 \\
+    \text{Süden} & \text{falls } d_x = 0,\ d_y = -1 \\
+\end{cases}$$
+
+
+Für das torusartige Gitter:
+$$\mathbf{W} \;=\; Gitterbreite \text{und} \mathbf{H} \;=\; Gitterh"ohe$$
+
+$$\mathbf{d} \;=\; \operatorname{wrap}\big(\text{neighbour} - \text{cell},\; (W,H)\big) \qquad\text{mit}\qquad \text{cell}=(x_c,y_c),\ \text{neighbour}=(x_n,y_n)$$
+
+Komponentweise:
+$$d_x = \operatorname{wrap}(x_n-x_c, W),\qquad d_y = \operatorname{wrap}(y_n-y_c, H)$$
+
+
+$$\operatorname{wrap}(\Delta,M)=\bigl((\Delta \bmod M)+M\bigr)\bmod M$$
+
+$$Gitter_{torus}(\text{cell},\text{neighbour}) = 
+\begin{cases} 
+    \text{Osten} & \text{falls } d_x = 1,\ d_y = 0 \\
+    \text{Norden} & \text{falls } d_x = 0,\ d_y = 1 \\
+    \text{Westen} & \text{falls } d_x = W-1,\ d_y = 0 \\
+    \text{Süden} & \text{falls } d_x = 0,\ d_y = H-1 \\
+\end{cases}$$
+
+
+Wenn man mit WFC eine Ausgabe erstellen will, die sich selbst tiled(also linker Rand gleich rechter Rand und so) kann man eine imaginäre Kante von einer Zelle am rechten Rand zu einer Zelle am linken Rand erstellen und dem Algorithmus definieren dass diese Benachbarung in Richtung Osten geht. Nun sind die Ränder des Gitters benachbart und das Ergebnis ist, dass die Ränder, wenn eine Lösung gefunden wird, zueinander passen. Wenn man dies für einen Rand macht, so ist die Form der Zellen mit ihren Nachbarn nicht mehr eine flache Ebene, sondern die Oberfläche eines Zylinders(ohne Deckel und Boden). Verbindet man auf die selbe Weise auch den anderen Rand, ist die Form nun ein Torus. Der Algorithmus selbst muss also nur auf diese Weise angepasst werden, um auf anderen Anordnungen von Zellen zu funktionieren.
+\\
+@todo(viktor): Müssen es planare Graphen sein?
+\\
+@todo(viktor): @incomplete Diagonale Regeln, besseres Sampling der Eingabe, Regelmengen , höhere Entropie durch Strictness
