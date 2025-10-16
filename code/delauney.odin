@@ -179,7 +179,7 @@ collect_points :: proc (node: ^Quad_Node(v2d), dest: ^Array(v2d)) {
     }
 }
 
-collect_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^[dynamic] Triangle, points: []v2d, dt: ^Delauney_Triangulation) {
+collect_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^[dynamic] Triangle, points: [] v2d, dt: ^Delauney_Triangulation) {
     if node.children != nil {
         for &child in node.children {
             collect_triangles(&child, dest, points, dt)
@@ -212,7 +212,7 @@ collect_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^[dynamic] Tri
     }
 }
 
-collect_work_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^[dynamic] Work_Triangle, points: []v2d, dt: ^Delauney_Triangulation) {
+collect_work_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^[dynamic] Work_Triangle, points: [] v2d, dt: ^Delauney_Triangulation) {
     if node.children != nil {
         for &child in node.children {
             collect_work_triangles(&child, dest, points, dt)
@@ -239,7 +239,7 @@ end_triangulation :: proc(dt: ^Delauney_Triangulation) -> (result: [] Triangle) 
 }
 
 bounds_line_intersection :: proc (a, b: $V, bounds: Rectangle(V)) -> (ok: b32, result: V) {
-    side :: proc (a, b: $V/[2]$E, is_x: bool, side: E) -> (result: V) {
+    side :: proc (a, b: $V /[2] $E, is_x: bool, side: E) -> (result: V) {
         ab := b - a
         assert( is_x || ab.y != 0)
         assert(!is_x || ab.x != 0)
@@ -289,8 +289,8 @@ end_triangulation_voronoi_cells :: proc(dt: ^Delauney_Triangulation) -> (result:
             if index_a < 0 do continue
             voronoi := &result[index_a]
             
-            index_b := wt.triangle[(it_index + 1)%3]
-            index_c := wt.triangle[(it_index + 2)%3]
+            index_b := wt.triangle[(it_index + 1) % 3]
+            index_c := wt.triangle[(it_index + 2) % 3]
             
             if index_b >= 0 do append_unique(&voronoi.neighbour_indices, index_b)
             if index_c >= 0 do append_unique(&voronoi.neighbour_indices, index_c)

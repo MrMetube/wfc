@@ -15,8 +15,6 @@ v4_to_rl_color :: proc (color: v4) -> (result: rl.Color) {
     return result
 }
 
-color_edit_flags_just_display: imgui.Color_Edit_Flags = .NoPicker | .NoOptions | .NoSmallPreview | .NoInputs | .NoTooltip | .NoSidePreview | .NoDragDrop
-
 // Call this at startup
 rl_imgui_init :: proc () {
     imgui.set_current_context(imgui.create_context(nil))

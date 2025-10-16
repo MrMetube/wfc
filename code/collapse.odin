@@ -1,6 +1,5 @@
 package main
 
-import "base:intrinsics"
 import rl "vendor:raylib"
 
 // @note(viktor): All images only work with this N anyways and its out of scope to have it differ

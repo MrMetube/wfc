@@ -7,12 +7,6 @@ import "core:time"
 
 import rl "vendor:raylib"
 
-/* @todo(viktor):
- - Remove all outdated and unused ideas
- - Get some nice screenshots of process and results
- - simplify code and make an overview of the important parts
- */
-
 print :: fmt.printf
 tprint :: fmt.tprintf
 ctprint :: fmt.ctprintf

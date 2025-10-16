@@ -2,7 +2,6 @@
 package main
 
 import "base:builtin"
-import "base:intrinsics"
 import "base:runtime"
 
 Array :: struct ($T: typeid) {
