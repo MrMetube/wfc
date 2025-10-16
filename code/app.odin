@@ -30,7 +30,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
             
             if imgui.button("Update once") do this_frame.tasks += { .update }
             
-            imgui.text("v%", current.state)
+            imgui.text("%v", current.state)
         } else {
             if imgui.button("Pause") do paused = true
             this_frame.tasks += { .update }
@@ -58,18 +58,6 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         } else {
             viewing_step = current.step
         }
-    
-        metrics := [Search_Metric] string {
-            .States  = "fewest possible states",
-            .Entropy = "lowest entropy",
-        }
-        imgui.text("Search Metric")
-        for text, metric in metrics {
-            if imgui.radio_button(text, metric == c.search_metric) {
-                c.search_metric = metric
-                restart(this_frame)
-            }
-        }
         
         imgui.text("Grid")
         imgui.slider_int2("Size", &desired_dimension, 3, 300, flags = .Logarithmic)
@@ -78,12 +66,19 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
             this_frame.tasks += { .setup_grid }
             dimension = desired_dimension
         }
+        imgui.text("Presets")
+        imgui.same_line(); if imgui.button("P0") do preset_0(generates)
+        imgui.same_line(); if imgui.button("P1") do preset_1(generates)
+        imgui.same_line(); if imgui.button("P2") do preset_2(generates)
+        imgui.same_line(); if imgui.button("P3") do preset_3(generates)
         
         {
             for _, index in generates {
                 is_active := index == active_generate_index
                 if index != 0 do imgui.same_line()
-                if imgui.radio_button(tprint("%v", index), is_active) do active_generate_index = index
+                if imgui.radio_button(tprint("L%v", index), is_active) {
+                    active_generate_index = index
+                }
             }
             imgui.same_line()
             if imgui.button("New") {
@@ -217,16 +212,5 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
             restart(this_frame, true)
         }
         imgui.pop_item_width()
-        
-        
-        @(static) angle: f32
-        imgui.slider_float("Angle", &angle, 0, 360)
-        radians := angle == 0 ? 0 : angle * RadiansPerDegree
-        closeness := get_direction_mask(arm(radians), cast(u8) base_strictness)
-        
-        imgui.get_content_region_avail(&region)
-        for direction in Direction {
-            imgui.progress_bar(direction in closeness ? 1 : 0, {region.x, 0}, overlay = tprint("%v", direction))
-        }
     imgui.end()
 }

@@ -27,8 +27,8 @@ TargetFrameTime :: 1./TargetFps
 // App
 
 voronoi_shape_t: f32 = 1
-cooling_chance: f32 = 0.0
-heating_chance: f32 = 0.0
+cooling_chance: f32 = 0.7
+heating_chance: f32 = 0.1
 
 total_duration: time.Duration
 
@@ -45,9 +45,9 @@ show_step_details   := false
 show_strictness     := true
 
 // @todo(viktor): visual dimension vs. point count for generates
-dimension: v2i = {66, 66}
+dimension: v2i = {100, 100}
 
-cells_background_color := V4_xyz_w(cast(v3) 0.4, 1)
+cells_background_color := V4(cast(v3) 0.4, 1)
 
 File :: struct {
     data:    [] u8,
@@ -166,7 +166,6 @@ main :: proc () {
     
     entropy := seed_random_series()
     collapse: Collapse
-    collapse.search_metric = .Entropy
     
     generates: [dynamic] Generate_Kind
     
@@ -183,38 +182,7 @@ main :: proc () {
         delete(collapse.cells)
     }
     
-    when false {
-        append(&generates, Generate_Grid {
-            center    = {.25, .25},
-            radius = .24,
-        })
-        append(&generates, Generate_Grid {
-            center    = {.25, .75},
-            radius = .24,
-            is_hex = true,
-        })
-        append(&generates, Generate_Grid {
-            center    = {.75, .25},
-            radius = .24,
-            is_hex    = true,
-        })
-        append(&generates, Generate_Grid {
-            center    = {.75, .75},
-            radius = .24,
-        })
-    } else {
-        append(&generates, Generate_Grid {
-            center    = {.5, .5},
-            radius = .51,
-        })
-    }
-    
-    when true {
-        append(&generates, Generate_Noise {
-            center = .5,
-            radius = {0.15, 0.51},
-        })
-    }
+    preset_0(&generates)
     active_generate_index = 0
     
     // @todo(viktor): Can we not rely on this pregen?
@@ -692,6 +660,63 @@ generate_points :: proc(points: ^[dynamic] v2d, count: i32, kind: Generate_Kind)
         }
     }
 }
+
+preset_0 :: proc (generates: ^[dynamic] Generate_Kind) {
+    clear(generates)
+    append(generates, Generate_Grid {
+        center    = {.5, .5},
+        radius = .51,
+    })
+}
+
+preset_2 :: proc (generates: ^[dynamic] Generate_Kind) {
+    clear(generates)
+    append(generates, Generate_Grid {
+        center    = {.5, .5},
+        radius = .51,
+    })
+    
+    append(generates, Generate_Noise {
+        center = .5,
+        radius = {0.15, 0.51},
+    })
+}
+preset_3 :: proc (generates: ^[dynamic] Generate_Kind) {
+    clear(generates)
+    append(generates, Generate_Grid {
+        center    = {.5, .5},
+        radius = .51,
+    })
+    
+    append(generates, Generate_Noise {
+        center = .5,
+        radius = {0.51, 0.15},
+    })
+}
+
+preset_1 :: proc (generates: ^[dynamic] Generate_Kind) {
+    clear(generates)
+    append(generates, Generate_Grid {
+        center    = {.25, .25},
+        radius = .24,
+    })
+    append(generates, Generate_Grid {
+        center    = {.25, .75},
+        radius = .24,
+        is_hex = true,
+    })
+    append(generates, Generate_Grid {
+        center    = {.75, .25},
+        radius = .24,
+        is_hex    = true,
+    })
+    append(generates, Generate_Grid {
+        center    = {.75, .75},
+        radius = .24,
+    })
+}
+
+////////////////////////////////////////////////
 
 draw_cell :: proc (cell: Cell, color: v4) {
     if len(cell.points) == 0 do return

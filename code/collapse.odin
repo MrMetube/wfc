@@ -7,12 +7,11 @@ import rl "vendor:raylib"
 N: i32 : 3
 
 Collapse :: struct {
+    total_frequency: f32,
     states:   [dynamic] State,
     overlaps: [/* State_Id * len(states) + State_Id */] Direction_Mask,
     
     steps: [dynamic] Step,
-    search_metric: Search_Metric,
-    
     cells: [dynamic] Cell,
 }
 
@@ -21,10 +20,7 @@ Collapse_Step :: distinct i32
 
 Invalid_State :: max(State_Id)
 
-Search_Metric :: enum { States, Entropy }
-
 State :: struct {
-    _id:        State_Id,
     frequency: f32,
     middle:    v4,
 }
@@ -67,8 +63,8 @@ Cell :: struct {
     states:     [] State_Entry,
     neighbours: [] Neighbour,
     
-    flags:  Cell_Flags,
-    metric: f32,
+    flags:   Cell_Flags,
+    entropy: f32,
     
     // Visual only
     points: [] v2, // for rendering the voronoi cell
@@ -134,51 +130,30 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
         spall_scope("Find next cell to be collapsed")
         
         spall_begin("Update dirty metrics")
-        switch c.search_metric {
-          case .Entropy:
-            for &cell in c.cells do if .dirty in cell.flags {
-                cell.flags -= { .dirty }
+        for &cell in c.cells do if .dirty in cell.flags {
+            cell.flags -= { .dirty }
+            
+            entropy: f32
+            for state, id in cell.states do if !state.removed {
+                frequency   := c.states[id].frequency
+                probability := frequency / c.total_frequency
                 
-                total_frequency: f32
-                for state, id in cell.states do if !state.removed {
-                    frequency := c.states[id].frequency
-                    
-                    total_frequency += frequency
-                }
-                
-                entropy: f32
-                for state, id in cell.states do if !state.removed {
-                    frequency := c.states[id].frequency
-                    
-                    probability := frequency / total_frequency
-                    
-                    entropy -= probability * log2(probability)
-                }
-                
-                cell.metric = entropy
+                entropy -= probability * log2(probability)
             }
             
-          case .States: 
-            for &cell in c.cells do if .dirty in cell.flags {
-                cell.flags -= { .dirty }
-                
-                for state in cell.states do if !state.removed {
-                    cell.metric += 1
-                }
-            }
+            cell.entropy = entropy
         }
-        
         spall_end()
         
         spall_begin("Search metric")
         lowest := +Infinity
         for &cell in c.cells do if .collapsed not_in cell.flags {
-            if lowest > cell.metric {
-                lowest = cell.metric
+            if lowest > cell.entropy {
+                lowest = cell.entropy
                 clear(&current.found)
             }
             
-            if lowest == cell.metric {
+            if lowest == cell.entropy {
                 append(&current.found, &cell)
             }
         }
@@ -276,17 +251,6 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
         
         assert(change != nil)
         if change != nil {
-            DoBits :: false
-            when DoBits {
-                change_states_ := make([] u64, 1 + len(change.states) / 64, context.temp_allocator)
-                
-                for state, state_index in change.states do if !state.removed {
-                    index := state_index / 64
-                    bit_index := cast(u64) state_index % 64
-                    change_states_[index] |= 1 << bit_index
-                }
-            }
-            
             propagate_remove: for &neighbour in change.neighbours {
                 cell := neighbour.cell
                 if .collapsed in cell.flags do continue
@@ -295,85 +259,24 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
                 states_count := 0
                 did_change := false
                 
-                when DoBits {
-                    cell_states_ := make([] u64, 1 + len(cell.states) / 64, context.temp_allocator)
-                    
-                    for state, state_index in cell.states do if !state.removed {
-                        index := state_index / 64
-                        bit_index := cast(u64) state_index % 64
-                        cell_states_[index] |= 1 << bit_index
-                    }
-                }
-                
                 spall_begin("recalc states")
-                when !DoBits {
-                    count := len(c.states)
-                    recalc_states: for &from, from_id in cell.states do if !from.removed {
-                        supported := false
-                        inner: for to, to_id in change.states do if !to.removed {
-                            #no_bounds_check overlap := c.overlaps[from_id * count + to_id]
-                            masked := overlap & neighbour.mask
-                            if masked != {} {
-                                states_count += 1
-                                supported = true
-                                break inner
-                            }
-                        }
-                        
-                        if !supported {
-                            from.removed = true
-                            from.at = current.step
-                            did_change = true
+                count := len(c.states)
+                recalc_states: for &from, from_id in cell.states do if !from.removed {
+                    supported := false
+                    inner: for to, to_id in change.states do if !to.removed {
+                        #no_bounds_check overlap := c.overlaps[from_id * count + to_id]
+                        masked := overlap & neighbour.mask
+                        if masked != {} {
+                            states_count += 1
+                            supported = true
+                            break inner
                         }
                     }
-                } else {
-                    count_trailing_zeros :: intrinsics.count_trailing_zeros
                     
-                    #no_bounds_check for from, from_removed_index in cell_states_ {
-                        from_it := from
-                        from_index := from_removed_index * 64
-                        recalc_states: for from_it != 0 {
-                            from_zeros := count_trailing_zeros(from_it)
-                            
-                            from_it >>= from_zeros
-                            if from_it & 1 == 0 do continue
-                            
-                            from_index += cast(int) from_zeros
-                            if from_index >= len(c.states) do break recalc_states
-                            
-                            defer from_it >>= 1
-                            defer from_index += 1
-                            
-                            tos: for to, to_removed_index in change_states_ {
-                                to_it := to
-                                
-                                to_index := to_removed_index * 64
-                                for to_it != 0 {
-                                    to_zeros := count_trailing_zeros(to_it)
-                                    
-                                    to_it >>= to_zeros
-                                    if to_it & 1 == 0 do continue
-                                    
-                                    to_index += cast(int) to_zeros
-                                    if to_index >= len(c.states) do break tos
-                                    
-                                    defer to_it >>= 1
-                                    defer to_index += 1
-                                    
-                                    overlap := c.overlaps[from_index * len(c.states) + to_index]
-                                    masked := overlap & neighbour.mask
-                                    if masked != {} {
-                                        states_count += 1
-                                        continue recalc_states
-                                    }
-                                }
-                            }
-                            
-                            state := &cell.states[from_index]
-                            state.removed = true
-                            state.at = current.step
-                            did_change = true
-                        }
+                    if !supported {
+                        from.removed = true
+                        from.at = current.step
+                        did_change = true
                     }
                 }
                 spall_end()
@@ -383,7 +286,7 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
                     
                     if states_count == 0 {
                         entropy := seed_random_series()
-                        // @note(viktor): maybe increase strictness for solved cells
+                        // @note(viktor): maybe reduce heat for solved cells
                         for &cell in c.cells {
                             for &n in cell.neighbours {
                                 if .collapsed in n.cell.flags {
@@ -395,7 +298,7 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
                                     }
                                 } else {
                                     if n.strictness < 8 {
-                                        if random_between(&entropy, f32, 0, 1) < heating_chance {
+                                        if random_between(&entropy, f32, 0, 1) < square(heating_chance) {
                                             n.strictness += 1
                                             n.mask = get_direction_mask(cell.p - n.cell.p, n.strictness)
                                         }
@@ -403,11 +306,13 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
                                 }
                             }
                         }
-                        // @note(viktor): reduce strictness
+                        // @note(viktor): increase heat
                         for it in current.changes {
                             for &n in it.neighbours {
                                 if n.strictness < 8 {
-                                    n.strictness += 1
+                                    if random_between(&entropy, f32, 0, 1) < heating_chance {
+                                        n.strictness += 1
+                                    }
                                 }
                                 n.mask = get_direction_mask(it.p - n.cell.p, n.strictness)
                             }
@@ -573,6 +478,12 @@ extract_states :: proc (c: ^Collapse, pixels: [] rl.Color, width, height: i32, w
         }
     }
     spall_end()
+    
+    total_frequency: f32
+    for state in c.states {
+        total_frequency += state.frequency
+    }
+    c.total_frequency = total_frequency
     
     spall_begin("Overlaps generation")
     make(&c.overlaps, square(len(c.states)))
