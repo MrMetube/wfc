@@ -1,7 +1,6 @@
 package main
 
 import "core:fmt"
-import "core:mem"
 import "core:os/os2"
 import "core:strings"
 import "core:time"
@@ -10,7 +9,7 @@ import rl "vendor:raylib"
 
 /* @todo(viktor):
  - Remove all outdated and unused ideas
- - Get some nice screenshots or process and results
+ - Get some nice screenshots of process and results
  - simplify code and make an overview of the important parts
  */
 
@@ -28,8 +27,8 @@ TargetFrameTime :: 1./TargetFps
 // App
 
 voronoi_shape_t: f32 = 1
-cooling_chance: f32 = 0.1
-heating_chance: f32 = 0.1
+cooling_chance: f32 = 0.0
+heating_chance: f32 = 0.0
 
 total_duration: time.Duration
 
@@ -123,7 +122,7 @@ Frame :: struct {
     reset_strictness: bool,
 }
 
-wrap_in_extraction: [2] bool = true
+wrap_when_extracting: [2] bool = true
 
 desired_dimension := dimension
 active_generate_index: int
@@ -131,17 +130,6 @@ active_generate_index: int
 ////////////////////////////////////////////////
 
 main :: proc () {
-    when true {
-        track: mem.Tracking_Allocator
-        mem.tracking_allocator_init(&track, context.allocator)
-        defer mem.tracking_allocator_destroy(&track)
-        context.allocator = mem.tracking_allocator(&track)
-        
-        defer for _, leak in track.allocation_map {
-            print("%v leaked %v bytes\n", leak.location, leak.size)
-        }
-    }
-    
     rl.SetTraceLogLevel(.WARNING)
     rl.InitWindow(Screen_Size.x, Screen_Size.y, "Wave Function Collapse")
     rl.SetTargetFPS(TargetFps)
@@ -356,14 +344,14 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             }
             clear(&step_depth)
         }
-        /// 0.475 / (3.1415 * 2 ) * 360
+        
         if .extract_states in this_frame.tasks {
             this_frame.tasks -= { .extract_states }
             
             assert(this_frame.pixels != nil)
             
             collapse_reset(c)
-            extract_states(c, this_frame.pixels, this_frame.pixels_dimension.x, this_frame.pixels_dimension.y, wrap_in_extraction)
+            extract_states(c, this_frame.pixels, this_frame.pixels_dimension.x, this_frame.pixels_dimension.y, wrap_when_extracting)
             
             setup_cells(c, true)
             
@@ -473,9 +461,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                     wait_until_this_state = nil
                 }
             }
-        }
-        
-        spall_flush()
+        }        
     }
 }
 

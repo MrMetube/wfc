@@ -160,9 +160,9 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
     imgui.end()
     
     imgui.begin("Extraction")
-        imgui.checkbox("Wrap X", &wrap_in_extraction.x)
+        imgui.checkbox("Wrap X", &wrap_when_extracting.x)
         imgui.same_line()
-        imgui.checkbox("Wrap Y", &wrap_in_extraction.y)
+        imgui.checkbox("Wrap Y", &wrap_when_extracting.y)
         
         imgui.text("Tile Size = 3x3")
         imgui.text("Select an input image")
