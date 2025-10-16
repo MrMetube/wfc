@@ -1,25 +1,50 @@
 \section{Stand der Technik}
 \subsection{Model Synthesis - Paul Merrell}
-% \begin{itemize}
-%     \item Original Idea based on texture synthesis
-%     \item is this true? discrete version of continous texture synthesis
-%     \item Rough overview of the methodology
-%     \item Key advantages over previous methods
-% \end{itemize}
+\url{https://gamma.cs.unc.edu/synthesis/papers/model_synthesis.pdf}
+\begin{itemize}
+    \item Improvements on texture synthesis: Global Search, iterative overlapping Local Area Solves 
+    \item better consistency and higher success rate, because some choice have global or large areas of effect
+    \item local area solves are faster and overlapping allows for information to pass from one subarea to another and patterns to be created that are larger than one subarea
+    \item the complete grid is initialized to an 'empty' value and only subareas are set to the complete superposition and then collapsed
+    \item can also easily enforce symmetry by adapting the transition function T with the symmetry function S
+    \item can also solve with soft constraints to the output
+\end{itemize}
 
 \subsection{Wave Function Collapse - Maxim Gumin}
+\url{https://github.com/mxgmn/WaveFunctionCollapse?tab=readme-ov-file}
+
 \begin{itemize}
-    \item WFC - Renaming and popularization
+    \item The name is inspired by Quantum Mechanics, the link being that cells are in a state of superposition before they are observed and collapse into a single state. besides this structural pun, there is no usage of the mathematics of QM
+    \item in the collapse/observation phase, we pick the cell with the lowest\\ Shannon-Entropy, before we just iterate through the array of cells without regard for their properties or arrangement in the output
     \item Overlapping tiles in extraction and for overlap checking
     \item search for lowest entropy (find explaination for added noise in code)
+    \item @todo(viktor): Tilesets and Overlapping Model(NxM), automatic extraction of rules, 
 \end{itemize}
 
-\subsection{Town Scaper - Oskar Stålberg}
+\subsubsection{WFC Algorithm}
+\url{https://github.com/mxgmn/WaveFunctionCollapse?tab=readme-ov-file#algorithm}
+
+\begin{enumerate}
+    \item Read the input bitmap and count NxN patterns.
+    \subitem (optional) Augment pattern data with rotations and reflections.
+    \item Create an array with the dimensions of the output (called ''wave'' in the source). Each element of this array represents a state of an NxN region in the output. A state of an NxN region is a superposition of NxN patterns of the input with boolean coefficients (so a state of a pixel in the output is a superposition of input colors with real coefficients). False coefficient means that the corresponding pattern is forbidden, true coefficient means that the corresponding pattern is not yet forbidden.
+    \item Initialize the wave in the completely unobserved state, i.e. with all the boolean coefficients being true.
+    \item Repeat the following steps:
+    \subitem Observation:
+    \subsubitem Find a wave element with the minimal nonzero entropy. If there is no such elements (if all elements have zero or undefined entropy) then break the cycle (4) and go to step (5).
+    \subsubitem Collapse this element into a definite state according to its coefficients and the distribution of NxN patterns in the input.
+    \item Propagation: propagate information gained on the previous observation step.
+    \item By now all the wave elements are either in a completely observed state (all the coefficients except one being zero) or in the contradictory state (all the coefficients being zero). In the first case return the output. In the second case finish the work without returning anything.
+\end{enumerate}
+
+    
+
+\subsection{Oskar Stålberg}
 \begin{itemize}
-    \item use case in 3D
+    \item Bad North
+    \item Town Scaper
     \item aperiodic infinite deterministic irregular relaxed quadrilateral grids
 \end{itemize}
-
 
 
 \section{Begriffe}
@@ -45,7 +70,7 @@
 
 
 
-\section{Unregelmäßige Gitter}
+\section{Unregelmäßige Gitter - planare Graphen}
 
 \subsection{Delaunay Triangulation}
 \begin{itemize}
