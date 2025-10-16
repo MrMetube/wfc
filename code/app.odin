@@ -1,7 +1,7 @@
 package main
 
 import rl "vendor:raylib"
-import "lib:imgui"
+import imgui "../lib/imgui"
 
 step_depth: [dynamic] f32
 
@@ -10,10 +10,10 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
     current := len(c.steps) != 0 ? peek(c.steps)^ : {}
     
     imgui.begin("Stats")
-        imgui.text(tprint("Total time %",  view_time_duration(total_duration, precision = 3)))
+        imgui.text("Total time %v", total_duration)
         
         tile_count := len(c.states)
-        imgui.text(tprint("Tile count %", tile_count))
+        imgui.text("Tile count %v", tile_count)
         
         imgui.plot_lines_float_ptr("Depth", raw_data(step_depth), auto_cast len(step_depth), graph_size = {0, 100})
         
@@ -30,7 +30,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
             
             if imgui.button("Update once") do this_frame.tasks += { .update }
             
-            imgui.text(tprint("%", current.state))
+            imgui.text("v%", current.state)
         } else {
             if imgui.button("Pause") do paused = true
             this_frame.tasks += { .update }
@@ -83,7 +83,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
             for _, index in generates {
                 is_active := index == active_generate_index
                 if index != 0 do imgui.same_line()
-                if imgui.radio_button(tprint("%", index), is_active) do active_generate_index = index
+                if imgui.radio_button(tprint("%v", index), is_active) do active_generate_index = index
             }
             imgui.same_line()
             if imgui.button("New") {
@@ -156,17 +156,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         imgui.checkbox("Show Cells", &show_cells)
         imgui.checkbox("Show Average Colors", &show_average_colors)
         imgui.checkbox("Show Voronoi Cells", &show_voronoi_cells)
-        imgui.text("Show Neighbours")
-        shows := [Show_Neighbour] string {
-            .None = "off", 
-            .Neighbour_Count = "neighbour count", 
-            .Direction_Fit = "direction fit",
-            .Picked = "final pick",
-            .Strictness = "strictness",
-        }
-        for text, mode in shows {
-            if imgui.radio_button(text, show_neighbours == mode) do show_neighbours = mode
-        }
+        imgui.checkbox("Show Strictness", &show_strictness)
     imgui.end()
     
     imgui.begin("Extraction")
@@ -174,7 +164,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         imgui.same_line()
         imgui.checkbox("Wrap Y", &wrap_in_extraction.y)
         
-        imgui.text("Tile Size = 3")
+        imgui.text("Tile Size = 3x3")
         imgui.text("Select an input image")
         {
             imgui.get_content_region_avail(&region)
@@ -236,7 +226,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         
         imgui.get_content_region_avail(&region)
         for direction in Direction {
-            imgui.progress_bar(direction in closeness ? 1 : 0, {region.x, 0}, overlay=tprint("%", direction))
+            imgui.progress_bar(direction in closeness ? 1 : 0, {region.x, 0}, overlay = tprint("%v", direction))
         }
     imgui.end()
 }

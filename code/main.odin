@@ -1,5 +1,6 @@
 package main
 
+import "core:fmt"
 import "core:mem"
 import "core:os/os2"
 import "core:strings"
@@ -12,7 +13,11 @@ import rl "vendor:raylib"
  - Get some nice screenshots or process and results
  - simplify code and make an overview of the important parts
  */
- 
+
+print :: fmt.printf
+tprint :: fmt.tprintf
+ctprint :: fmt.ctprintf
+
 Screen_Size  :: v2i{1920, 1080}
 Viewing_Size :: v2i{1024, 1024}
 
@@ -36,9 +41,9 @@ cell_size_on_screen: v2
 show_cells          := true
 show_average_colors := true
 show_voronoi_cells  := false
+
 show_step_details   := false
-show_neighbours: Show_Neighbour = .Strictness
-Show_Neighbour :: enum { None, Neighbour_Count, Direction_Fit, Picked, Strictness }
+show_strictness     := true
 
 // @todo(viktor): visual dimension vs. point count for generates
 dimension: v2i = {66, 66}
@@ -133,7 +138,7 @@ main :: proc () {
         context.allocator = mem.tracking_allocator(&track)
         
         defer for _, leak in track.allocation_map {
-            print("% leaked %\n", leak.location, view_memory_size(leak.size))
+            print("%v leaked %v bytes\n", leak.location, leak.size)
         }
     }
     
@@ -154,14 +159,14 @@ main :: proc () {
     image_dir := "./images"
     file_type := ".png"
     infos, err := os2.read_directory_by_path(image_dir, 0, context.temp_allocator)
-    if err != nil do print("Error reading dir %: %", image_dir, err)
+    if err != nil do print("Error reading dir %v: %v", image_dir, err)
     for info in infos {
         if info.type == .Regular {
             if strings.ends_with(info.name, file_type) {
                 data, ferr := os2.read_entire_file(info.fullpath, context.allocator)
-                if ferr != nil do print("Error reading file %:%\n", info.name, ferr)
+                if ferr != nil do print("Error reading file %v:%v\n", info.name, ferr)
                 
-                cstr := cast(cstring) raw_data(tprint("%", file_type, flags = { .AppendZero }))
+                cstr := ctprint("%v", file_type)
                 
                 image := File { data = data }
                 image.image   = rl.LoadImageFromMemory(cstr, raw_data(image.data), auto_cast len(image.data))
@@ -284,7 +289,7 @@ main :: proc () {
         }
         
         // @todo(viktor): Find a way to determine if a lattice is "solveable" or if it has cells that will need "areal" rules, rules that allow same states in all or most directions
-        if show_neighbours == .Strictness {
+        if show_strictness {
             for cell in collapse.cells {
                 center := world_to_screen(cell.p)
                 
@@ -300,88 +305,6 @@ main :: proc () {
                     }
                     
                     end := world_to_screen(neighbour.cell.p)
-                    rl.DrawLineEx(center, end, 2, v4_to_rl_color(color))
-                }
-            }
-        } else if show_neighbours == .Picked {
-            for &cell in collapse.cells {
-                if .collapsed not_in cell.flags || .edge in cell.flags do continue
-                
-                get_state :: proc (cell: ^Cell, at: Collapse_Step) -> (result: State_Id) {
-                    count: int
-                    for state, index in cell.states {
-                        if state.at > at {
-                            result = auto_cast index
-                            count += 1
-                        }
-                    }
-                    assert(count == 1)
-                    return result
-                }
-                
-                cell_state := get_state(&cell, current.step)
-                for neighbour in cell.neighbours {
-                    if .collapsed not_in neighbour.cell.flags || .edge in neighbour.cell.flags do continue
-                    neighbour_state := get_state(neighbour.cell, current.step)
-                    
-                    entry := collapse.overlaps[neighbour_state * auto_cast len(collapse.states) + cell_state]
-                    
-                    assert(entry & neighbour.mask != {})
-                }
-            }
-        } else if show_neighbours != .None {
-            for cell in collapse.cells {
-                color := Emerald
-                count_color: v4
-                switch len(cell.neighbours) {
-                  case 0..<4: count_color = Emerald // under constraint
-                  case 4..<8: count_color = Orange  // medium
-                  case:       count_color = Red     // over constraint
-                }
-                if show_neighbours == .Neighbour_Count {
-                    color = count_color
-                    if color == Red {
-                        draw_cell_outline(cell, v4_to_rl_color(color))
-                    }
-                    color = 0
-                }
-                
-                center := world_to_screen(cell.p)
-                for neighbour in cell.neighbours {
-                    end := world_to_screen(neighbour.cell.p)
-                    if show_neighbours == .Direction_Fit {
-                        fits_perfect := false
-                        fits_ok := false
-                        sampling_normal := normalize(neighbour.cell.p - cell.p)
-                        threshold_perfect := cos(cast(f32) 1./64. * Tau)  
-                        threshold_ok      := cos(cast(f32) 1./32. * Tau) 
-                        threshold_3       := cos(cast(f32) 1./16. * Tau) 
-                        _ = threshold_3
-                        // 1/64 ~ 5.625°
-                        // 1/32 ~ 11.25° 
-                        // 1/16 ~ 22.5° 
-                        for direction in Direction {
-                            normal := normalized_direction(direction)
-                            closeness := dot(sampling_normal, normal)
-                            if closeness >= threshold_perfect {
-                                fits_perfect = true
-                                break
-                            }
-                            if closeness >= threshold_ok {
-                                fits_ok = true
-                                break
-                            }
-                        }
-                        if count_color == Red {
-                            color = Red
-                            if fits_ok do color = Orange
-                            if fits_perfect do color = Emerald
-                            draw_cell_outline(cell, v4_to_rl_color(color))
-                            color = 0
-                        } else {
-                            color = 0
-                        }
-                    }
                     rl.DrawLineEx(center, end, 2, v4_to_rl_color(color))
                 }
             }

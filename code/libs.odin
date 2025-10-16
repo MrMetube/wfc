@@ -2,8 +2,8 @@
 package main
 
 import rl "vendor:raylib"
-import "lib:imgui"
-import rlimgui "lib:imgui/impl/raylib"
+import "../lib/imgui"
+import rlimgui "../lib/imgui/impl/raylib"
 
 
 rl_color_to_v4 :: proc (color: rl.Color) -> (result: v4) {
