@@ -42,7 +42,7 @@ show_average_colors := true
 show_voronoi_cells  := false
 
 show_step_details   := false
-show_strictness     := true
+show_heat           := true
 
 // @todo(viktor): visual dimension vs. point count for generates
 dimension: v2i = {100, 100}
@@ -60,7 +60,9 @@ viewing_step: Collapse_Step
 
 ////////////////////////////////////////////////
 
-base_strictness: i32 = 1
+
+// @todo(viktor): min max desired and gradual cooldown over time/steps?
+base_heat: i32 = 1
 
 Direction :: enum {
     E, NE, N, NW, W, SW, S, SE,
@@ -119,7 +121,7 @@ Frame :: struct {
     
     // rewind
     rewind_to: Collapse_Step,
-    reset_strictness: bool,
+    reset_heat: bool,
 }
 
 wrap_when_extracting: [2] bool = true
@@ -245,19 +247,17 @@ main :: proc () {
         }
         
         // @todo(viktor): Find a way to determine if a lattice is "solveable" or if it has cells that will need "areal" rules, rules that allow same states in all or most directions
-        if show_strictness {
+        if show_heat {
             for cell in collapse.cells {
                 center := world_to_screen(cell.p)
                 
                 for neighbour in cell.neighbours {
-                    color := Emerald
+                    color := Blue
                     
-                    if neighbour.strictness > 1 {
-                        color = linear_blend(Emerald, Orange, cast(f32) (neighbour.strictness - 1) / (5-1))
-                    }
-                    
-                    if neighbour.strictness > 5 {
-                        color = linear_blend(Orange, Red, cast(f32) (neighbour.strictness - 5) / (8-5))
+                    if neighbour.heat < 5 {
+                        color = linear_blend(Blue, Jasmine, cast(f32) (neighbour.heat) / 5)
+                    } else {
+                        color = linear_blend(Jasmine, Red, cast(f32) (neighbour.heat - 5) / (8-5))
                     }
                     
                     end := world_to_screen(neighbour.cell.p)
@@ -288,10 +288,10 @@ main :: proc () {
     }
 }
 
-restart :: proc (this_frame: ^Frame, reset_strictness := false) {
+restart :: proc (this_frame: ^Frame, reset_heat := false) {
     this_frame.tasks += { .rewind }
     this_frame.rewind_to = 0
-    this_frame.reset_strictness = reset_strictness
+    this_frame.reset_heat = reset_heat
 }
 
 do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSeries, generates: ^[dynamic] Generate_Kind) {
@@ -370,7 +370,7 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 spall_scope("Restart")
                 
                 total_duration = 0
-                setup_cells(c, this_frame.reset_strictness)
+                setup_cells(c, this_frame.reset_heat)
             } else {
                 for &cell in c.cells {
                     for &state in cell.states {
@@ -440,9 +440,9 @@ setup_cells :: proc (c: ^Collapse, is_total_reset: bool) {
         
         for &neighbour in cell.neighbours {
             if is_total_reset {
-                neighbour.strictness = cast(u8) base_strictness
+                neighbour.heat = cast(u8) base_heat
             }
-            neighbour.mask = get_direction_mask(cell.p - neighbour.cell.p, neighbour.strictness)
+            neighbour.mask = get_direction_mask(cell.p - neighbour.cell.p, neighbour.heat)
         }
         if len(cell.states) != len(c.states) {
             delete(cell.states)
@@ -527,7 +527,7 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, generates: ^[dynamic] 
         for neighbour_index, index in voronoi.neighbour_indices {
             neighbour := &cell.neighbours[index]
             neighbour.cell = &c.cells[neighbour_index]
-            neighbour.strictness = cast(u8) base_strictness
+            neighbour.heat = cast(u8) base_heat
         }
     }
     

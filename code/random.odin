@@ -26,6 +26,7 @@ seed_random_series_manual :: proc(#any_int seed: u32) -> (result: RandomSeries) 
 next_random_lane_u32 :: xor_shift
 next_random_u32 :: proc (series: ^RandomSeries) ->  (result: u32) {
     next_random_lane_u32(series)
+    result = extract(series.state, 0)
     result = rand.uint32()
     return result
 }

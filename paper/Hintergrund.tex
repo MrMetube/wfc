@@ -3,7 +3,7 @@
 \url{https://gamma.cs.unc.edu/synthesis/papers/model_synthesis.pdf}
 \begin{itemize}
     \item Improvements on texture synthesis: Global Search, iterative overlapping Local Area Solves 
-    \item better consistency and higher success rate, because some choice have global or large areas of effect
+    \item better consistency and higher success rate, because we take into account that some choice have global or large areas of effect
     \item local area solves are faster and overlapping allows for information to pass from one subarea to another and patterns to be created that are larger than one subarea
     \item the complete grid is initialized to an 'empty' value and only subareas are set to the complete superposition and then collapsed
     \item can also easily enforce symmetry by adapting the transition function T with the symmetry function S
@@ -57,6 +57,7 @@
 \end{itemize}
 
 \section{Prozedurale Generierung}
+
 \section{Wave Function Collapse}
 \begin{itemize}
     \item Ein Algorithmus zur prozeduralen Generierung von 2D oder 3D Strukturen 
@@ -71,7 +72,10 @@
 
 
 \section{Unregelmäßige Gitter - planare Graphen}
-
+% https://en.wikipedia.org/wiki/Delaunay_triangulation
+% https://en.wikipedia.org/wiki/Voronoi_diagram
+% https://de.wikipedia.org/wiki/Polygonnetz
+% https://en.wikipedia.org/wiki/Triangulated_irregular_network
 \subsection{Delaunay Triangulation}
 \begin{itemize}
     \item Defintion der Triangulierung

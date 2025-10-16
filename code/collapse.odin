@@ -77,7 +77,8 @@ Direction_Mask :: bit_set[Direction; u8]
 Neighbour :: struct {
     cell: ^Cell,
     mask: Direction_Mask,
-    strictness: u8,
+    // @todo(viktor): try this with a float and then round or floor to u8?
+    heat: u8,
 }
 
 State_Entry :: bit_field i32 {
@@ -98,12 +99,8 @@ collapse_reset :: proc (c: ^Collapse) {
 
 ////////////////////////////////////////////////
 
-get_direction_mask :: proc (sampling_direction: v2, strictness: u8) -> (result: Direction_Mask) {
-    threshold := cos((cast(f32) strictness) / 16 * Tau)
-    result = get_direction_mask_with_threshold(sampling_direction, threshold)
-    return result
-}
-get_direction_mask_with_threshold :: proc (sampling_direction: v2, threshold: f32) -> (result: Direction_Mask) {
+get_direction_mask :: proc (sampling_direction: v2, heat: u8) -> (result: Direction_Mask) {
+    threshold := cos((cast(f32) heat) / 16 * Tau)
     for other in Direction {
         sampling_normal := normalize(sampling_direction)
         other_normal    := normalized_direction(other)
@@ -113,7 +110,6 @@ get_direction_mask_with_threshold :: proc (sampling_direction: v2, threshold: f3
             result += { other }
         }
     }
-    
     return result
 }
 
@@ -291,30 +287,30 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
                             for &n in cell.neighbours {
                                 if .collapsed in n.cell.flags {
                                         if random_between(&entropy, f32, 0, 1) < cooling_chance {
-                                        if n.strictness > 1 {
-                                            n.strictness -= 1
-                                            n.mask = get_direction_mask(cell.p - n.cell.p, n.strictness)
+                                        if n.heat > 1 {
+                                            n.heat -= 1
+                                            n.mask = get_direction_mask(cell.p - n.cell.p, n.heat)
                                         }
                                     }
                                 } else {
-                                    if n.strictness < 8 {
-                                        if random_between(&entropy, f32, 0, 1) < square(heating_chance) {
-                                            n.strictness += 1
-                                            n.mask = get_direction_mask(cell.p - n.cell.p, n.strictness)
-                                        }
-                                    }
+                                    // if n.heat < 8 {
+                                    //     if random_between(&entropy, f32, 0, 1) < square(heating_chance) {
+                                    //         n.heat += 1
+                                    //         n.mask = get_direction_mask(cell.p - n.cell.p, n.heat)
+                                    //     }
+                                    // }
                                 }
                             }
                         }
                         // @note(viktor): increase heat
                         for it in current.changes {
                             for &n in it.neighbours {
-                                if n.strictness < 8 {
+                                if n.heat < 8 {
                                     if random_between(&entropy, f32, 0, 1) < heating_chance {
-                                        n.strictness += 1
+                                        n.heat += 1
                                     }
                                 }
-                                n.mask = get_direction_mask(it.p - n.cell.p, n.strictness)
+                                n.mask = get_direction_mask(it.p - n.cell.p, n.heat)
                             }
                         }
                             

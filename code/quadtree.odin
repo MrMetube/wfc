@@ -14,7 +14,7 @@ Quad_Tree :: struct ($D: typeid) {
 
 Quad_Node :: struct ($D: typeid) {
     parent:   ^Quad_Node(D),
-    children: ^[4]Quad_Node(D),
+    children: ^[4] Quad_Node(D),
     order:    Quad_Order,
     bounds:   Rectangle2d,
     sentinel: Quad_Entry(D),

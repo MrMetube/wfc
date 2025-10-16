@@ -14,8 +14,9 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         
         tile_count := len(c.states)
         imgui.text("Tile count %v", tile_count)
+        imgui.text("Depth")
         
-        imgui.plot_lines_float_ptr("Depth", raw_data(step_depth), auto_cast len(step_depth), graph_size = {0, 100})
+        imgui.plot_lines_float_ptr("##Depth", raw_data(step_depth), auto_cast len(step_depth))
         
     imgui.end()
     
@@ -151,7 +152,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         imgui.checkbox("Show Cells", &show_cells)
         imgui.checkbox("Show Average Colors", &show_average_colors)
         imgui.checkbox("Show Voronoi Cells", &show_voronoi_cells)
-        imgui.checkbox("Show Strictness", &show_strictness)
+        imgui.checkbox("Show Heat", &show_heat)
     imgui.end()
     
     imgui.begin("Extraction")
@@ -197,18 +198,17 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         }
     imgui.end()
     
-    imgui.begin("Neighbourhood")
+    imgui.begin("Heat")
         imgui.get_content_region_avail(&region)
         
-        imgui.text("Directional Strictness")
         imgui.push_item_width(region.x*0.5)
-        if imgui.slider_int("Base Strictness", &base_strictness, 1, 8) {
+        if imgui.slider_int("Base", &base_heat, 1, 8) {
             restart(this_frame, true)
         }
-        if imgui.slider_float("cooling chance", &cooling_chance, 0, 1, flags = .Logarithmic) {
+        if imgui.slider_float("Cooling Chance", &cooling_chance, 0, 1, flags = .Logarithmic) {
             restart(this_frame, true)
         }
-        if imgui.slider_float("heating chance", &heating_chance, 0, 1, flags = .Logarithmic) {
+        if imgui.slider_float("Heating Chance", &heating_chance, 0, 1, flags = .Logarithmic) {
             restart(this_frame, true)
         }
         imgui.pop_item_width()
