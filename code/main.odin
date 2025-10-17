@@ -36,7 +36,8 @@ show_average_colors := true
 show_voronoi_cells  := false
 
 show_step_details   := false
-show_heat           := true
+show_heat           := false
+show_entropy        := true
 
 // @todo(viktor): visual dimension vs. point count for generates
 dimension: v2i = {100, 100}
@@ -219,12 +220,27 @@ main :: proc () {
         }
         
         if show_cells {
+            max_entropy: f32
+            for id in 0..<len(collapse.states) {
+                frequency   := collapse.states[id].frequency
+                probability := frequency / collapse.total_frequency
+                
+                max_entropy -= probability * log2(probability)
+            }
             spall_begin("draw cells")
             for &cell in collapse.cells {
                 if .edge in cell.flags do continue
                 
+                color: v4
                 if show_average_colors || .collapsed in cell.flags {
-                    color := calculate_average_color(&collapse, &cell)
+                    color = calculate_average_color(&collapse, &cell)
+                }
+                if show_entropy {
+                    t := cell.entropy / max_entropy
+                    color = linear_blend(color, Red, t)
+                }
+                
+                if color.a != 0 {
                     draw_cell(cell, color)
                 }
             }
@@ -367,9 +383,10 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
                 setup_cells(c, this_frame.reset_heat)
             } else {
                 for &cell in c.cells {
-                    for &state in cell.states {
-                        if state.removed && state.at >= current.step {
-                            state = {}
+                    for &state_at, id in cell.states_at {
+                        if cell_state_removed(&cell, id) && state_at >= current.step {
+                            set_cell_state_ok(&cell, id, true)
+                            state_at = {}
                             cell.flags += { .dirty }
                             cell.flags -= { .collapsed }
                         }
@@ -397,8 +414,8 @@ do_tasks_in_order :: proc (this_frame: ^Frame, c: ^Collapse, entropy: ^RandomSer
             switch result.kind {
               case .Complete: break task_loop
               case .Next:     
-                append(&c.steps, Step { step = current.step + 1 })
                 append(&step_depth, cast(f32) current.step)
+                append(&c.steps, Step { step = current.step + 1 })
                 fallthrough
               case .Continue: 
                 next_frame.tasks += { .update }
@@ -438,13 +455,18 @@ setup_cells :: proc (c: ^Collapse, is_total_reset: bool) {
             }
             neighbour.mask = get_direction_mask(cell.p - neighbour.cell.p, neighbour.heat)
         }
-        if len(cell.states) != len(c.states) {
-            delete(cell.states)
-            make(&cell.states, len(c.states))
+        
+        if len(cell.states_at) != len(c.states) {
+            delete(cell.states_at)
+            delete(cell.states_ok)
+            make(&cell.states_at, len(c.states))
+            make(&cell.states_ok, (len(c.states) / 64)+1)
+        } else {
+            for &it in cell.states_at do it = {}
         }
         
-        for &state in cell.states {
-            state = {}
+        for state in 0..<len(c.states) {
+            set_cell_state_ok(&cell, state, true)
         }
     }
 }
