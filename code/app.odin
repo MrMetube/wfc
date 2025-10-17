@@ -21,6 +21,9 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
     imgui.end()
     
     imgui.begin("Controls")
+        if imgui.button("Restart") do restart(this_frame)
+        imgui.same_line()
+        
         if paused {
             if imgui.button("Unpause") do paused = false
             
@@ -28,18 +31,16 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
                 this_frame.tasks += { .update }
                 wait_until_this_state = cast(Step_State) ((cast(int) current.state + 1) % len(Step_State))
             }
+            imgui.same_line()
             
             if imgui.button("Update once") do this_frame.tasks += { .update }
+            imgui.same_line()
             
             imgui.text("%v", current.state)
         } else {
             if imgui.button("Pause") do paused = true
             this_frame.tasks += { .update }
         }
-        
-        if imgui.button("Restart") do restart(this_frame)
-        
-        imgui.slider_float("t", &voronoi_shape_t, 0, 1)
         
         imgui.text("Steps")
         imgui.get_content_region_avail(&region)
@@ -50,8 +51,9 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         imgui.pop_item_width()
         
         if viewing_step_detached {
-            if imgui.button("View latest step") do viewing_step_detached = false
-            if imgui.button("Rewind to viewed step") {
+            if imgui.button("View latest") do viewing_step_detached = false
+            imgui.same_line()
+            if imgui.button("Rewind to here") {
                 this_frame.tasks += { .rewind  }
                 this_frame.rewind_to = viewing_step
                 viewing_step_detached = false
@@ -94,51 +96,48 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
             if active_generate_index >= 0 && active_generate_index < len(generates) { // Active one
                 generate := &generates[active_generate_index]
                 
-                grid, is_grid := &generate.(Generate_Grid)
+                if imgui.button("Remove") do ordered_remove(generates, active_generate_index)
+                
+                _, is_grid := &generate.(Generate_Grid)
+                _, is_circle := &generate.(Generate_Circle)
+                _, is_noise := &generate.(Generate_Noise)
                 if imgui.radio_button("Square", is_grid) {
                     generate ^= Generate_Grid {
                         radius = 0.51,
                         center = 0.5,
                     }
                 }
-                if is_grid {
-                    imgui.indent(); defer imgui.unindent()
-                    imgui.push_item_width(region.x/2); defer imgui.pop_item_width()
-                    
-                    imgui.slider_float("angle", &grid.angle, 0, Tau/4)
-                    imgui.slider_float2("center", &grid.center, 0, 1)
-                    imgui.slider_float2("radius", &grid.radius, 0, 1)
-                    imgui.checkbox("hexagonal", &grid.is_hex)
-                }
-                
-                circle, is_circle := &generate.(Generate_Circle)
+                imgui.same_line()
                 if imgui.radio_button("Circular", is_circle) {
-                    generate ^= Generate_Circle { radius = .5, spiral_size = 0 }
+                    generate ^= Generate_Circle { radius = .5, spiral_size = 1 }
                 }
-                if is_circle {
-                    imgui.indent();                    defer imgui.unindent()
-                    imgui.push_item_width(region.x/2); defer imgui.pop_item_width()
-                    
-                    imgui.slider_float("radius", &circle.radius, 0, 1)
-                    imgui.slider_float("spiral", &circle.spiral_size, 0, 2)
-                }
-                
-                noise, is_noise := &generate.(Generate_Noise)
+                imgui.same_line()
                 if imgui.radio_button("Noise", is_noise) {
                     generate ^= Generate_Noise {
                         radius = 0.51,
                         center = 0.5,
                     }
                 }
-                if is_noise {
-                    imgui.indent(); defer imgui.unindent()
+                
+                imgui.indent(); defer imgui.unindent()
+                imgui.push_item_width(region.x/2); defer imgui.pop_item_width()
+                switch &kind in generate {
+                case Generate_Grid:
+                    imgui.slider_float("angle", &kind.angle, 0, Tau/4)
+                    imgui.slider_float2("center", &kind.center, 0, 1)
+                    imgui.slider_float2("radius", &kind.radius, 0, 1)
+                    imgui.checkbox("hexagonal", &kind.is_hex)
                     
-                    imgui.slider_float2("center", &noise.center, 0, 1)
-                    imgui.slider_float2("radius", &noise.radius, 0, 1)
-                    imgui.checkbox("blue noise", &noise.is_blue)
+                case Generate_Circle:
+                    imgui.slider_float("radius", &kind.radius, 0, 1)
+                    imgui.slider_float("spiral", &kind.spiral_size, 0, 2)
+                    
+                case Generate_Noise:
+                    imgui.slider_float2("center", &kind.center, 0, 1)
+                    imgui.slider_float2("radius", &kind.radius, 0, 1)
+                    imgui.checkbox("blue noise", &kind.is_blue)    
                 }
                 
-                if imgui.button("Remove") do ordered_remove(generates, active_generate_index)
             }
         }
     imgui.end()
@@ -153,6 +152,11 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         imgui.checkbox("Show Average Colors", &show_average_colors)
         imgui.checkbox("Show Voronoi Cells", &show_voronoi_cells)
         imgui.checkbox("Show Heat", &show_heat)
+        
+        imgui.get_content_region_avail(&region)
+        imgui.push_item_width(region.x*1/2)
+        imgui.slider_float("Cell Size", &voronoi_shape_t, 0, 1)
+        imgui.pop_item_width()
     imgui.end()
     
     imgui.begin("Extraction")
