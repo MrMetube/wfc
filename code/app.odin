@@ -63,7 +63,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         }
         
         imgui.text("Grid")
-        imgui.slider_int2("Size", &desired_dimension, 3, 300, flags = .Logarithmic)
+        imgui.slider_int2("Size", &desired_dimension, 3, 500, flags = .Logarithmic)
         
         if imgui.button("Generate Grid") {
             this_frame.tasks += { .setup_grid }
@@ -152,6 +152,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         imgui.checkbox("Show Average Colors", &show_average_colors)
         imgui.checkbox("Show Voronoi Cells", &show_voronoi_cells)
         imgui.checkbox("Show Heat", &show_heat)
+        imgui.checkbox("Show Entropy", &show_entropy)
         
         imgui.get_content_region_avail(&region)
         imgui.push_item_width(region.x*1/2)
@@ -172,6 +173,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
             pad: f32 = 6
             columns := max(1, round(int, region.x / (image_width+pad)))
             imgui.push_item_width(image_width)
+            @static selected_image_index: int
             image_index := 0
             for _, &image in images {
                 defer image_index += 1
@@ -179,7 +181,11 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
                 if image_index % columns != 0 do imgui.same_line()
                 
                 imgui.push_id(&image)
-                if imgui.image_button(auto_cast &image.texture.id, size = image_width*0.8, frame_padding = 1) {
+                factor: f32 = 0.7
+                if image_index == selected_image_index do factor = 0.8
+                
+                if imgui.image_button(auto_cast &image.texture.id, size = image_width*factor, frame_padding = 1) {
+                    selected_image_index = image_index
                     if image.image.format == .UNCOMPRESSED_R8G8B8 {
                         make(&this_frame.pixels, image.image.width * image.image.height, context.temp_allocator)
                         
