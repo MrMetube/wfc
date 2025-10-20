@@ -22,7 +22,8 @@
     \item Zum Beispiel nehmen wir den oberen-linke 2x2 Ausschnitt von Zustand A und vergleichen ihn mit dem unteren-rechten 2x2 Ausschnitt von Zustand B. Sind diese gleich so kann B im Nordwesten von A sein oder andersherum A im Südosten von B.
 \end{itemize}
 
-\section{Prozedurale Voronoi-Graphen}
+\section{Output Graphen} @naming
+\section{Generierung von Voronoi-Graphen}
 @todo(viktor): Erklärung der Generierung separat zur erklärung der Anforderung an den Graphen auf dem der Algorithmus laufen soll  
 \begin{itemize}
     \item Der Algorithmus arbeitet auf einem gegebenen Graphen. Die Verteilung der Zellen kann regelmäßig oder ohne Struktur sein. Es muss kann auch über den Graphen hinweg variieren. Jede Zelle hat eine 2D Position und jeder Zelle müssen alle ihre Nachbarzellen zugewiesen werden. Zellen sind benachbart, wenn sie eine Kante teilen. Eine Kante sind alle Punkte die gleichweit von zwei Zellenmittelpunkten entfernt sind. 
@@ -31,24 +32,36 @@
     \item Zu Beginn des Wave Function Collapse werden alle Zellen mit einer Superposition aller möglichen Zustände initialisiert.
 \end{itemize}
 
-\section{Collapse Cells}
-\begin{itemize}
-    \item what are steps?
-    \item the step control flow diagram?
-    \subitem add "loop until the grid is fully collapsed"
-    @todo(viktor): Erst den allgemeinen Ablauf ohne Backtracking und dann erklären wo und wie Backtracking eingebaut werden kann 
-\end{itemize}
+\section{Collapse Cells - Step}
+\begin{enumerate}
+    \item Search: ermittle alle Zellen mit der geringsten Entropie (Shannon - Entropie) die noch nicht Collapsed ist
+    \item Pick: wähle eine der gefundenen Zellen
+    \item Collapse: wähle aus der Menge an noch möglichen Zuständen einen aus, skalierte Chance basiert auf dessen Frequenz in der Eingabe
+    \item Propagate: Keep a list of cells that changed. Add the collapsed cell onto the list. Then until its empty:
+    \subitem Pop off a changed cell and for each of its neighbours recalculate their set of possible states. If any state became impossible, append that neighbour onto the list. If any neighbour now has no more possible states we reached a contradiction.
+\end{enumerate}
+
+If we can collapse all cells then we found a valid solution for the given input pattern and graph. Otherwise we reached a contradiction, when at least one cell could no longer be collapsed into a single state.
+To handle a contradiction, we need to trace back to an early stage of the collapse and make a different decision, in hope that from there we can reach a solution (@todo(viktor): provability of a solve and NP-Hard). The points at which the algorithm ''decides'' are when Picking a cell with the lowest entropy and when Collapsing a cell into any one of its possible states. If we do not want to store any of the intermediates states of the graph, we can just go back to the first decision point, when the grid was just initialized. In other words, we just restart and try again. Otherwise we can also store some information to allow us to return to a partially solved version of the graph.
 
 \subsection{Backtracking}
-\begin{itemize}
-    \item Goal, dont restart when reaching a contradiction, most of the time most of the cells are fine, only a small number of cells cause a contradiction
-    \item Key Observation: for each cell the set of possible states only ever shrinks, as more and more constraints are placed on it. We never need to add back a state.
-    \item For each state there is only ever one point in time when it is removed. all we need to know to advance is know which steps are removed right now.
-    \item the naiive implementation creates a set of states and removes each state when it becomes impossible
-    \item but We dont need to remove entries from this set, we can just store at which step in time each state became impossible and whenever we check all remaining states we ignore states that where "removed" before the current step happened
-    \item Implementation: for each state in a cell store a sentinel value as the step index of removal. in the context store the current step index. after each step, increment the step index. then when propagating changes whenever a state is removed, store the current steps index as its removal timestamp. 
-    \item Now we can rewind by only changing the context current step by some desired amount. the condition that checks if a state is removed now ensures that rewound removals can be detected and ignored.
-\end{itemize}
+
+Wenn der Algorithmus einen Widerspruch entdeckt, muss nicht immer alle Arbeit verworfen werden. Gerade bei größeren oder komplizierteren Mustern oder Graphen ist es wahrscheinlich, dass beim ersten Versuch keine Lösung gefunden wird, weil Komplexität den Lösungsraum stärker einschränkt. Wenn ein Widerspruch in einer Zelle aber nun, nur von den direkten Nachbar abhängt, so ist es wahrscheinlich dass weiter entfernte bereits gelöste Zellen dennoch kompatibel sind. Um einen lokalen Widerspruch aufzulösen muss meistens nur lokal eine andere Entscheidung getroffen werden.
+
+Um Backtracking umzusetzen müssen mehr Informationen behalten werden als nur der Zustand des Gitters zum aktuellen Zeitpunkt. Will man nun wieder einen Schritt zurückgehen muss man wissen, welche Entscheidung man zuvor bereits getroffen hat um dessen Effekt rückgängig zu machen. Dabei genügt es nicht nur die Collapste Zelle und den Zustand wieder zu entfernen, weil jede Zelle von mehreren Nachbarn beeinflusst wird. Die Zustandsmenge einer Zelle ist die Schnittmenge der möglichen Nachbarzuständen der Nachbar. Somit kann es sein, dass ein Zustand A aus der Menge wegen mehreren Einschränkungen von mehreren Nachbarn fehlt. Nimmt man nun durch Backtracking eine dieser Einschränkungen wieder zurück, so ist es nicht offensichtlich, ob Zustand A nun wieder möglich ist, ohne alle Einschränkungen auf die Zelle neu zu berechnen.
+Entweder man macht die Änderung nur lokal rückgängig und berechnet immer alle Zellen neu, bis sich keine mehr ändern. Oder man speichert ab, zu welchem Zeitpunkt ein Zustand unmöglich geworden ist und prüft ob dieser Zeitpunkt nach dem Schritt zurück weiterhin in der Vergangenheit oder nun in der Zukunft liegt. Bei zweiterem müssen alle solche Zustände als wieder möglich betrachtet werden.
+Diese Art die Menge an Zuständen darzustellen ist gut, weil sich für jede Zelle die Zustandsmenge in jedem Schritt des Algorithmus immer nur verkleinert oder gleichbleibt. Ist ein Zustand durch die Nachbar unmöglich so wird er auch nie wieder an späterem Zeitpunkt möglich.
+
+Desweiteren wollen wir bereits gemachte Entscheidungen nicht noch einmal wiederholen, wenn diese zu einem Widerspruch führen werden. Die Entscheidungspunkte in der  Pick und Collapse Phase können gleich behandelt werden. Wir können die List an Auswahlmöglichkeiten für später speichern und die ausgewählte Zelle oder den ausgewählten Zustand von der Liste entfernen. Kommen wir nun zu diesem Schritt zurück können wir einfach die nächste Möglichkeit auswählen und den Algorithmus normal weiterlaufen lassen.
+
+@todo(viktor): Diagramme für Algorithmus and Backtracking?
+
+@placement Ein Schritt besteht aus Search, Pick, Collapse und Propagate Phase.
+
+In der Umsetzung speichere ich für jede Zelle eine Liste aller Zustände. Jeder Zustand ist entweder möglich und wurde noch nicht entfernt oder ist unmöglich und speichert den Zeitpunkt an dem er unmöglich wurde. Hierbei ist der Zeitpunkt einfach die Anzahl an Schritten des Algorithmus. 
+Für jeden Schritt des Algorithmus speichern wir nun die Liste der gefundenen Zellen in Search. Wenn in Pick eine Zelle ausgewählt wird, entfernen wir diese aus der Liste und wählen beim Backtracken nun eine andere. Ebenso speichern wir vor der Collapse Phase alle wählbaren Zustände und entfernen mit jedem Lösungsversuch den gewählten Zustand. 
+
+Nun haben wir unwissentlich auch eine Schwachstelle in den Algorithmus eingeführt. Zuvor war es unmöglich z.B. keine Zelle in der Search-Phase zu finden, außer alle Zellen sind collapsed und wir sind fertig. Auch in der Collapse-Phase war es unmöglich keinen Zustand mehr auswählen zu können, da eine Zelle mit leerer Zustandmenge bereits zuvor als Widerspruch identifiziert wurden wäre. Um diese Fälle ordentlich zu behandeln können wir nun aber einfach auch in solchen Fällen einen Widerspruch deklarieren und Backtracken. Schließlich haben wir alle möglichen Entscheidungen getroffen und keine Lösung gefunden, somit führt dieser Schritt zwar nicht direkt zu einem Widerspruch in einer Zelle aber alle folgen Schritte werden irgendwann zu einem Widerspruch führen. Zu bemerken ist, dass wenn auf diese Weise bis zum ersten Schritt gebacktrackt wird und auch die erste Entscheidung einen Widerspruch verursacht, so ist es eindeutig, dass diese Kombination aus Eingabe und Graph keine Ausgabe geben kann.
 
 \section{Datenstrukturen und Algorithmen}
 \subsection{Overlap - Direction Mask / State Buckets?}

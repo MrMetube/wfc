@@ -28,6 +28,7 @@ State :: struct {
 ////////////////////////////////////////////////
 
 Step :: struct {
+    // @todo(viktor): what is transient per step and what is reused on rewind? 
     step:  Collapse_Step,
     state: Step_State,
     
