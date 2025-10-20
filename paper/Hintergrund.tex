@@ -1,3 +1,17 @@
+\section{Prozedurale Generierung}
+% https://en.wikipedia.org/wiki/Procedural_generation
+
+\section{Wave Function Collapse}
+\begin{itemize}
+    \item Ein Algorithmus zur prozeduralen Generierung von 2D oder 3D Strukturen 
+    \item Generiert aus minimalen Input eine große Menge an ähnlichem Output
+    \item wfc arbeitet ursprünglich mit quadratgittern hierbei sind die position jeder zelle und dessen nachbar zellen durch das gitter definiert und können zB. mittels 2D Indizes identifiziert werden. Die Nachbar sind dann über je einen schritt in eine der 4 Richtungen im Gitter, siehe 2 Achsen je positiv oder negativ, erreicht werden
+    \item allgemeiner kann jeder zelle eine 2D Koordinate zugewiesen werden und nun sind die nachbar stets durch je einen der zwei Basisvektoren des Koordinatensystems zu erreichen, auch hier positiv oder negativ
+    \item Nun auf unregelmäßigen gittern sind zellen frei in der Ebene des 2D Koordinatensystems angeordnet. Nun muss die Menge der Nachbarn für jede Zelle berechnet werden
+    \item Wie im regelmäßigen gitter wollen wir, dass wenn zwei Zellen benachbart sind, dass sie eine Kante Teilen, also tatsächlich eine Verbindung besteht. für unregelmäßige gitter können wir ein Voronoi Diagramm erstellen, wodurch die Ebene in Regionen aufgeteilt wird die je alle Punkte umfässt die einer unserer Zelle am nächsten sind. 
+    \item Um dieses Voronoi diagramm zu erstellen gibt es mehrere Wege. Einer ist, eine Delaunay Triangulierung zu generieren, da dies die Inverse des Voronoi Diagramm darstellt. Die Zellen im Voronoi Diagramm entsprechen den Ecken in der Delaunay Triangulierung und die Kanten den Seitenhalbierenden der Kanten zwischen den Ecken. Aus der Delaunay Triangulierung lassen sich auch die Nachbarn einer Zelle direkt auslesen, da es einfach alle Punkte sind die mit dem Mittelpunkte der Zelle eine Kante teilen.
+\end{itemize}
+
 \section{Stand der Technik}
 \subsection{Model Synthesis - Paul Merrell}
 \url{https://gamma.cs.unc.edu/synthesis/papers/model_synthesis.pdf}
@@ -46,30 +60,13 @@
     \item aperiodic infinite deterministic irregular relaxed quadrilateral grids
 \end{itemize}
 
-
-\section{Begriffe}
-
+\section{}
 @todo(viktor): Hier Visualisierungen für:
 \begin{itemize}
     \item regelmäßig vs unregelmäßiges Gitter
     \item Delaunay Triangulierung
     \item Voronoi Diagramme
 \end{itemize}
-
-\section{Prozedurale Generierung}
-
-\section{Wave Function Collapse}
-\begin{itemize}
-    \item Ein Algorithmus zur prozeduralen Generierung von 2D oder 3D Strukturen 
-    \item Generiert aus minimalen Input eine große Menge an ähnlichem Output
-    \item wfc arbeitet ursprünglich mit quadratgittern hierbei sind die position jeder zelle und dessen nachbar zellen durch das gitter definiert und können zB. mittels 2D Indizes identifiziert werden. Die Nachbar sind dann über je einen schritt in eine der 4 Richtungen im Gitter, siehe 2 Achsen je positiv oder negativ, erreicht werden
-    \item allgemeiner kann jeder zelle eine 2D Koordinate zugewiesen werden und nun sind die nachbar stets durch je einen der zwei Basisvektoren des Koordinatensystems zu erreichen, auch hier positiv oder negativ
-    \item Nun auf unregelmäßigen gittern sind zellen frei in der Ebene des 2D Koordinatensystems angeordnet. Nun muss die Menge der Nachbarn für jede Zelle berechnet werden
-    \item Wie im regelmäßigen gitter wollen wir, dass wenn zwei Zellen benachbart sind, dass sie eine Kante Teilen, also tatsächlich eine Verbindung besteht. für unregelmäßige gitter können wir ein Voronoi Diagramm erstellen, wodurch die Ebene in Regionen aufgeteilt wird die je alle Punkte umfässt die einer unserer Zelle am nächsten sind. 
-    \item Um dieses Voronoi diagramm zu erstellen gibt es mehrere Wege. Einer ist, eine Delaunay Triangulierung zu generieren, da dies die Inverse des Voronoi Diagramm darstellt. Die Zellen im Voronoi Diagramm entsprechen den Ecken in der Delaunay Triangulierung und die Kanten den Seitenhalbierenden der Kanten zwischen den Ecken. Aus der Delaunay Triangulierung lassen sich auch die Nachbarn einer Zelle direkt auslesen, da es einfach alle Punkte sind die mit dem Mittelpunkte der Zelle eine Kante teilen.
-\end{itemize}
-
-
 
 \section{Unregelmäßige Gitter - planare Graphen}
 % https://en.wikipedia.org/wiki/Delaunay_triangulation

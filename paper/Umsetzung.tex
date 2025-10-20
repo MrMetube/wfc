@@ -22,25 +22,32 @@
     \item Zum Beispiel nehmen wir den oberen-linke 2x2 Ausschnitt von Zustand A und vergleichen ihn mit dem unteren-rechten 2x2 Ausschnitt von Zustand B. Sind diese gleich so kann B im Nordwesten von A sein oder andersherum A im Südosten von B.
 \end{itemize}
 
-\section{Generate and Setup Grid}
+\section{Prozedurale Voronoi-Graphen}
+@todo(viktor): Erklärung der Generierung separat zur erklärung der Anforderung an den Graphen auf dem der Algorithmus laufen soll  
 \begin{itemize}
-    \item what do we need for a grid
-    \item what do we need for a cell
-    \item when generating a grid
-    \subitem generate a point cloud with or without an intrisic pattern in any way you like
-    \subitem generate a delaunay triangulation out of those points 
-    \subitem find the dual graph, the voronoi graph, of the triangulation
-    \subitem note down all neighbouring cells for each cell
-    \subitem each voronoi cell becomes a cell of the grid for the wfc
-    \item otherwise just manually setup a bunch of cells
-    \subitem a cell needs a list of neighbouring cells
-    \item for each cell initialize its states and member variables
+    \item Der Algorithmus arbeitet auf einem gegebenen Graphen. Die Verteilung der Zellen kann regelmäßig oder ohne Struktur sein. Es muss kann auch über den Graphen hinweg variieren. Jede Zelle hat eine 2D Position und jeder Zelle müssen alle ihre Nachbarzellen zugewiesen werden. Zellen sind benachbart, wenn sie eine Kante teilen. Eine Kante sind alle Punkte die gleichweit von zwei Zellenmittelpunkten entfernt sind. 
+    \item In meiner Anwendung erstelle ich die Graphen prozedural aus einfachen Mustern oder mittels Zufallsprinzip. 
+    \item Meine generierten Graphen sind immer planar, da ich immer dem selben Ablauf folge. Erst erstelle ich eine Menge an 2D Punkten, die wie gesagt eine beliebige Anordnung habe. Dann erstelle ich auf diesen Punkten eine Delaunay-Triangulierung. Das Gegenstück einer solchen Triangulierung ist ein Voronoi-Diagramm. Man findet es in dem man die Eckpunkte der Dreiecke als Mittelpunkte der Voronoizellen nimmt und die Kanten der Dreiecke enden in den Nachbarzellen jeder Zelle. Da Zellen am Rand von diesem Voronoi-Diagramm nach außen unendlich groß sind, begrenzen wir diese Zellen auf eine freigewählte rechteckige Fläche. 
+    \item Zu Beginn des Wave Function Collapse werden alle Zellen mit einer Superposition aller möglichen Zustände initialisiert.
 \end{itemize}
-\section{Collapse Grid}
+
+\section{Collapse Cells}
 \begin{itemize}
     \item what are steps?
     \item the step control flow diagram?
     \subitem add "loop until the grid is fully collapsed"
+    @todo(viktor): Erst den allgemeinen Ablauf ohne Backtracking und dann erklären wo und wie Backtracking eingebaut werden kann 
+\end{itemize}
+
+\subsection{Backtracking}
+\begin{itemize}
+    \item Goal, dont restart when reaching a contradiction, most of the time most of the cells are fine, only a small number of cells cause a contradiction
+    \item Key Observation: for each cell the set of possible states only ever shrinks, as more and more constraints are placed on it. We never need to add back a state.
+    \item For each state there is only ever one point in time when it is removed. all we need to know to advance is know which steps are removed right now.
+    \item the naiive implementation creates a set of states and removes each state when it becomes impossible
+    \item but We dont need to remove entries from this set, we can just store at which step in time each state became impossible and whenever we check all remaining states we ignore states that where "removed" before the current step happened
+    \item Implementation: for each state in a cell store a sentinel value as the step index of removal. in the context store the current step index. after each step, increment the step index. then when propagating changes whenever a state is removed, store the current steps index as its removal timestamp. 
+    \item Now we can rewind by only changing the context current step by some desired amount. the condition that checks if a state is removed now ensures that rewound removals can be detected and ignored.
 \end{itemize}
 
 \section{Datenstrukturen und Algorithmen}
@@ -64,18 +71,6 @@
     \item Bei höherer Strictness und einer gelösten Zelle: ein Nachbar der Zelle kann nun aus mehr als einer Regelmenge entsprechend seiner Richtung wählen. Die Superposition des Nachbarn ist 'größer' bei höherer Strictness. Dadurch ist auch die Menge an Zuständen die Nachbarn des Nachbarn haben entsprechend größer, da weniger Beschränkungen auf sie einwirken. Es bleiben für einen längeren Zeitraum mehr Zustände möglich, wodurch ein Widerspruch durch eine Zelle mit leerer Superposition weniger wahrscheinlich ist. Im Gegenzug ist die lokale Ähnlichkeit zum Original verringert, da nun auch Nachbarn mit 'eindeutiger' Richtung zur Zelle auch einer weniger passenden Richtung zugewiesen werden können.
     \item Eine globale Strictness für alle Zellen hat einen negativen Effekt auf lokal regelmäßige Regionen eines Gitters und ein postiven Effekt auf sehr unregelmäßige Regionen des Gitters.
     \item Anstatt dass die Strictness global für alle Zellen zu Beginn bestimmt wird, kann man auch während des Collapse 'lernen' welche Regionen 'schwerer' zu lösen sind und dort die Strictness schrittweise erhöhen bis eine Lösung gefunden werden kann.
-\end{itemize}
-\section{Cell - Search, Collapse, Propagate}
-
-\subsection{Backtracking}
-\begin{itemize}
-    \item Goal, dont restart when reaching a contradiction, most of the time most of the cells are fine, only a small number of cells cause a contradiction
-    \item Key Observation: for each cell the set of possible states only ever shrinks, as more and more constraints are placed on it. We never need to add back a state.
-    \item For each state there is only ever one point in time when it is removed. all we need to know to advance is know which steps are removed right now.
-    \item the naiive implementation creates a set of states and removes each state when it becomes impossible
-    \item but We dont need to remove entries from this set, we can just store at which step in time each state became impossible and whenever we check all remaining states we ignore states that where "removed" before the current step happened
-    \item Implementation: for each state in a cell store a sentinel value as the step index of removal. in the context store the current step index. after each step, increment the step index. then when propagating changes whenever a state is removed, store the current steps index as its removal timestamp. 
-    \item Now we can rewind by only changing the context current step by some desired amount. the condition that checks if a state is removed now ensures that rewound removals can be detected and ignored.
 \end{itemize}
 
 \subsection{vielleicht was zur App}
