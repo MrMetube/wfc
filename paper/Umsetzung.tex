@@ -23,8 +23,9 @@
 \end{itemize}
 
 \section{Output Graphen} @naming
-\section{Generierung von Voronoi-Graphen}
-@todo(viktor): Erklärung der Generierung separat zur erklärung der Anforderung an den Graphen auf dem der Algorithmus laufen soll  
+\subsection{Generierung von Voronoi-Graphen}
+@todo(viktor): Erklärung der Generierung separat zur erklärung der Anforderung an den Graphen auf dem der Algorithmus laufen soll 
+@todo(viktor): Warum nicht nur jede Zelle mit 8 nächsten Verbinden? keine garantie dass a's nächster Nachbar b auch a als nächsten Nachbar hat. Müssen Nachbarn immer bidirektional sein? Future Work mit unidirektionalen Benachbarungen?
 \begin{itemize}
     \item Der Algorithmus arbeitet auf einem gegebenen Graphen. Die Verteilung der Zellen kann regelmäßig oder ohne Struktur sein. Es muss kann auch über den Graphen hinweg variieren. Jede Zelle hat eine 2D Position und jeder Zelle müssen alle ihre Nachbarzellen zugewiesen werden. Zellen sind benachbart, wenn sie eine Kante teilen. Eine Kante sind alle Punkte die gleichweit von zwei Zellenmittelpunkten entfernt sind. 
     \item In meiner Anwendung erstelle ich die Graphen prozedural aus einfachen Mustern oder mittels Zufallsprinzip. 
@@ -33,6 +34,9 @@
 \end{itemize}
 
 \section{Collapse Cells - Step}
+
+@placement Ein Schritt besteht aus Search, Pick, Collapse und Propagate Phase.
+
 \begin{enumerate}
     \item Search: ermittle alle Zellen mit der geringsten Entropie (Shannon - Entropie) die noch nicht Collapsed ist
     \item Pick: wähle eine der gefundenen Zellen
@@ -55,8 +59,6 @@ Diese Art die Menge an Zuständen darzustellen ist gut, weil sich für jede Zell
 Desweiteren wollen wir bereits gemachte Entscheidungen nicht noch einmal wiederholen, wenn diese zu einem Widerspruch führen werden. Die Entscheidungspunkte in der  Pick und Collapse Phase können gleich behandelt werden. Wir können die List an Auswahlmöglichkeiten für später speichern und die ausgewählte Zelle oder den ausgewählten Zustand von der Liste entfernen. Kommen wir nun zu diesem Schritt zurück können wir einfach die nächste Möglichkeit auswählen und den Algorithmus normal weiterlaufen lassen.
 
 @todo(viktor): Diagramme für Algorithmus and Backtracking?
-
-@placement Ein Schritt besteht aus Search, Pick, Collapse und Propagate Phase.
 
 In der Umsetzung speichere ich für jede Zelle eine Liste aller Zustände. Jeder Zustand ist entweder möglich und wurde noch nicht entfernt oder ist unmöglich und speichert den Zeitpunkt an dem er unmöglich wurde. Hierbei ist der Zeitpunkt einfach die Anzahl an Schritten des Algorithmus. 
 Für jeden Schritt des Algorithmus speichern wir nun die Liste der gefundenen Zellen in Search. Wenn in Pick eine Zelle ausgewählt wird, entfernen wir diese aus der Liste und wählen beim Backtracken nun eine andere. Ebenso speichern wir vor der Collapse Phase alle wählbaren Zustände und entfernen mit jedem Lösungsversuch den gewählten Zustand. 

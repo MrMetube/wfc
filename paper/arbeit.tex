@@ -9,7 +9,7 @@
 \begin{enumerate}
     \item prozedurale generierung
     \item wfc algorithmus erklären
-    \item quadrat, regelmäßige und unregelmäßige gitter
+    \item quadrat, regelmäßige und unregelmäßige gitter, planare graphen
     \item 8 statt 4 Directions in Extrahierung
     \item overlap lookup table
     \item overlap / direction mask
@@ -21,7 +21,6 @@
 \begin{enumerate}
     \item model synthesis
     \item 
-    \item Gittergenerierung
     \item Delaunay-Triangulierung
     \item Bowyer-Watson Algorithmus
     \item Voronoi Diagramme
@@ -40,8 +39,6 @@
 \tableofcontents
 \pagebreak
 
-
-
 \section{Einleitung}
 % \section{Motivation}
 % \section{Problemstellung und Ziel}
@@ -58,7 +55,7 @@
 \begin{itemize}
     \item Bilder
     \item Base Case - reguläres Gitter
-    \item geringe Striktheit - Richtung verliert einfluss auf output und es kommen nur noch adjazenz regeln?
+    \item geringe Striktheit/höhere Heat - Richtung verliert einfluss auf output, lokale Verzerrungen dominieren, sobald entgegengesetze richtungen wählbar sind dominiert Adjazenz
     \item Lokale Ähnlichkeit im Vergleich zum Input
 \end{itemize}
 
