@@ -9,10 +9,12 @@
     \item @todo(viktor): 8 richtungen
 \end{itemize}
 
+
+
 \section{Overlap Lookup Table}
 \begin{itemize}
     \item Für den Wave Function Collapse muss ich später prüfen, ob ein Zustand neben einem (oder mindestens einen von vielen) Zuständen seien darf.
-    \item Hierfür erstelle ich eine Tabelle mit drei Axen. Die ersten beiden sind die zu vergleichenden Zustände, die dritte bestimmt die Himmelsrichtung entlang der ich diese vergleiche.
+    \item Hierfür erstelle ich eine Tabelle mit drei Axen. Die ersten beiden sind die zu vergleichenden Zustände, die dritte bestimmt die Himmelsrichtung(@naming) entlang der ich diese vergleiche.
     \item Jeder Eintrag sagt mir nun, ob ein Zustand A neben einem Zustand B der in Richtung D von A aus liegt in der Eingabe existiert hat und somit möglich ist.
     \item Da die Überlappung eine symmetrische Eigenschaft ist, ist auch die Tabelle symmetrisch. Man könnte also nur halb so viele Einträge speichern solange man dies beim auslesen bedenkt. In meiner Implementierung habe ich diese Optimierung nicht genutzt um das Auslesen möglichst einfach zu halten, da selbst meine komplexesten Eingaben nie mehr als 600 Zustände hatten und die Tabelle somit nie mehr als ca. 300 kB groß wahr. Der Median liegt bei 77 Zuständen also 5 kB.
     % 12 20 31 37 41 50 51 55 61 66 77 78 107 111 117 124 153 259 423 526
@@ -22,10 +24,11 @@
     \item Zum Beispiel nehmen wir den oberen-linke 2x2 Ausschnitt von Zustand A und vergleichen ihn mit dem unteren-rechten 2x2 Ausschnitt von Zustand B. Sind diese gleich so kann B im Nordwesten von A sein oder andersherum A im Südosten von B.
 \end{itemize}
 
-\section{Output Graphen} @naming
-\subsection{Generierung von Voronoi-Graphen}
+
+
+\section{Generierung von Voronoi-Graphen}
 @todo(viktor): Erklärung der Generierung separat zur erklärung der Anforderung an den Graphen auf dem der Algorithmus laufen soll 
-@todo(viktor): Warum nicht nur jede Zelle mit 8 nächsten Verbinden? keine garantie dass a's nächster Nachbar b auch a als nächsten Nachbar hat. Müssen Nachbarn immer bidirektional sein? Future Work mit unidirektionalen Benachbarungen?
+@todo(viktor): Warum nicht nur jede Zelle mit 8 nächsten Verbinden? keine garantie dass a's nächster Nachbar b auch a als nächsten Nachbar hat. Müssen Nachbarn immer bidirektional sein? einseitige Benachbarungen?
 \begin{itemize}
     \item Der Algorithmus arbeitet auf einem gegebenen Graphen. Die Verteilung der Zellen kann regelmäßig oder ohne Struktur sein. Es muss kann auch über den Graphen hinweg variieren. Jede Zelle hat eine 2D Position und jeder Zelle müssen alle ihre Nachbarzellen zugewiesen werden. Zellen sind benachbart, wenn sie eine Kante teilen. Eine Kante sind alle Punkte die gleichweit von zwei Zellenmittelpunkten entfernt sind. 
     \item In meiner Anwendung erstelle ich die Graphen prozedural aus einfachen Mustern oder mittels Zufallsprinzip. 
@@ -33,8 +36,9 @@
     \item Zu Beginn des Wave Function Collapse werden alle Zellen mit einer Superposition aller möglichen Zustände initialisiert.
 \end{itemize}
 
-\section{Collapse Cells - Step}
 
+
+\section{Collapse Cells - Step}
 @placement Ein Schritt besteht aus Search, Pick, Collapse und Propagate Phase.
 
 \begin{enumerate}
@@ -48,8 +52,9 @@
 If we can collapse all cells then we found a valid solution for the given input pattern and graph. Otherwise we reached a contradiction, when at least one cell could no longer be collapsed into a single state.
 To handle a contradiction, we need to trace back to an early stage of the collapse and make a different decision, in hope that from there we can reach a solution (@todo(viktor): provability of a solve and NP-Hard). The points at which the algorithm ''decides'' are when Picking a cell with the lowest entropy and when Collapsing a cell into any one of its possible states. If we do not want to store any of the intermediates states of the graph, we can just go back to the first decision point, when the grid was just initialized. In other words, we just restart and try again. Otherwise we can also store some information to allow us to return to a partially solved version of the graph.
 
-\subsection{Backtracking}
 
+
+\subsection{Backtracking}
 Wenn der Algorithmus einen Widerspruch entdeckt, muss nicht immer alle Arbeit verworfen werden. Gerade bei größeren oder komplizierteren Mustern oder Graphen ist es wahrscheinlich, dass beim ersten Versuch keine Lösung gefunden wird, weil Komplexität den Lösungsraum stärker einschränkt. Wenn ein Widerspruch in einer Zelle aber nun, nur von den direkten Nachbar abhängt, so ist es wahrscheinlich dass weiter entfernte bereits gelöste Zellen dennoch kompatibel sind. Um einen lokalen Widerspruch aufzulösen muss meistens nur lokal eine andere Entscheidung getroffen werden.
 
 Um Backtracking umzusetzen müssen mehr Informationen behalten werden als nur der Zustand des Gitters zum aktuellen Zeitpunkt. Will man nun wieder einen Schritt zurückgehen muss man wissen, welche Entscheidung man zuvor bereits getroffen hat um dessen Effekt rückgängig zu machen. Dabei genügt es nicht nur die Collapste Zelle und den Zustand wieder zu entfernen, weil jede Zelle von mehreren Nachbarn beeinflusst wird. Die Zustandsmenge einer Zelle ist die Schnittmenge der möglichen Nachbarzuständen der Nachbar. Somit kann es sein, dass ein Zustand A aus der Menge wegen mehreren Einschränkungen von mehreren Nachbarn fehlt. Nimmt man nun durch Backtracking eine dieser Einschränkungen wieder zurück, so ist es nicht offensichtlich, ob Zustand A nun wieder möglich ist, ohne alle Einschränkungen auf die Zelle neu zu berechnen.
@@ -65,8 +70,8 @@ Für jeden Schritt des Algorithmus speichern wir nun die Liste der gefundenen Ze
 
 Nun haben wir unwissentlich auch eine Schwachstelle in den Algorithmus eingeführt. Zuvor war es unmöglich z.B. keine Zelle in der Search-Phase zu finden, außer alle Zellen sind collapsed und wir sind fertig. Auch in der Collapse-Phase war es unmöglich keinen Zustand mehr auswählen zu können, da eine Zelle mit leerer Zustandmenge bereits zuvor als Widerspruch identifiziert wurden wäre. Um diese Fälle ordentlich zu behandeln können wir nun aber einfach auch in solchen Fällen einen Widerspruch deklarieren und Backtracken. Schließlich haben wir alle möglichen Entscheidungen getroffen und keine Lösung gefunden, somit führt dieser Schritt zwar nicht direkt zu einem Widerspruch in einer Zelle aber alle folgen Schritte werden irgendwann zu einem Widerspruch führen. Zu bemerken ist, dass wenn auf diese Weise bis zum ersten Schritt gebacktrackt wird und auch die erste Entscheidung einen Widerspruch verursacht, so ist es eindeutig, dass diese Kombination aus Eingabe und Graph keine Ausgabe geben kann.
 
-\section{Datenstrukturen und Algorithmen}
-\subsection{Overlap - Direction Mask / State Buckets?}
+
+\section{Overlap - Direction Mask / State Buckets?}
 \begin{itemize}
     \item @todo(viktor): Strictness muss ich nicht mit der Größe der Zahl im Code hier gleichstellen, dass ist nur verwirrend wenn 'hohe' strictness eigentlich weniger strenge bedingungen darstellt
     \item Da Nachbarn nun in beliebigen Richtungen zu finden sind, gibt es kein direktes mapping zu den Supportregeln, welche ja je eine Menge pro Richtung sind.
@@ -79,7 +84,7 @@ Nun haben wir unwissentlich auch eine Schwachstelle in den Algorithmus eingefüh
     \item Aber genau diese auflockerung ist nötig, damit der Algorithmus mit \\ höherer Wahrscheinlichkeit eine Lösung findet
     \item 
     \item Wenn mehr Richtungen erlaubt sind, so kann dies auch betrachtet werden als dass nun nicht nur das Eingabe Muster sondern auch gedrehte Versionen der Eingabe möglich sind. 
-    \item Nun können gedrehte regelmäßige Gitter auch gelöst werden. (Siehe Grid = Square with an angle ~27° and strictness 1 or 2).
+    \item Nun können gedrehte regelmäßige Gitter auch gelöst werden. (Siehe Grid = Square with an angle ~27° and strictness(@naming) 1 or 2).
     \item Auf unregelmäßigen Gittern kann man keine Drehung finden in der es einem regelmäßigen Gitter global gleich. Dennoch können Lösungen gefunden werden, da für jedes Zellenpaar/Benachbarung frei gewählt werden kann, ob eine solche gedacht Drehung angewendet wird oder nicht. 
     \item Es ist so, als würde der Algorithmus das Gitter lokal immer genau so verdrehen (mit Beschränkung durch die maximal Strictness), dass das tatsächliche Gitter lokal einem regelmäßigen gleicht.
     \item 

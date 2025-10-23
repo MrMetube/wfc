@@ -46,9 +46,23 @@ Wenn man mit WFC eine Ausgabe erstellen will, die sich selbst tiled(also linker 
 
 @incomplete Diagonale Regeln, besseres Sampling der Eingabe, Regelmengen, höhere Entropie durch Strictness
 
+
+
 \section{Wave Function Collapse auf Graphen}
 
 @incomplete Welche Formel für Richtung? Mehr als eine Richtung. Welche Heuristik für Strictness? Warum auch Diagonalen extrahieren?
 @incomplete Welche Nachbarn hat eine Zelle? Wie beeinflusst eine Zelle seine Nachbarn und was hat Heat damit zutun? Zustand/Richtungsmengen erklären. Overlap Lookup Table
 
 @todo(viktor): Warum brauchen wir Heat. Welchen Effekt hat eine Heat von 1 auf z.B. Hexagongitter oder ''Rauschgraphen''
+
+
+
+\subsection{Output Graphen @naming}
+
+Wave Function Collapse arbeitet normalerweise mit einem regelmäßigem Gitter. Hier ist die Anordnung der Zellen eindeutig; die Position einer Zelle und welche Nachbarn sie hat und in welcher Richtung die relativ zur Zelle sind implizit in der Datenstruktur eingebaut. Bei einem Graphen müssen diese Informationen explizit gespeichert werden. Jede Zelle kann eine beliebige Position haben und beliebig viele Nachbar in beliebigen Richtungen haben. 
+
+Jede Kante des Graphen stellt eine Beschränkung des Lösungsraums dar. Bei einem Gitter ist jede Zelle, mit Ausnahme der Zellen am Rand, gleichermaßen beschränkt, jedoch kann die Anordnung des Graphen dazu führen dass einzelne Zelle weniger und andere stärker eingeschränkt werden. Eine Zelle mit zehn Nachbarn muss in einen Zustand collapsen (@translation) welcher zu den Zuständen der zehn Nachbaren passt.
+
+Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthalten, während dass Gitter uniforme Beschränkung auf Zellen ergibt. Zur Erinnerung: es muss nur eine Zelle eine Widerspruch verursachen damit der Algorithmus fehlschlägt. Also sind solche Regionen starker Beschränkung besonderns entscheident für die Chance einen validen Output zu generieren, weil hier der Lösungsraum am kleinsten ist.
+
+@incomplete Entropy erwähnen und für Regionen mit einer Grafik von der App darstellen
