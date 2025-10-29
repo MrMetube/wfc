@@ -1,6 +1,6 @@
 \section{Einschränkung des Algorithmus und Idee zur Erweiterung}
 
-Die ursprüngliche Form des Wave Function Collapse nimmt in 2D Pixelmuster und Tilesets als Eingabe und produziert darauß wieder 2D Muster. 
+Die ursprüngliche Form des Wave Function Collapse nimmt in 2D Pixelmuster oder Tilesets als Eingabe und produziert darauß wieder 2D Muster. 
 Pixel liegen stets auf einem quadratischen Gitter. Bei Tilesets ist die grafische Gestaltung des Tiles uneingeschränkt. Dennoch sind die Tiles selbst quadratisch. Dies schränkt die Gestaltung des Inhalts der Tiles in sofern ein, dass die Kanten zu anderen Kanten passen müssen. Auch bei 3D Inputs werden die Modelle in blockförmige Bausteine zerschnitten, damit der Collapse auf einem 3D Gitter von Würfeln arbeiten kann.
 
 Man beschränkt sich auf regelmäßige quadratische Gitter, da ihre Struktur bestimmte Vorteile mit sich bringt. Benachbarung von Zellen ist implizit durch die Struktur des Gitters mitgeliefert. Eine Zelle des Ausgabegitters ist durch seine Koordinaten im Gitter definiert und seine Nachbarn lassen sich einfach durch Schritte in vier festen Richtungen in 2D oder sechs Richtungen in 3D finden. Diese Eigenschaft gilt durch die Regelmäßigkeit des Gitters für alle Zellen gleichermaßen. Dies ist nützlich, da die Benachbarungsregeln, die aus der Eingabe herausgezogen werden, eben auch auf einem regelmäßigem Gitter basieren und direkt im Algorithmus verwendet werden können.
