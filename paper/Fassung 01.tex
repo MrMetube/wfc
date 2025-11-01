@@ -1,12 +1,8 @@
-% ////////////////////////////////////////////////////////////////////////////////////////////////
-
 \section{Einleitung}
 \subsection{Motivation}
 \subsection{Problemstellung und Ziel}
 \subsection{Problemlösung}
 \subsection{Aufbau der Arbeit}
-
-% ////////////////////////////////////////////////////////////////////////////////////////////////
 
 \section{Hintergrund}
 \subsection{Prozedurale Generierung}
@@ -107,42 +103,14 @@
     \item nützliche Eigenschaften
 \end{itemize}
 
-% ////////////////////////////////////////////////////////////////////////////////////////////////
-
 \section{Konzept}
-\subsection{Einschränkung des Algorithmus und Idee zur Erweiterung}
 \subsection{Wave Function Collapse auf Graphen}
 
 \url{https://en.wikipedia.org/wiki/Lattice_graph}
 \at{@incomplete} Welche Formel für Richtung? Mehr als eine Richtung. Welche Heuristik für Strictness? Warum auch Diagonalen extrahieren?
 \at{@incomplete} Welche Nachbarn hat eine Zelle? Wie beeinflusst eine Zelle seine Nachbarn und was hat Heat damit zutun? Zustand/Richtungsmengen erklären. Overlap Lookup Table
 
-\subsection{Regelextrahierung}
-
-% ////////////////////////////////////////////////////////////////////////////////////////////////
-
 \section{Umsetzung}
-\subsection{Generierung von Voronoi-Graphen}
-\subsection{Collapse Cells - Step}
-
-\at{@placement} Ein Schritt besteht aus Search, Pick, Collapse und Propagate Phase.
-
-\begin{enumerate}
-    \item Search: ermittle alle Zellen mit der geringsten Entropie (Shannon - Entropie) die noch nicht Collapsed ist
-    \item Pick: wähle eine der gefundenen Zellen
-    \item Collapse: wähle aus der Menge an noch möglichen Zuständen einen aus, skalierte Chance basiert auf dessen Frequenz in der Eingabe
-    \item Propagate: Keep a list of cells that changed. Add the collapsed cell onto the list. Then until its empty:
-    \subitem Pop off a changed cell and for each of its neighbours recalculate their set of possible states. If any state became impossible, append that neighbour onto the list. If any neighbour now has no more possible states we reached a contradiction.
-\end{enumerate}
-
-If we can collapse all cells then we found a valid solution for the given input pattern and graph. Otherwise we reached a contradiction, when at least one cell could no longer be collapsed into a single state.
-To handle a contradiction, we need to trace back to an early stage of the collapse and make a different decision, in hope that from there we can reach a solution (\@todo(viktor):{ provability of a solve and NP-Hardness}). The points at which the algorithm ''decides'' are when Picking a cell with the lowest entropy and when Collapsing a cell into any one of its possible states. If we do not want to store any of the intermediates states of the graph, we can just go back to the first decision point, when the grid was just initialized. In other words, we just restart and try again. Otherwise we can also store some information to allow us to return to a partially solved version of the graph.
-
-\subsection{Backtracking}
-\subsection{Overlap - Direction Mask / State Buckets / rule sets}
-
-% ////////////////////////////////////////////////////////////////////////////////////////////////
-
 \section{Ergebnisse und Diskussion}
 \begin{itemize}
     \item Bilder
@@ -166,5 +134,3 @@ To handle a contradiction, we need to trace back to an early stage of the collap
     \item{Welche Beziehung besteht zwischen Input Muster und Gitter und strictness? Linien und Flächen im Input}
     \item{Welche Eigenschaften eines Gitters bestimmen die Wahrscheinlichkeit eine Lösung zu finden?}
 \end{itemize}
-
-% ////////////////////////////////////////////////////////////////////////////////////////////////

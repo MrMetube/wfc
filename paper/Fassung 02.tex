@@ -16,65 +16,60 @@
 \subsubsection{Delaunay Triangulation}
 \subsubsection{Voronoi Diagramm}
 \section{Konzept}
-\subsection{Einschränkung des Algorithmus und Idee zur Erweiterung}
-
 \subsection{Wave Function Collapse auf Graphen}
-\subsubsection{Output Graphen \at{@naming}}
 \subsection{Regelextrahierung}
-\at{@placement}vielleicht aufteilen in Allgemeines vom WFC und meine Abänderungen\\
+    \at{@placement}vielleicht aufteilen in Allgemeines vom WFC und meine Abänderungen\\
 
-\begin{itemize}
-    \item Allgemein: damit die Ausgabe der Eingabe lokal ähnlich ist, muss jede Zelle der Ausgabe einen Zustand erhalten, so dass ihr Umfeld, die Zelle und ihre Nachbarn, in der Eingabe existiert
-    \item Um diese Bedingung zu erfüllen könnte man im Algorithmus prüfen, dass eine Zelle einen Zustand nur dann erhalten darf, wenn das dadurch entstehende Umfeld in der Eingabe existiert
-    \item Andersherum heißt dass aber auch, dass wenn wir Zellen nur Umfelder ''zuweisen'' die in der Eingabe existieren, dann erhalten wir eine Ausgabe die der Eingabe lokal ähnlich ist
-    \item 
-    \item \at{@incomplete} Algorithmus zur Extrahierung und Wrapping
-    \item \at{@incomplete} Frequenz von Zuständen
-    \item 
-    \item Aus der Eingabe können wir eine Menge an Umfeldern auslesen, die bildet die Menge an Zuständen die eine Zelle erhalten kann. Zu Beginn sind alle Zustände möglich und jede Zelle befindet sich sozusagen in einer Superposition aller Zustände.
-    \item Nach dem eine Zelle beobachtet wurde, also einen konkreten Zustand annimmt, müssen wir die Nachbarzellen prüfen, so dass nur noch passende Zustände in der Superposition sind. 
-    \item Ein Zustand A passt genau dann neben einen Zustand B, wenn das Umfeld von A und das Umfeld von B überlappen.
-    \item Zwei Umfelder A und B überlappen in einer Richtung D wenn man A über B legt und dann B um einen Schritt in Richtung D verschiebt und der übereinander liegende Teile gleich ist.
-    \item \at{@incomplete} \at{@visual} Grafik zur Erklärung
-    \item 
-    \item Die Form und Größe des Umfelds kann bei der Extrahierung frei gewählt werden. Bei einem Umfeld von 1x2 Pixeln entstehen Ausgaben wo nur die Adjazenz der Pixel erhalten bleibt. Bei einem Umfeld von der Größe der Eingabe erhält man nur eine exakte Kopie in der Ausgabe. Je größer das Umfeld gewählt wird, umso mehr sind Zellen von ihren Nachbarzellen beschränkt. Die Größe sollte auf die jeweils gewählte Eingabe abgestimmt sein, damit die gewünschten Muster in der Eingabe neu angeordnet und kombiniert werden können und man nicht nur einfache Kopien erhält.
-    \item Ich habe mich auf ein 3x3 Umfeld beschränkt und Eingaben die dazu passen genutzt.
-    \item 
-    \item \at{@incomplete} Welche Richtungen sind erlaubt?
-    \item 
-    \item Während des Algorithmus wird immer wieder geprüft, ob ein Zustand noch möglich ist. Das ist er dann, wenn er noch zu mindestens einem Zustand jeder Nachbarzelle passt. Also müssen wir über den Verlauf immer wieder prüfen, ob zwei Zustände überlappen. 
-    \item Da dies nur von der Eingabe abhängt und sich nicht verändert können wir diese Information auch vorher berechnen und für später abspeichern.
-    \item Nachdem wir die Umfelder aus der Eingabe ausgelesen haben, können wir die Überlappungs-Lookup-Tabelle erstellen. Dazu prüfen wir für jedes Paar von Umfeldern ob diese überlappen, und dass für jede Richtung.
-    \subitem \at{@incomplete} Symmetrie der Regeln
-    \item Später können wir einfach in der Tabelle ablesen ob zwei Zustände in einer Richtung überlappen und müssen nicht immer nicht immer die selbe Arbeit wiederholen. 
-    \item 
-    \item \at{@incomplete} Darstellung in der Ausgabe
-\end{itemize}
+    \begin{itemize}
+        \item Allgemein: damit die Ausgabe der Eingabe lokal ähnlich ist, muss jede Zelle der Ausgabe einen Zustand erhalten, so dass ihr Umfeld, die Zelle und ihre Nachbarn, in der Eingabe existiert
+        \item Um diese Bedingung zu erfüllen könnte man im Algorithmus prüfen, dass eine Zelle einen Zustand nur dann erhalten darf, wenn das dadurch entstehende Umfeld in der Eingabe existiert
+        \item Andersherum heißt dass aber auch, dass wenn wir Zellen nur Umfelder ''zuweisen'' die in der Eingabe existieren, dann erhalten wir eine Ausgabe die der Eingabe lokal ähnlich ist
+        \item 
+        \item \at{@incomplete} Algorithmus zur Extrahierung und Wrapping
+        \item \at{@incomplete} Frequenz von Zuständen
+        \item 
+        \item Aus der Eingabe können wir eine Menge an Umfeldern auslesen, die bildet die Menge an Zuständen die eine Zelle erhalten kann. Zu Beginn sind alle Zustände möglich und jede Zelle befindet sich sozusagen in einer Superposition aller Zustände.
+        \item Nach dem eine Zelle beobachtet wurde, also einen konkreten Zustand annimmt, müssen wir die Nachbarzellen prüfen, so dass nur noch passende Zustände in der Superposition sind. 
+        \item Ein Zustand A passt genau dann neben einen Zustand B, wenn das Umfeld von A und das Umfeld von B überlappen.
+        \item Zwei Umfelder A und B überlappen in einer Richtung D wenn man A über B legt und dann B um einen Schritt in Richtung D verschiebt und der übereinander liegende Teile gleich ist.
+        \item \at{@incomplete} \at{@visual} Grafik zur Erklärung
+        \item 
+        \item Die Form und Größe des Umfelds kann bei der Extrahierung frei gewählt werden. Bei einem Umfeld von 1x2 Pixeln entstehen Ausgaben wo nur die Adjazenz der Pixel erhalten bleibt. Bei einem Umfeld von der Größe der Eingabe erhält man nur eine exakte Kopie in der Ausgabe. Je größer das Umfeld gewählt wird, umso mehr sind Zellen von ihren Nachbarzellen beschränkt. Die Größe sollte auf die jeweils gewählte Eingabe abgestimmt sein, damit die gewünschten Muster in der Eingabe neu angeordnet und kombiniert werden können und man nicht nur einfache Kopien erhält.
+        \item Ich habe mich auf ein 3x3 Umfeld beschränkt und Eingaben die dazu passen genutzt.
+        \item 
+        \item \at{@incomplete} Welche Richtungen sind erlaubt?
+        \item 
+        \item Während des Algorithmus wird immer wieder geprüft, ob ein Zustand noch möglich ist. Das ist er dann, wenn er noch zu mindestens einem Zustand jeder Nachbarzelle passt. Also müssen wir über den Verlauf immer wieder prüfen, ob zwei Zustände überlappen. 
+        \item Da dies nur von der Eingabe abhängt und sich nicht verändert können wir diese Information auch vorher berechnen und für später abspeichern.
+        \item Nachdem wir die Umfelder aus der Eingabe ausgelesen haben, können wir die Überlappungs-Lookup-Tabelle erstellen. Dazu prüfen wir für jedes Paar von Umfeldern ob diese überlappen, und dass für jede Richtung.
+        \subitem \at{@incomplete} Symmetrie der Regeln
+        \item Später können wir einfach in der Tabelle ablesen ob zwei Zustände in einer Richtung überlappen und müssen nicht immer nicht immer die selbe Arbeit wiederholen. 
+        \item 
+        \item \at{@incomplete} Darstellung in der Ausgabe
+    \end{itemize}
 \section{Umsetzung}
-\subsection{Generierung von Voronoi-Graphen}
-\subsection{Collapse Cells - Step}
-\subsection{Backtracking}
+
 \subsection{Overlap - Direction Mask / State Buckets / rule sets}
-\begin{itemize}
-    \item \@todo(viktor):{ Strictness muss ich nicht mit der Größe der Zahl im Code hier gleichstellen, dass ist nur verwirrend wenn 'hohe' strictness eigentlich weniger strenge bedingungen darstellt}
-    \item Da Nachbarn nun in beliebigen Richtungen zu finden sind, gibt es kein direktes mapping zu den Supportregeln, welche ja je eine Menge pro Richtung sind.
-    \item Dabei können wir entscheiden ob jeweils nur eine Menge oder mehrere Mengen betrachtet werden
-    \item Ob eine Menge erlaubt ist, messen wir indem wir berechnen wir nahe die tatsächliche Richtung zu den Mengenrichtungen ist. Nun wählen wir die x-nähesten Mengen aus. Bei einer Strenge von 1 also die beste, bei 2 die zwei besten und so weiter.
-    \item Die Strenge kann maximal 8 betrangen, da wir nur 8 "Himmelsrichtungen`` in der Extraktion genutzt haben. 
-    \item Insgesamt bedeutet dies, dass ein Nachbar als z.B. im Norden oder im Nordosten betrachtet werden kann. Dadurch ist die menge an kompatiblen zuständen weniger eingeschränkt und es ist weniger wahrscheinlich, dass alle Zustände einer Zelle unmöglich werden
-    \item Es folgt aber auch, dass nun Nachbar mit fast oder gar perfekter \\ übereinstimmung mit einer der Himmelsrichtung als nicht nur diese gelten, wodurch es zu einer Verzerrung im Output kommt.
-    \item Wenn zuvor ein Muster im Input z.B. stehts N-S ausgerichtet war kann es ab einer Strenge vom 3 auch als (NW, N, NO)-(SW, S, SO) betrachtet werden. es könnte also auch als NW-SW betrachtet werden und aus einem Geradlinigen muster wird ein geknicktes oder zackiges.
-    \item Aber genau diese auflockerung ist nötig, damit der Algorithmus mit \\ höherer Wahrscheinlichkeit eine Lösung findet
-    \item 
-    \item Wenn mehr Richtungen erlaubt sind, so kann dies auch betrachtet werden als dass nun nicht nur das Eingabe Muster sondern auch gedrehte Versionen der Eingabe möglich sind. 
-    \item Nun können gedrehte regelmäßige Gitter auch gelöst werden. (Siehe Grid = Square with an angle ~27° and strictness(\at{@naming}) 1 or 2).
-    \item Auf unregelmäßigen Gittern kann man keine Drehung finden in der es einem regelmäßigen Gitter global gleich. Dennoch können Lösungen gefunden werden, da für jedes Zellenpaar/Benachbarung frei gewählt werden kann, ob eine solche gedacht Drehung angewendet wird oder nicht. 
-    \item Es ist so, als würde der Algorithmus das Gitter lokal immer genau so verdrehen (mit Beschränkung durch die maximal Strictness), dass das tatsächliche Gitter lokal einem regelmäßigen gleicht.
-    \item 
-    \item Bei höherer Strictness und einer gelösten Zelle: ein Nachbar der Zelle kann nun aus mehr als einer Regelmenge entsprechend seiner Richtung wählen. Die Superposition des Nachbarn ist 'größer' bei höherer Strictness. Dadurch ist auch die Menge an Zuständen die Nachbarn des Nachbarn haben entsprechend größer, da weniger Beschränkungen auf sie einwirken. Es bleiben für einen längeren Zeitraum mehr Zustände möglich, wodurch ein Widerspruch durch eine Zelle mit leerer Superposition weniger wahrscheinlich ist. Im Gegenzug ist die lokale Ähnlichkeit zum Original verringert, da nun auch Nachbarn mit 'eindeutiger' Richtung zur Zelle auch einer weniger passenden Richtung zugewiesen werden können.
-    \item Eine globale Strictness für alle Zellen hat einen negativen Effekt auf lokal regelmäßige Regionen eines Gitters und ein postiven Effekt auf sehr unregelmäßige Regionen des Gitters.
-    \item Anstatt dass die Strictness global für alle Zellen zu Beginn bestimmt wird, kann man auch während des Collapse 'lernen' welche Regionen 'schwerer' zu lösen sind und dort die Strictness schrittweise erhöhen bis eine Lösung gefunden werden kann.
-\end{itemize}
+    \begin{itemize}
+        \item \@todo(viktor):{ Strictness muss ich nicht mit der Größe der Zahl im Code hier gleichstellen, dass ist nur verwirrend wenn 'hohe' strictness eigentlich weniger strenge bedingungen darstellt}
+        \item Da Nachbarn nun in beliebigen Richtungen zu finden sind, gibt es kein direktes mapping zu den Supportregeln, welche ja je eine Menge pro Richtung sind.
+        \item Dabei können wir entscheiden ob jeweils nur eine Menge oder mehrere Mengen betrachtet werden
+        \item Ob eine Menge erlaubt ist, messen wir indem wir berechnen wir nahe die tatsächliche Richtung zu den Mengenrichtungen ist. Nun wählen wir die x-nähesten Mengen aus. Bei einer Strenge von 1 also die beste, bei 2 die zwei besten und so weiter.
+        \item Die Strenge kann maximal 8 betrangen, da wir nur 8 "Himmelsrichtungen`` in der Extraktion genutzt haben. 
+        \item Insgesamt bedeutet dies, dass ein Nachbar als z.B. im Norden oder im Nordosten betrachtet werden kann. Dadurch ist die menge an kompatiblen zuständen weniger eingeschränkt und es ist weniger wahrscheinlich, dass alle Zustände einer Zelle unmöglich werden
+        \item Es folgt aber auch, dass nun Nachbar mit fast oder gar perfekter \\ übereinstimmung mit einer der Himmelsrichtung als nicht nur diese gelten, wodurch es zu einer Verzerrung im Output kommt.
+        \item Wenn zuvor ein Muster im Input z.B. stehts N-S ausgerichtet war kann es ab einer Strenge vom 3 auch als (NW, N, NO)-(SW, S, SO) betrachtet werden. es könnte also auch als NW-SW betrachtet werden und aus einem Geradlinigen muster wird ein geknicktes oder zackiges.
+        \item Aber genau diese auflockerung ist nötig, damit der Algorithmus mit \\ höherer Wahrscheinlichkeit eine Lösung findet
+        \item 
+        \item Wenn mehr Richtungen erlaubt sind, so kann dies auch betrachtet werden als dass nun nicht nur das Eingabe Muster sondern auch gedrehte Versionen der Eingabe möglich sind. 
+        \item Nun können gedrehte regelmäßige Gitter auch gelöst werden. (Siehe Grid = Square with an angle ~27° and strictness(\at{@naming}) 1 or 2).
+        \item Auf unregelmäßigen Gittern kann man keine Drehung finden in der es einem regelmäßigen Gitter global gleich. Dennoch können Lösungen gefunden werden, da für jedes Zellenpaar/Benachbarung frei gewählt werden kann, ob eine solche gedacht Drehung angewendet wird oder nicht. 
+        \item Es ist so, als würde der Algorithmus das Gitter lokal immer genau so verdrehen (mit Beschränkung durch die maximal Strictness), dass das tatsächliche Gitter lokal einem regelmäßigen gleicht.
+        \item 
+        \item Bei höherer Strictness und einer gelösten Zelle: ein Nachbar der Zelle kann nun aus mehr als einer Regelmenge entsprechend seiner Richtung wählen. Die Superposition des Nachbarn ist 'größer' bei höherer Strictness. Dadurch ist auch die Menge an Zuständen die Nachbarn des Nachbarn haben entsprechend größer, da weniger Beschränkungen auf sie einwirken. Es bleiben für einen längeren Zeitraum mehr Zustände möglich, wodurch ein Widerspruch durch eine Zelle mit leerer Superposition weniger wahrscheinlich ist. Im Gegenzug ist die lokale Ähnlichkeit zum Original verringert, da nun auch Nachbarn mit 'eindeutiger' Richtung zur Zelle auch einer weniger passenden Richtung zugewiesen werden können.
+        \item Eine globale Strictness für alle Zellen hat einen negativen Effekt auf lokal regelmäßige Regionen eines Gitters und ein postiven Effekt auf sehr unregelmäßige Regionen des Gitters.
+        \item Anstatt dass die Strictness global für alle Zellen zu Beginn bestimmt wird, kann man auch während des Collapse 'lernen' welche Regionen 'schwerer' zu lösen sind und dort die Strictness schrittweise erhöhen bis eine Lösung gefunden werden kann.
+    \end{itemize}
 \section{Ergebnisse und Diskussion}
 \section{Fazit}
 \subsection{Vergleich zum Original}
