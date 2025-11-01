@@ -1,4 +1,5 @@
 \documentclass{article}
+
 \usepackage[ngerman]{babel}
 \usepackage{amsmath}
 \usepackage{hyperref}
@@ -6,68 +7,24 @@
 \usepackage{caption}
 \usepackage{subcaption}
 \usepackage{pgffor}
+\usepackage{xcolor}
+
+\definecolor{mred}{HTML}{fe163d}
+\definecolor{mgreen}{HTML}{a1e381}
+\DeclareRobustCommand{\@todo(viktor):}[1]{\textcolor{mred}{@todo:} \textcolor{mred}{#1}}
+\DeclareRobustCommand{\at}[1]{\textcolor{mgreen}{#1}}
 
 \begin{document}
-
-
-Passive Form, besser In dieser Arbeit, im Umfang dieser Arbeit, diese Arbeit...
-Die Todos aufräumen und nur die fertigen Teile an Schlechtweg schicken
-die Ergebnisse festhalten
-planare Graphen raus
-mehr Grafiken - was besseres für das layout der beschriftungen finden
-Tippfehler und Korrekturlesen
-
-
-
-\section{Dinge die besprochen werden müssen}
-\begin{enumerate}
-    \item prozedurale generierung
-    \item wfc algorithmus erklären
-    \item quadrat, regelmäßige und unregelmäßige gitter, planare graphen
-    \item 8 statt 4 Directions in Extrahierung
-    \item overlap / direction mask
-    \item simulated annealing und heating und cooling chance with strictness
-\end{enumerate}
-
-\section{Dinge die besprochen werden können}
-\begin{enumerate}
-    \item model synthesis
-    \item 
-    \item Delaunay-Triangulierung
-    \item Bowyer-Watson Algorithmus
-    \item Voronoi Diagramme
-    \item 
-    \item Townscapers Gitter
-    \item Tilesets und Pixelmuster
-    \item 
-    \item Constraint Solving
-    \item 
-    \item Vergleiche zwischen Algorithmen und Daten
-    \item Ähnlichkeit zum Input
-    \item wahrscheinliche Lösbarkeit und NP-Hardness
-    \item 
-    \item die App und ihre Features
-\end{enumerate}
-
-\pagebreak
-Tags:
-\begin{itemize}
-    \item @incomplete - Hier fehlt noch was.
-    \item @placement - Wo soll das in der Arbeit stehen,
-    \item @visual - Hier würde eine Darstellung helfen.
-    \item @translation - Was wäre eine bessere Übersetzung
-    \item @naming - Der Begriff ist uneinheitlich verwendet
-\end{itemize}
 
 \pagebreak
 \tableofcontents
 \pagebreak
 
 \section{Einleitung}
-% \section{Motivation}
-% \section{Problemstellung und Ziel}
-% \section{Problemlösung}
-% \section{Aufbau der Arbeit}
+% \subsection{Motivation}
+% \subsection{Problemstellung und Ziel}
+% \subsection{Problemlösung}
+% \subsection{Aufbau der Arbeit}
 
 \input{Hintergrund}
 
@@ -75,12 +32,14 @@ Tags:
 
 \input{Umsetzung}
 
-\section{Ergebnisse}
+\section{Ergebnisse und Diskussion}
 \begin{itemize}
     \item Bilder
     \item Base Case - reguläres Gitter
     \item geringe Striktheit/höhere Heat - Richtung verliert einfluss auf output, lokale Verzerrungen dominieren, sobald entgegengesetze richtungen wählbar sind dominiert Adjazenz
     \item Lokale Ähnlichkeit im Vergleich zum Input
+    \item Pixel/Linienmuster und Flächenmuster
+    \item Zu kleiner Lösungsraum ergibt uniformen Output, nur eine Farbe die flächenartig ist.
 \end{itemize}
 
 \section{Fazit}
@@ -98,5 +57,7 @@ Tags:
 \end{itemize}
 
 \section{Literaturverzeichnis}
+
+\input{Notizen}
 
 \end{document}

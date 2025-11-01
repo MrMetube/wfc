@@ -42,35 +42,35 @@ Wenn man sich den Kern des Wave Function Collapse Algorithmus genauer anguckt, e
 
 Wenn man mit WFC eine Ausgabe erstellen will, die sich selbst tiled(also linker Rand gleich rechter Rand und so) kann man eine imaginäre Kante von einer Zelle am rechten Rand zu einer Zelle am linken Rand erstellen und dem Algorithmus definieren dass diese Benachbarung in Richtung Osten geht. Nun sind die Ränder des Gitters benachbart und das Ergebnis ist, dass die Ränder, wenn eine Lösung gefunden wird, zueinander passen. Wenn man dies für einen Rand macht, so ist die Form der Zellen mit ihren Nachbarn nicht mehr eine flache Ebene, sondern die Oberfläche eines Zylinders(ohne Deckel und Boden). Verbindet man auf die selbe Weise auch den anderen Rand, ist die Form nun ein Torus. Der Algorithmus selbst muss also nur auf diese Weise angepasst werden, um auf anderen Anordnungen von Zellen zu funktionieren.
 
-@todo(viktor): Müssen es planare Graphen sein? Nein, ein Quadratgitter mit allen 8 Diagonalen pro Zelle ist ja auch okay, nur Delaunay macht daraus immer nur Ecken mit 4 bis 8 Kanten.
+\@todo(viktor):{ Müssen es planare Graphen sein? Nein, ein Quadratgitter mit allen 8 Diagonalen pro Zelle ist ja auch okay, nur Delaunay macht daraus immer nur Ecken mit 4 bis 8 Kanten.}
 
-@incomplete Diagonale Regeln, besseres Sampling der Eingabe, Regelmengen, höhere Entropie durch Strictness
+\at{@incomplete} Diagonale Regeln, besseres Sampling der Eingabe, Regelmengen, höhere Entropie durch Strictness
 
 
 
 \section{Wave Function Collapse auf Graphen}
 \url{https://en.wikipedia.org/wiki/Lattice_graph}
-@incomplete Welche Formel für Richtung? Mehr als eine Richtung. Welche Heuristik für Strictness? Warum auch Diagonalen extrahieren?
-@incomplete Welche Nachbarn hat eine Zelle? Wie beeinflusst eine Zelle seine Nachbarn und was hat Heat damit zutun? Zustand/Richtungsmengen erklären. Overlap Lookup Table
+\at{@incomplete} Welche Formel für Richtung? Mehr als eine Richtung. Welche Heuristik für Strictness? Warum auch Diagonalen extrahieren?
+\at{@incomplete} Welche Nachbarn hat eine Zelle? Wie beeinflusst eine Zelle seine Nachbarn und was hat Heat damit zutun? Zustand/Richtungsmengen erklären. Overlap Lookup Table
 
-@todo(viktor): Warum brauchen wir Heat. Welchen Effekt hat eine Heat von 1 auf z.B. Hexagongitter oder ''Rauschgraphen''
+\@todo(viktor):{ Warum brauchen wir Heat. Welchen Effekt hat eine Heat von 1 auf z.B. Hexagongitter oder ''Rauschgraphen''}
 
-\subsection{Output Graphen @naming}
+\subsection{Output Graphen \at{@naming}}
 
 Wave Function Collapse arbeitet normalerweise mit einem regelmäßigem Gitter. Hier ist die Anordnung der Zellen eindeutig; die Position einer Zelle und welche Nachbarn sie hat und in welcher Richtung die relativ zur Zelle sind implizit in der Datenstruktur eingebaut. Bei einem Graphen müssen diese Informationen explizit gespeichert werden. Jede Zelle kann eine beliebige Position haben und beliebig viele Nachbar in beliebigen Richtungen haben. 
 
-Jede Kante des Graphen stellt eine Beschränkung des Lösungsraums dar. Bei einem Gitter ist jede Zelle, mit Ausnahme der Zellen am Rand, gleichermaßen beschränkt, jedoch kann die Anordnung des Graphen dazu führen dass einzelne Zelle weniger und andere stärker eingeschränkt werden. Eine Zelle mit zehn Nachbarn muss in einen Zustand collapsen (@translation) welcher zu den Zuständen der zehn Nachbaren passt.
+Jede Kante des Graphen stellt eine Beschränkung des Lösungsraums dar. Bei einem Gitter ist jede Zelle, mit Ausnahme der Zellen am Rand, gleichermaßen beschränkt, jedoch kann die Anordnung des Graphen dazu führen dass einzelne Zelle weniger und andere stärker eingeschränkt werden. Eine Zelle mit zehn Nachbarn muss in einen Zustand collapsen (\at{@translation}) welcher zu den Zuständen der zehn Nachbaren passt.
 
 Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthalten, während dass Gitter uniforme Beschränkung auf Zellen ergibt. Zur Erinnerung: es muss nur eine Zelle eine Widerspruch verursachen damit der Algorithmus fehlschlägt. Also sind solche Regionen starker Beschränkung besonderns entscheident für die Chance einen validen Output zu generieren, weil hier der Lösungsraum am kleinsten ist.
 
-@incomplete Entropy erwähnen und für Regionen mit einer Grafik von der App darstellen
+\at{@incomplete} Entropy erwähnen und für Regionen mit einer Grafik von der App darstellen
 
-@todo(viktor): Collapsed und Observed als Begriffe vereinheitlichen
+\@todo(viktor):{ Collapsed und Observed als Begriffe vereinheitlichen}
 
 
 \subsection{Regelextrahierung}
-@todo(viktor): @placement vielleicht aufteilen in Allgemeines vom WFC und meine Abänderungen\\
-@todo(viktor): Kurz was zu Nachbarschaft \\
+\@todo(viktor):{ \at{@placement} vielleicht aufteilen in Allgemeines vom WFC und meine Abänderungen}\\
+\@todo(viktor):{ Kurz was zu Nachbarschaft }\\
 \url{https://en.wikipedia.org/wiki/Von_Neumann_neighborhood} und \\
 \url{https://en.wikipedia.org/wiki/Moore_neighborhood}
 
@@ -79,25 +79,25 @@ Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthal
     \item Um diese Bedingung zu erfüllen könnte man im Algorithmus prüfen, dass eine Zelle einen Zustand nur dann erhalten darf, wenn das dadurch entstehende Umfeld in der Eingabe existiert
     \item Andersherum heißt dass aber auch, dass wenn wir Zellen nur Umfelder ''zuweisen'' die in der Eingabe existieren, dann erhalten wir eine Ausgabe die der Eingabe lokal ähnlich ist
     \item 
-    \item @incomplete Algorithmus zur Extrahierung und Wrapping
-    \item @incomplete Frequenz von Zuständen
+    \item \at{@incomplete} Algorithmus zur Extrahierung und Wrapping
+    \item \at{@incomplete} Frequenz von Zuständen
     \item 
     \item Aus der Eingabe können wir eine Menge an Umfeldern auslesen, die bildet die Menge an Zuständen die eine Zelle erhalten kann. Zu Beginn sind alle Zustände möglich und jede Zelle befindet sich sozusagen in einer Superposition aller Zustände.
     \item Nach dem eine Zelle beobachtet wurde, also einen konkreten Zustand annimmt, müssen wir die Nachbarzellen prüfen, so dass nur noch passende Zustände in der Superposition sind. 
     \item Ein Zustand A passt genau dann neben einen Zustand B, wenn das Umfeld von A und das Umfeld von B überlappen.
     \item Zwei Umfelder A und B überlappen in einer Richtung D wenn man A über B legt und dann B um einen Schritt in Richtung D verschiebt und der übereinander liegende Teile gleich ist.
-    \item @incomplete Grafik zur Erklärung
+    \item \at{@incomplete} Grafik zur Erklärung
     \item 
     \item Die Form und Größe des Umfelds kann bei der Extrahierung frei gewählt werden. Bei einem Umfeld von 1x2 Pixeln entstehen Ausgaben wo nur die Adjazenz der Pixel erhalten bleibt. Bei einem Umfeld von der Größe der Eingabe erhält man nur eine exakte Kopie in der Ausgabe. Je größer das Umfeld gewählt wird, umso mehr sind Zellen von ihren Nachbarzellen beschränkt. Die Größe sollte auf die jeweils gewählte Eingabe abgestimmt sein, damit die gewünschten Muster in der Eingabe neu angeordnet und kombiniert werden können und man nicht nur einfache Kopien erhält.
     \item Ich habe mich auf ein 3x3 Umfeld beschränkt und Eingaben die dazu passen genutzt.
     \item 
-    \item @incomplete Welche Richtungen sind erlaubt?
+    \item \at{@incomplete} Welche Richtungen sind erlaubt?
     \item 
     \item Während des Algorithmus wird immer wieder geprüft, ob ein Zustand noch möglich ist. Das ist er dann, wenn er noch zu mindestens einem Zustand jeder Nachbarzelle passt. Also müssen wir über den Verlauf immer wieder prüfen, ob zwei Zustände überlappen. 
     \item Da dies nur von der Eingabe abhängt und sich nicht verändert können wir diese Information auch vorher berechnen und für später abspeichern.
     \item Nachdem wir die Umfelder aus der Eingabe ausgelesen haben, können wir die Überlappungs-Lookup-Tabelle erstellen. Dazu prüfen wir für jedes Paar von Umfeldern ob diese überlappen, und dass für jede Richtung.
-    \subitem @incomplete Symmetrie der Regeln
+    \subitem \at{@incomplete} Symmetrie der Regeln
     \item Später können wir einfach in der Tabelle ablesen ob zwei Zustände in einer Richtung überlappen und müssen nicht immer nicht immer die selbe Arbeit wiederholen. 
     \item 
-    \item @incomplete Darstellung in der Ausgabe
+    \item \at{@incomplete} Darstellung in der Ausgabe
 \end{itemize}
