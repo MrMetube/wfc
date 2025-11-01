@@ -8,41 +8,8 @@ Man beschränkt sich auf regelmäßige quadratische Gitter, da ihre Struktur bes
 Der Nachteil dadurch, dass die Generierung immer auf einem regelmäßigem quadratischen Gitter läuft, ist, dass die Ausgabe im Ganzen Artefakte des Gitter aufweist. Vertikale und horizontale Linien können im Pixelgitter dargestellt werden, aber bei diagonalen oder frei geformte Kurven und Linien müsste eine Zelle des Ausgabegitters anteilmäßig ausgefüllt sein, was aber nicht möglich ist. Eine Zelle kann immer nur einen diskreten finalen Zustand wählen. Es kommt zu Aliasing.
 
 Wenn man sich den Kern des Wave Function Collapse Algorithmus genauer anguckt, erkennt man, dass die Entscheidung, welchen Zustand eine Zelle erhällt, nur von den möglichen Zuständen ihrer Nachbarn abhängt. Deren Zuständ geschränken die Menge aller in der Eingabe existierenden Zustände, auf genau diese, die in der Eingabe nebeneinander gefunden wurden. Dabei ist auf dem Gitter immer eindeutig, dass z.B. die Zelle N nördlich einer betrachteten Zelle M, nur Zustände wählen kann die in der Eingabe nördlich von einem von M's Zuständen gefunden wurde. Damit der Algorithmus die Menge an möglichen Zuständen einer Zelle finden kann, braucht es also nur eine Funktion die aus der tatsächlichen Richtung von M zu N die betrachtete Richtung der Benachbarungregeln ergibt. Im Gitter ist gibt diese Funktion meißt die Identität; die Richtung zum Nachbarn ist die Richtung für die Regeln. 
-% \newline
-% $$\text{cell}=(x_c,y_c),\ \text{neighbour}=(x_n,y_n)$$
-% $$\mathbf{d} \;=\; \text{neighbour} - \text{cell}$$
-% Für das normale quadratische Gitter:
-% $$\mathbf{d} \;=\; (x_n-x_c,\; y_n-y_c)$$
 
-% $$Gitter(\text{cell},\text{neighbour}) = 
-% \begin{cases} 
-%     \text{Osten} & \text{falls } d_x = 1,\ d_y = 0 \\
-%     \text{Norden} & \text{falls } d_x = 0,\ d_y = 1 \\
-%     \text{Westen} & \text{falls } d_x = -1,\ d_y = 0 \\
-%     \text{Süden} & \text{falls } d_x = 0,\ d_y = -1 \\
-% \end{cases}$$
-
-
-% Für das torusartige Gitter:
-% $$\mathbf{W} \;=\; Gitterbreite,\ \mathbf{H} \;=\; Gitterh"ohe$$
-
-% $$d = \operatorname{wrap}\big((x_n,y_n)-(x_c,y_c), (W,H)\big)$$
-
-
-% $$\operatorname{wrap}(\Delta,M)=\bigl((\Delta \bmod M)+M\bigr)\bmod M$$
-
-% $$Gitter_{torus}(\text{cell},\text{neighbour}) = 
-% \begin{cases} 
-%     \text{Osten} & \text{falls } d_x = 1,\ d_y = 0 \\
-%     \text{Norden} & \text{falls } d_x = 0,\ d_y = 1 \\
-%     \text{Westen} & \text{falls } d_x = W-1,\ d_y = 0 \\
-%     \text{Süden} & \text{falls } d_x = 0,\ d_y = H-1 \\
-% \end{cases}$$
-
-
-Wenn man mit WFC eine Ausgabe erstellen will, die sich selbst tiled(also linker Rand gleich rechter Rand und so) kann man eine imaginäre Kante von einer Zelle am rechten Rand zu einer Zelle am linken Rand erstellen und dem Algorithmus definieren dass diese Benachbarung in Richtung Osten geht. Nun sind die Ränder des Gitters benachbart und das Ergebnis ist, dass die Ränder, wenn eine Lösung gefunden wird, zueinander passen. Wenn man dies für einen Rand macht, so ist die Form der Zellen mit ihren Nachbarn nicht mehr eine flache Ebene, sondern die Oberfläche eines Zylinders(ohne Deckel und Boden). Verbindet man auf die selbe Weise auch den anderen Rand, ist die Form nun ein Torus. Der Algorithmus selbst muss also nur auf diese Weise angepasst werden, um auf anderen Anordnungen von Zellen zu funktionieren.
-
-\@todo(viktor):{ Müssen es planare Graphen sein? Nein, ein Quadratgitter mit allen 8 Diagonalen pro Zelle ist ja auch okay, nur Delaunay macht daraus immer nur Ecken mit 4 bis 8 Kanten.}
+Wenn man mit WFC eine Ausgabe erstellen will, die sich selbst tiled\at{@translation}(also linker Rand gleich rechter Rand und so) kann man eine imaginäre Kante von einer Zelle am rechten Rand zu einer Zelle am linken Rand erstellen und dem Algorithmus definieren dass diese Benachbarung in Richtung Osten geht. Nun sind die Ränder des Gitters benachbart und das Ergebnis ist, dass die Ränder, wenn eine Lösung gefunden wird, zueinander passen. Wenn man dies für einen Rand macht, so ist die Form der Zellen mit ihren Nachbarn nicht mehr eine flache Ebene, sondern die Oberfläche eines Zylinders(ohne Deckel und Boden). Verbindet man auf die selbe Weise auch den anderen Rand, ist die Form nun ein Torus. Der Algorithmus selbst muss also nur auf diese Weise angepasst werden, um auf anderen Anordnungen von Zellen zu funktionieren.
 
 \at{@incomplete} Diagonale Regeln, besseres Sampling der Eingabe, Regelmengen, höhere Entropie durch Strictness
 
@@ -52,8 +19,6 @@ Wenn man mit WFC eine Ausgabe erstellen will, die sich selbst tiled(also linker 
 \url{https://en.wikipedia.org/wiki/Lattice_graph}
 \at{@incomplete} Welche Formel für Richtung? Mehr als eine Richtung. Welche Heuristik für Strictness? Warum auch Diagonalen extrahieren?
 \at{@incomplete} Welche Nachbarn hat eine Zelle? Wie beeinflusst eine Zelle seine Nachbarn und was hat Heat damit zutun? Zustand/Richtungsmengen erklären. Overlap Lookup Table
-
-\@todo(viktor):{ Warum brauchen wir Heat. Welchen Effekt hat eine Heat von 1 auf z.B. Hexagongitter oder ''Rauschgraphen''}
 
 \subsection{Output Graphen \at{@naming}}
 
@@ -65,14 +30,8 @@ Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthal
 
 \at{@incomplete} Entropy erwähnen und für Regionen mit einer Grafik von der App darstellen
 
-\@todo(viktor):{ Collapsed und Observed als Begriffe vereinheitlichen}
-
-
 \subsection{Regelextrahierung}
-\@todo(viktor):{ \at{@placement} vielleicht aufteilen in Allgemeines vom WFC und meine Abänderungen}\\
-\@todo(viktor):{ Kurz was zu Nachbarschaft }\\
-\url{https://en.wikipedia.org/wiki/Von_Neumann_neighborhood} und \\
-\url{https://en.wikipedia.org/wiki/Moore_neighborhood}
+\at{@placement}vielleicht aufteilen in Allgemeines vom WFC und meine Abänderungen\\
 
 \begin{itemize}
     \item Allgemein: damit die Ausgabe der Eingabe lokal ähnlich ist, muss jede Zelle der Ausgabe einen Zustand erhalten, so dass ihr Umfeld, die Zelle und ihre Nachbarn, in der Eingabe existiert
@@ -86,7 +45,7 @@ Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthal
     \item Nach dem eine Zelle beobachtet wurde, also einen konkreten Zustand annimmt, müssen wir die Nachbarzellen prüfen, so dass nur noch passende Zustände in der Superposition sind. 
     \item Ein Zustand A passt genau dann neben einen Zustand B, wenn das Umfeld von A und das Umfeld von B überlappen.
     \item Zwei Umfelder A und B überlappen in einer Richtung D wenn man A über B legt und dann B um einen Schritt in Richtung D verschiebt und der übereinander liegende Teile gleich ist.
-    \item \at{@incomplete} Grafik zur Erklärung
+    \item \at{@incomplete} \at{@visual} Grafik zur Erklärung
     \item 
     \item Die Form und Größe des Umfelds kann bei der Extrahierung frei gewählt werden. Bei einem Umfeld von 1x2 Pixeln entstehen Ausgaben wo nur die Adjazenz der Pixel erhalten bleibt. Bei einem Umfeld von der Größe der Eingabe erhält man nur eine exakte Kopie in der Ausgabe. Je größer das Umfeld gewählt wird, umso mehr sind Zellen von ihren Nachbarzellen beschränkt. Die Größe sollte auf die jeweils gewählte Eingabe abgestimmt sein, damit die gewünschten Muster in der Eingabe neu angeordnet und kombiniert werden können und man nicht nur einfache Kopien erhält.
     \item Ich habe mich auf ein 3x3 Umfeld beschränkt und Eingaben die dazu passen genutzt.
