@@ -7,7 +7,6 @@ import rl "vendor:raylib"
 N: i32 : 3
 
 Collapse :: struct {
-    total_frequency: f32,
     states:   [dynamic] State,
     overlaps: [/* State_Id * len(states) + State_Id */] Direction_Mask,
     
@@ -21,8 +20,8 @@ Collapse_Step :: distinct i32
 Invalid_State :: max(State_Id)
 
 State :: struct {
-    frequency: f32,
-    middle:    v4,
+    probability: f32, // @note(viktor): frequency of state / total frequency of all states
+    middle:      v4,
 }
 
 ////////////////////////////////////////////////
@@ -129,8 +128,7 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
             
             entropy: f32
             for id in 0..<len(c.states) do if !cell_state_removed(&cell, id) {
-                frequency   := c.states[id].frequency
-                probability := frequency / c.total_frequency
+                probability := c.states[id].probability
                 
                 entropy -= probability * log2(probability)
             }
@@ -196,7 +194,7 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
             total: f32
             for index in current.pickable_indices {
                 assert(!cell_state_removed(cell, index))
-                total += c.states[index].frequency
+                total += c.states[index].probability
             }
             
             target := random_between(entropy, f32, 0, total)
@@ -205,7 +203,7 @@ step_update :: #force_no_inline proc (c: ^Collapse, entropy: ^RandomSeries, curr
             pick := Invalid_State
             pickable_index := -1
             for index, pick_index in current.pickable_indices {
-                target -= c.states[index].frequency
+                target -= c.states[index].probability
                 
                 if target <= 0 {
                     pick = cast(State_Id) index
@@ -420,14 +418,14 @@ set_cell_state_ok :: proc (cell: ^Cell, index: int, value: bool) #no_bounds_chec
 }
 
 calculate_average_color :: proc (c: ^Collapse, cell: ^Cell) -> (result: v4) {
-    count: f32
+    total: f32
     for state_at, id in cell.states_at do if !cell_state_removed(cell, id) || state_at > viewing_step {
         state := c.states[id]
-        result += state.middle * state.frequency
-        count += state.frequency
+        result += state.middle * state.probability
+        total += state.probability
     }
+    result = safe_ratio_0(result, total)
     
-    result = safe_ratio_0(result, count)
     return result
 }
 
@@ -501,7 +499,7 @@ extract_states :: proc (c: ^Collapse, pixels: [] rl.Color, width, height: i32, w
                     other_hashes := subregion_hashes[other_id]
                     if other_hashes != hashes do continue search
                     
-                    other.frequency += 1
+                    other.probability += 1
                     found = true
                     break search
                 }
@@ -509,7 +507,7 @@ extract_states :: proc (c: ^Collapse, pixels: [] rl.Color, width, height: i32, w
                 if !found {
                     state := State {
                         middle    = rl_color_to_v4(temp_values[N/4+N/4*N]),
-                        frequency = 1,
+                        probability = 1,
                     }
                     
                     append(&c.states, state)
@@ -523,9 +521,11 @@ extract_states :: proc (c: ^Collapse, pixels: [] rl.Color, width, height: i32, w
     
     total_frequency: f32
     for state in c.states {
-        total_frequency += state.frequency
+        total_frequency += state.probability
     }
-    c.total_frequency = total_frequency
+    for &state in c.states {
+        state.probability /= total_frequency
+    }
     
     spall_begin("Overlaps generation")
     make(&c.overlaps, square(len(c.states)))

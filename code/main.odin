@@ -222,8 +222,7 @@ main :: proc () {
         if show_cells {
             max_entropy: f32
             for id in 0..<len(collapse.states) {
-                frequency   := collapse.states[id].frequency
-                probability := frequency / collapse.total_frequency
+                probability := collapse.states[id].probability
                 
                 max_entropy -= probability * log2(probability)
             }
