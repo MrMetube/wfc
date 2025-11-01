@@ -1,63 +1,20 @@
 \documentclass{article}
 
-\usepackage[ngerman]{babel}
-\usepackage{amsmath}
-\usepackage{hyperref}
-\usepackage{graphicx}
-\usepackage{caption}
-\usepackage{subcaption}
-\usepackage{pgffor}
-\usepackage{xcolor}
-
-\definecolor{mred}{HTML}{fe163d}
-\definecolor{mgreen}{HTML}{a1e381}
-\DeclareRobustCommand{\@todo(viktor):}[1]{\textcolor{mred}{@todo:} \textcolor{mred}{#1}}
-\DeclareRobustCommand{\at}[1]{\textcolor{mgreen}{#1}}
-
+\input{Header.tex}
 \begin{document}
 
+
+\input{Fassung 03.tex}
+
 \pagebreak
-\tableofcontents
 \pagebreak
 
-\section{Einleitung}
-% \subsection{Motivation}
-% \subsection{Problemstellung und Ziel}
-% \subsection{Problemlösung}
-% \subsection{Aufbau der Arbeit}
+\input{Fassung 02.tex}
 
-\input{Hintergrund}
+\pagebreak
+\pagebreak
 
-\input{Konzept}
+\input{Fassung 01.tex}
 
-\input{Umsetzung}
-
-\section{Ergebnisse und Diskussion}
-\begin{itemize}
-    \item Bilder
-    \item Base Case - reguläres Gitter
-    \item geringe Striktheit/höhere Heat - Richtung verliert einfluss auf output, lokale Verzerrungen dominieren, sobald entgegengesetze richtungen wählbar sind dominiert Adjazenz
-    \item Lokale Ähnlichkeit im Vergleich zum Input
-    \item Pixel/Linienmuster und Flächenmuster
-    \item Zu kleiner Lösungsraum ergibt uniformen Output, nur eine Farbe die flächenartig ist.
-\end{itemize}
-
-\section{Fazit}
-
-\subsection{Vergleich zum Original}
-
-\subsection{Mögliche Anwendungsbereiche?}
-
-\subsection{Ausblick und zukünftige Forschung}
-
-\begin{itemize}
-    \item{Kann dies auf 3D angewendet werden?}
-    \item{Welche Beziehung besteht zwischen Input Muster und Gitter und strictness? Linien und Flächen im Input}
-    \item{Welche Eigenschaften eines Gitters bestimmen die Wahrscheinlichkeit eine Lösung zu finden?}
-\end{itemize}
-
-\section{Literaturverzeichnis}
-
-\input{Notizen}
-
+\input{Footer.tex}
 \end{document}

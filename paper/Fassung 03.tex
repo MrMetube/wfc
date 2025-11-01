@@ -1,7 +1,48 @@
+\section{Einleitung}
+\subsection{Motivation}
+\subsection{Problemstellung und Ziel}
+\subsection{Problemlösung}
+\subsection{Aufbau der Arbeit}
+\section{Hintergrund}
+\subsection{Prozedurale Generierung}
+\subsection{Wave Function Collapse}
+\subsection{Stand der Technik}
+\subsubsection{Model Synthesis - Paul Merrell}
+\subsubsection{Wave Function Collapse - Maxim Gumin}
+\subsubsection{WFC Algorithm}
+\subsubsection{Oskar Stålberg}
+\subsection{Von Gittern zu Graphen}
+\subsubsection{Unregelmäßige Gitter}
+\subsubsection{Delaunay Triangulation}
+\subsubsection{Voronoi Diagramm}
+\section{Konzept}
+\subsection{Einschränkung des Algorithmus und Idee zur Erweiterung}
+Die ursprüngliche Form des Wave Function Collapse nimmt in 2D Pixelmuster oder Tilesets als Eingabe und produziert darauß wieder 2D Muster. 
+Pixel liegen stets auf einem quadratischen Gitter. Bei Tilesets ist die grafische Gestaltung des Tiles uneingeschränkt. Dennoch sind die Tiles selbst quadratisch. Dies schränkt die Gestaltung des Inhalts der Tiles in sofern ein, dass die Kanten zu anderen Kanten passen müssen. Auch bei 3D Inputs werden die Modelle in blockförmige Bausteine zerschnitten, damit der Collapse auf einem 3D Gitter von Würfeln arbeiten kann.
+
+Man beschränkt sich auf regelmäßige quadratische Gitter, da ihre Struktur bestimmte Vorteile mit sich bringt. Benachbarung von Zellen ist implizit durch die Struktur des Gitters mitgeliefert. Eine Zelle des Ausgabegitters ist durch seine Koordinaten im Gitter definiert und seine Nachbarn lassen sich einfach durch Schritte in vier festen Richtungen in 2D oder sechs Richtungen in 3D finden. Diese Eigenschaft gilt durch die Regelmäßigkeit des Gitters für alle Zellen gleichermaßen. Dies ist nützlich, da die Benachbarungsregeln, die aus der Eingabe herausgezogen werden, eben auch auf einem regelmäßigem Gitter basieren und direkt im Algorithmus verwendet werden können.
+
+Der Nachteil dadurch, dass die Generierung immer auf einem regelmäßigem quadratischen Gitter läuft, ist, dass die Ausgabe im Ganzen Artefakte des Gitter aufweist. Vertikale und horizontale Linien können im Pixelgitter dargestellt werden, aber bei diagonalen oder frei geformte Kurven und Linien müsste eine Zelle des Ausgabegitters anteilmäßig ausgefüllt sein, was aber nicht möglich ist. Eine Zelle kann immer nur einen diskreten finalen Zustand wählen. Es kommt zu Aliasing.
+
+Wenn man sich den Kern des Wave Function Collapse Algorithmus genauer anguckt, erkennt man, dass die Entscheidung, welchen Zustand eine Zelle erhällt, nur von den möglichen Zuständen ihrer Nachbarn abhängt. Deren Zuständ geschränken die Menge aller in der Eingabe existierenden Zustände, auf genau diese, die in der Eingabe nebeneinander gefunden wurden. Dabei ist auf dem Gitter immer eindeutig, dass z.B. die Zelle N nördlich einer betrachteten Zelle M, nur Zustände wählen kann die in der Eingabe nördlich von einem von M's Zuständen gefunden wurde. Damit der Algorithmus die Menge an möglichen Zuständen einer Zelle finden kann, braucht es also nur eine Funktion die aus der tatsächlichen Richtung von M zu N die betrachtete Richtung der Benachbarungregeln ergibt. Im Gitter ist gibt diese Funktion meißt die Identität; die Richtung zum Nachbarn ist die Richtung für die Regeln. 
+
+Wenn man mit WFC eine Ausgabe erstellen will, die sich selbst tiled\at{@translation}(also linker Rand gleich rechter Rand und so) kann man eine imaginäre Kante von einer Zelle am rechten Rand zu einer Zelle am linken Rand erstellen und dem Algorithmus definieren dass diese Benachbarung in Richtung Osten geht. Nun sind die Ränder des Gitters benachbart und das Ergebnis ist, dass die Ränder, wenn eine Lösung gefunden wird, zueinander passen. Wenn man dies für einen Rand macht, so ist die Form der Zellen mit ihren Nachbarn nicht mehr eine flache Ebene, sondern die Oberfläche eines Zylinders(ohne Deckel und Boden). Verbindet man auf die selbe Weise auch den anderen Rand, ist die Form nun ein Torus. Der Algorithmus selbst muss also nur auf diese Weise angepasst werden, um auf anderen Anordnungen von Zellen zu funktionieren.
+
+\at{@incomplete} Diagonale Regeln, besseres Sampling der Eingabe, Regelmengen, höhere Entropie durch Strictness
+
+\subsection{Wave Function Collapse auf Graphen}
+
+\subsubsection{Output Graphen \at{@naming}}
+
+Wave Function Collapse arbeitet normalerweise mit einem regelmäßigem Gitter. Hier ist die Anordnung der Zellen eindeutig; die Position einer Zelle und welche Nachbarn sie hat und in welcher Richtung die relativ zur Zelle sind implizit in der Datenstruktur eingebaut. Bei einem Graphen müssen diese Informationen explizit gespeichert werden. Jede Zelle kann eine beliebige Position haben und beliebig viele Nachbar in beliebigen Richtungen haben. 
+
+Jede Kante des Graphen stellt eine Beschränkung des Lösungsraums dar. Bei einem Gitter ist jede Zelle, mit Ausnahme der Zellen am Rand, gleichermaßen beschränkt, jedoch kann die Anordnung des Graphen dazu führen dass einzelne Zelle weniger und andere stärker eingeschränkt werden. Eine Zelle mit zehn Nachbarn muss in einen Zustand collapsen (\at{@translation}) welcher zu den Zuständen der zehn Nachbaren passt.
+
+Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthalten, während dass Gitter uniforme Beschränkung auf Zellen ergibt. Zur Erinnerung: es muss nur eine Zelle eine Widerspruch verursachen damit der Algorithmus fehlschlägt. Also sind solche Regionen starker Beschränkung besonderns entscheident für die Chance einen validen Output zu generieren, weil hier der Lösungsraum am kleinsten ist.
+
+\at{@incomplete} Entropy erwähnen und für Regionen mit einer Grafik von der App darstellen
+\subsection{Regelextrahierung}
 \section{Umsetzung}
-
-
-
 \subsection{Generierung von Voronoi-Graphen}
 
 \@todo(viktor):{ Erklärung der Generierung separat zur erklärung der Anforderung an den Graphen auf dem der Algorithmus laufen soll \\}
@@ -82,26 +123,7 @@ Es ist normal, dass ein solches Voronoidiagram an den Rändern der Point-Cloud a
     }
     \label{fig:voronoi_clipping}
 \end{figure}
-
-
-
 \subsection{Collapse Cells - Step}
-
-\at{@placement} Ein Schritt besteht aus Search, Pick, Collapse und Propagate Phase.
-
-\begin{enumerate}
-    \item Search: ermittle alle Zellen mit der geringsten Entropie (Shannon - Entropie) die noch nicht Collapsed ist
-    \item Pick: wähle eine der gefundenen Zellen
-    \item Collapse: wähle aus der Menge an noch möglichen Zuständen einen aus, skalierte Chance basiert auf dessen Frequenz in der Eingabe
-    \item Propagate: Keep a list of cells that changed. Add the collapsed cell onto the list. Then until its empty:
-    \subitem Pop off a changed cell and for each of its neighbours recalculate their set of possible states. If any state became impossible, append that neighbour onto the list. If any neighbour now has no more possible states we reached a contradiction.
-\end{enumerate}
-
-If we can collapse all cells then we found a valid solution for the given input pattern and graph. Otherwise we reached a contradiction, when at least one cell could no longer be collapsed into a single state.
-To handle a contradiction, we need to trace back to an early stage of the collapse and make a different decision, in hope that from there we can reach a solution (\@todo(viktor):{ provability of a solve and NP-Hardness}). The points at which the algorithm ''decides'' are when Picking a cell with the lowest entropy and when Collapsing a cell into any one of its possible states. If we do not want to store any of the intermediates states of the graph, we can just go back to the first decision point, when the grid was just initialized. In other words, we just restart and try again. Otherwise we can also store some information to allow us to return to a partially solved version of the graph.
-
-
-
 \subsection{Backtracking}
 Wenn der Algorithmus einen Widerspruch entdeckt, muss nicht immer alle Arbeit verworfen werden. Gerade bei größeren oder komplizierteren Mustern oder Graphen ist es wahrscheinlich, dass beim ersten Versuch keine Lösung gefunden wird, weil die Komplexität den Lösungsraum stärker einschränkt. Wenn ein Widerspruch in einer Zelle aber nun nur von den direkten Nachbar abhängt, so ist es wahrscheinlich dass weiter entfernte bereits gelöste Zellen dennoch kompatibel sind. Um einen lokalen Widerspruch aufzulösen muss meistens nur lokal eine andere Entscheidung getroffen werden.
 
@@ -118,26 +140,9 @@ Für jeden Schritt des Algorithmus speichern wir nun die Liste der gefundenen Ze
 
 Nun haben wir unwissentlich auch eine Schwachstelle in den Algorithmus eingeführt. Wenn wir zuvor in der Search-Phase keine Zellen in Superposition mehr gefunden haben, waren alle Zellen tatsächlich collapsed. Nun kann es auch sein, dass alle Zellen, die wir finden, zu einem Widerspruch führen. Auch in der Collapse-Phase war es unmöglich keinen Zustand mehr auswählen zu können, da eine Zelle mit leerer Zustandmenge bereits zuvor als Widerspruch identifiziert wurden wäre. 
 Um diese Fälle ordentlich zu behandeln können wir nun aber einfach auch in solchen Fällen einen Widerspruch deklarieren und Backtracken. Schließlich haben wir alle noch möglichen Entscheidungen bereits getroffen und ausgewertet und keine Lösung gefunden. Somit führt dieser Schritt zwar nicht direkt zu einem Widerspruch in einer Zelle, aber alle folgen Schritte werden irgendwann zu einem Widerspruch führen. Zu Bemerken ist, dass wenn auf diese Weise bis zum ersten Schritt gebacktrackt wird und auch die erste Entscheidung einen Widerspruch verursacht, so kann die Kombination aus Eingabe und Graph keine Ausgabe ergeben.
-
-
 \subsection{Overlap - Direction Mask / State Buckets / rule sets}
-\begin{itemize}
-    \item \@todo(viktor):{ Strictness muss ich nicht mit der Größe der Zahl im Code hier gleichstellen, dass ist nur verwirrend wenn 'hohe' strictness eigentlich weniger strenge bedingungen darstellt}
-    \item Da Nachbarn nun in beliebigen Richtungen zu finden sind, gibt es kein direktes mapping zu den Supportregeln, welche ja je eine Menge pro Richtung sind.
-    \item Dabei können wir entscheiden ob jeweils nur eine Menge oder mehrere Mengen betrachtet werden
-    \item Ob eine Menge erlaubt ist, messen wir indem wir berechnen wir nahe die tatsächliche Richtung zu den Mengenrichtungen ist. Nun wählen wir die x-nähesten Mengen aus. Bei einer Strenge von 1 also die beste, bei 2 die zwei besten und so weiter.
-    \item Die Strenge kann maximal 8 betrangen, da wir nur 8 "Himmelsrichtungen`` in der Extraktion genutzt haben. 
-    \item Insgesamt bedeutet dies, dass ein Nachbar als z.B. im Norden oder im Nordosten betrachtet werden kann. Dadurch ist die menge an kompatiblen zuständen weniger eingeschränkt und es ist weniger wahrscheinlich, dass alle Zustände einer Zelle unmöglich werden
-    \item Es folgt aber auch, dass nun Nachbar mit fast oder gar perfekter \\ übereinstimmung mit einer der Himmelsrichtung als nicht nur diese gelten, wodurch es zu einer Verzerrung im Output kommt.
-    \item Wenn zuvor ein Muster im Input z.B. stehts N-S ausgerichtet war kann es ab einer Strenge vom 3 auch als (NW, N, NO)-(SW, S, SO) betrachtet werden. es könnte also auch als NW-SW betrachtet werden und aus einem Geradlinigen muster wird ein geknicktes oder zackiges.
-    \item Aber genau diese auflockerung ist nötig, damit der Algorithmus mit \\ höherer Wahrscheinlichkeit eine Lösung findet
-    \item 
-    \item Wenn mehr Richtungen erlaubt sind, so kann dies auch betrachtet werden als dass nun nicht nur das Eingabe Muster sondern auch gedrehte Versionen der Eingabe möglich sind. 
-    \item Nun können gedrehte regelmäßige Gitter auch gelöst werden. (Siehe Grid = Square with an angle ~27° and strictness(\at{@naming}) 1 or 2).
-    \item Auf unregelmäßigen Gittern kann man keine Drehung finden in der es einem regelmäßigen Gitter global gleich. Dennoch können Lösungen gefunden werden, da für jedes Zellenpaar/Benachbarung frei gewählt werden kann, ob eine solche gedacht Drehung angewendet wird oder nicht. 
-    \item Es ist so, als würde der Algorithmus das Gitter lokal immer genau so verdrehen (mit Beschränkung durch die maximal Strictness), dass das tatsächliche Gitter lokal einem regelmäßigen gleicht.
-    \item 
-    \item Bei höherer Strictness und einer gelösten Zelle: ein Nachbar der Zelle kann nun aus mehr als einer Regelmenge entsprechend seiner Richtung wählen. Die Superposition des Nachbarn ist 'größer' bei höherer Strictness. Dadurch ist auch die Menge an Zuständen die Nachbarn des Nachbarn haben entsprechend größer, da weniger Beschränkungen auf sie einwirken. Es bleiben für einen längeren Zeitraum mehr Zustände möglich, wodurch ein Widerspruch durch eine Zelle mit leerer Superposition weniger wahrscheinlich ist. Im Gegenzug ist die lokale Ähnlichkeit zum Original verringert, da nun auch Nachbarn mit 'eindeutiger' Richtung zur Zelle auch einer weniger passenden Richtung zugewiesen werden können.
-    \item Eine globale Strictness für alle Zellen hat einen negativen Effekt auf lokal regelmäßige Regionen eines Gitters und ein postiven Effekt auf sehr unregelmäßige Regionen des Gitters.
-    \item Anstatt dass die Strictness global für alle Zellen zu Beginn bestimmt wird, kann man auch während des Collapse 'lernen' welche Regionen 'schwerer' zu lösen sind und dort die Strictness schrittweise erhöhen bis eine Lösung gefunden werden kann.
-\end{itemize}
+\section{Ergebnisse und Diskussion}
+\section{Fazit}
+\subsection{Vergleich zum Original}
+\subsection{Mögliche Anwendungsbereiche?}
+\subsection{Ausblick und zukünftige Forschung}
