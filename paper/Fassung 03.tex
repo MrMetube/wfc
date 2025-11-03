@@ -17,6 +17,7 @@
 \subsubsection{Voronoi Diagramm}
 \section{Konzept}
 \subsection{Einschränkung des Algorithmus und Idee zur Erweiterung}
+    
     Die ursprüngliche Form des Wave Function Collapse nimmt in 2D Pixelmuster oder Tilesets als Eingabe und produziert darauß wieder 2D Muster. 
     Pixel liegen stets auf einem quadratischen Gitter. Bei Tilesets ist die grafische Gestaltung des Tiles uneingeschränkt. Dennoch sind die Tiles selbst quadratisch. Dies schränkt die Gestaltung des Inhalts der Tiles in sofern ein, dass die Kanten zu anderen Kanten passen müssen. Auch bei 3D Inputs werden die Modelle in blockförmige Bausteine zerschnitten, damit der Collapse auf einem 3D Gitter von Würfeln arbeiten kann.
 
@@ -26,24 +27,23 @@
 
     Wenn man sich den Kern des Wave Function Collapse Algorithmus genauer anguckt, erkennt man, dass die Entscheidung, welchen Zustand eine Zelle erhällt, nur von den möglichen Zuständen ihrer Nachbarn abhängt. Deren Zuständ geschränken die Menge aller in der Eingabe existierenden Zustände, auf genau diese, die in der Eingabe nebeneinander gefunden wurden. Dabei ist auf dem Gitter immer eindeutig, dass z.B. die Zelle N nördlich einer betrachteten Zelle M, nur Zustände wählen kann die in der Eingabe nördlich von einem von M's Zuständen gefunden wurde. Damit der Algorithmus die Menge an möglichen Zuständen einer Zelle finden kann, braucht es also nur eine Funktion die aus der tatsächlichen Richtung von M zu N die betrachtete Richtung der Benachbarungregeln ergibt. Im Gitter ist gibt diese Funktion meißt die Identität; die Richtung zum Nachbarn ist die Richtung für die Regeln. 
 
-    Wenn man mit WFC eine Ausgabe erstellen will, die sich selbst tiled\at{@translation}(also linker Rand gleich rechter Rand und so) kann man eine imaginäre Kante von einer Zelle am rechten Rand zu einer Zelle am linken Rand erstellen und dem Algorithmus definieren dass diese Benachbarung in Richtung Osten geht. Nun sind die Ränder des Gitters benachbart und das Ergebnis ist, dass die Ränder, wenn eine Lösung gefunden wird, zueinander passen. Wenn man dies für einen Rand macht, so ist die Form der Zellen mit ihren Nachbarn nicht mehr eine flache Ebene, sondern die Oberfläche eines Zylinders(ohne Deckel und Boden). Verbindet man auf die selbe Weise auch den anderen Rand, ist die Form nun ein Torus. Der Algorithmus selbst muss also nur auf diese Weise angepasst werden, um auf anderen Anordnungen von Zellen zu funktionieren.
+    Wenn man mit WFC eine Ausgabe erstellen will, die sich selbst tiled \at{@translation} (also linker Rand gleich rechter Rand und so) kann man eine imaginäre Kante von einer Zelle am rechten Rand zu einer Zelle am linken Rand erstellen und dem Algorithmus definieren dass diese Benachbarung in Richtung Osten geht. Nun sind die Ränder des Gitters benachbart und das Ergebnis ist, dass die Ränder, wenn eine Lösung gefunden wird, zueinander passen. Wenn man dies für einen Rand macht, so ist die Form der Zellen mit ihren Nachbarn nicht mehr eine flache Ebene, sondern die Oberfläche eines Zylinders(ohne Deckel und Boden). Verbindet man auf die selbe Weise auch den anderen Rand, ist die Form nun ein Torus. Der Algorithmus selbst muss also nur auf diese Weise angepasst werden, um auf anderen Anordnungen von Zellen zu funktionieren.
 
 \at{@incomplete} Diagonale Regeln, besseres Sampling der Eingabe, Regelmengen, höhere Entropie durch Strictness
 
 \subsection{Wave Function Collapse auf Graphen}
 
-\subsubsection{Output Graphen \at{@naming}}
+\subsubsection{Output Graphen}
 
     Wave Function Collapse arbeitet normalerweise mit einem regelmäßigem Gitter. Hier ist die Anordnung der Zellen eindeutig; die Position einer Zelle und welche Nachbarn sie hat und in welcher Richtung die relativ zur Zelle sind implizit in der Datenstruktur eingebaut. Bei einem Graphen müssen diese Informationen explizit gespeichert werden. Jede Zelle kann eine beliebige Position haben und beliebig viele Nachbar in beliebigen Richtungen haben. 
 
-    Jede Kante des Graphen stellt eine Beschränkung des Lösungsraums dar. Bei einem Gitter ist jede Zelle, mit Ausnahme der Zellen am Rand, gleichermaßen beschränkt, jedoch kann die Anordnung des Graphen dazu führen dass einzelne Zelle weniger und andere stärker eingeschränkt werden. Eine Zelle mit zehn Nachbarn muss in einen Zustand collapsen (\at{@translation}) welcher zu den Zuständen der zehn Nachbaren passt.
+    Jede Kante des Graphen stellt eine Beschränkung des Lösungsraums dar. Bei einem Gitter ist jede Zelle, mit Ausnahme der Zellen am Rand, gleichermaßen beschränkt, jedoch kann die Anordnung des Graphen dazu führen dass einzelne Zelle weniger und andere stärker eingeschränkt werden. Eine Zelle mit zehn Nachbarn muss in einen Zustand collapsen welcher zu den Zuständen der zehn Nachbaren passt.
 
     Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthalten, während dass Gitter uniforme Beschränkung auf Zellen ergibt. Zur Erinnerung: es muss nur eine Zelle eine Widerspruch verursachen damit der Algorithmus fehlschlägt. Also sind solche Regionen starker Beschränkung besonderns entscheident für die Chance einen validen Output zu generieren, weil hier der Lösungsraum am kleinsten ist.
 
     \at{@incomplete} Entropy erwähnen und für Regionen mit einer Grafik von der App darstellen
 
 \subsection{Regelextrahierung \at{@naming}}
-    \at{@translation} Eingabe nennt Merrel Example, also wäre Beispiel vielleicht besser
     \at{@citation merrel}
     \at{@flow} Die Absätze sind okay aber ihre Reihenfolge muss überdacht werden
     
@@ -58,8 +58,8 @@
     
     \at{@placement} Das ist eher Implementierung
     Während des Collapse werden die Regeln, welche Zustände überlappen, nach jedem Schritt für alle benachbarten Zellen geprüft. Da sich diese Eigenschaft aber nicht während des Verlauf des Algorithmus ändert, kann eine Datenstruktur zuvor zur Speicherung erstellt werden. Die Überlappungs-Lookuptabelle gibt für jedes Zustandspaar die Richtungen an, in denen die Zustände überlappen. Wenn Zellen nun geprüft werden, kann nun aus der Lookuptabelle abgelesen werden, wodurch viel wiederholte Arbeit vermieden wird.
-            
-    Ist der Output-Graph ein Quadratgitter können die diagonalen Richtungen bei der Betrachtung entfallen, ohne dass es einen Einfluss auf die Qualität der Ausgabe hat. Die reguläre Struktur führt dazu, dass wenn für eine Zelle A der Nachbar von A im Norden(An) passt und der Nachbar im Westen von An passt, dann muss auch der Nachbar von A im Nordwesten passen. 
+      
+    Ist der Output-Graph ein Quadratgitter können die diagonalen Richtungen bei der Betrachtung entfallen, ohne dass es einen Einfluss auf die Qualität der Ausgabe hat. Die reguläre Struktur führt dazu, dass wenn für eine Zelle A der Nachbar von A im Norden(An) passt und der Nachbar im Westen von An passt, dann muss auch der Nachbar von A im Nordwesten passen. \at{@wording}
     
     \at{@incomplete} Symmetrie und Transitivität der Regeln
     
@@ -109,7 +109,7 @@
 \subsection{Collapse Cells - Step \at{@naming}}
     Der Algorithmus generiert die Ausgabe iterativ. Eine Iteration, ein Schritt, kann in vier Phasen geteilt werden: Search, Pick, Observe und Propagate.
     
-    Zu Beginn wird die Zelle mit der geringsten Entropie gesucht, die noch nicht collapsed\at{@translation} ist. Die Entropie einer Zelle wird als die Shannon-Entropy \at{@citation} der noch möglichen Zustände berechnet. 
+    Zu Beginn wird die Zelle mit der geringsten Entropie gesucht, die noch nicht collapsed ist. Die Entropie einer Zelle wird als die Shannon-Entropy \at{@citation} der noch möglichen Zustände berechnet. 
     
     Es ist möglich, dass mehrere Zellen die gleiche Entropie haben. Zum Beispiel haben am Anfang, bevor dem ersten Schritt, sind alle Zellen in der Superposition aller Zustände, wodurch alle Zellen die selbe Entropie haben. Aus der Menge an gefundenen Zellen wird in diesem Fall in der Pick-Phase eine Zelle zufällig ausgewählt.
 

@@ -7,11 +7,11 @@
 \section{Hintergrund}
 \subsection{Prozedurale Generierung}
 
-% https://en.wikipedia.org/wiki/Procedural_generation
+    % https://en.wikipedia.org/wiki/Procedural_generation
 
 \subsection{Wave Function Collapse}
 
-\begin{itemize}
+    \begin{itemize}
     \item Ein Algorithmus zur prozeduralen Generierung von 2D oder 3D Strukturen 
     \item Generiert aus minimalen Input eine große Menge an ähnlichem Output
     \item wfc arbeitet ursprünglich mit quadratgittern hierbei sind die position jeder zelle und dessen nachbar zellen durch das gitter definiert und können zB. mittels 2D Indizes identifiziert werden. Die Nachbar sind dann über je einen schritt in eine der 4 Richtungen im Gitter, siehe 2 Achsen je positiv oder negativ, erreicht werden
@@ -19,39 +19,39 @@
     \item Nun auf unregelmäßigen gittern sind zellen frei in der Ebene des 2D Koordinatensystems angeordnet. Nun muss die Menge der Nachbarn für jede Zelle berechnet werden
     \item Wie im regelmäßigen gitter wollen wir, dass wenn zwei Zellen benachbart sind, dass sie eine Kante Teilen, also tatsächlich eine Verbindung besteht. für unregelmäßige gitter können wir ein Voronoi Diagramm erstellen, wodurch die Ebene in Regionen aufgeteilt wird die je alle Punkte umfässt die einer unserer Zelle am nächsten sind. 
     \item Um dieses Voronoi diagramm zu erstellen gibt es mehrere Wege. Einer ist, eine Delaunay Triangulierung zu generieren, da dies die Inverse des Voronoi Diagramm darstellt. Die Zellen im Voronoi Diagramm entsprechen den Ecken in der Delaunay Triangulierung und die Kanten den Seitenhalbierenden der Kanten zwischen den Ecken. Aus der Delaunay Triangulierung lassen sich auch die Nachbarn einer Zelle direkt auslesen, da es einfach alle Punkte sind die mit dem Mittelpunkte der Zelle eine Kante teilen.
-\end{itemize}
+    \end{itemize}
 
 \subsection{Stand der Technik}
 
 \subsubsection{Model Synthesis - Paul Merrell}
-
-\url{https://gamma.cs.unc.edu/synthesis/papers/model_synthesis.pdf}
-\begin{itemize}
+    
+    \url{https://gamma.cs.unc.edu/synthesis/papers/model_synthesis.pdf}
+    \begin{itemize}
     \item Improvements on texture synthesis: Global Search, iterative overlapping Local Area Solves 
     \item better consistency and higher success rate, because we take into account that some choice have global or large areas of effect
     \item local area solves are faster and overlapping allows for information to pass from one subarea to another and patterns to be created that are larger than one subarea
     \item the complete grid is initialized to an 'empty' value and only subareas are set to the complete superposition and then collapsed
     \item can also easily enforce symmetry by adapting the transition function T with the symmetry function S
     \item can also solve with soft constraints to the output
-\end{itemize}
+    \end{itemize}
 
 \subsubsection{Wave Function Collapse - Maxim Gumin}
 
 \url{https://github.com/mxgmn/WaveFunctionCollapse?tab=readme-ov-file}
 
-\begin{itemize}
+    \begin{itemize}
     \item The name is inspired by Quantum Mechanics, the link being that cells are in a state of superposition before they are observed and collapse into a single state. besides this structural pun, there is no usage of the mathematics of QM
     \item in the collapse/observation phase, we pick the cell with the lowest\\ Shannon-Entropy, before we just iterate through the array of cells without regard for their properties or arrangement in the output
     \item Overlapping tiles in extraction and for overlap checking
     \item search for lowest entropy (find explaination for added noise in code)
     \item \@todo(viktor):{ Tilesets and Overlapping Model(NxM), automatic extraction of rules, }
-\end{itemize}
+    \end{itemize}
 
 \subsubsection{WFC Algorithm}
 
-% \url{https://github.com/mxgmn/WaveFunctionCollapse?tab=readme-ov-file#algorithm}
+    % \url{https://github.com/mxgmn/WaveFunctionCollapse?tab=readme-ov-file#algorithm}
 
-\begin{enumerate}
+    \begin{enumerate}
     \item Read the input bitmap and count NxN patterns.
     \subitem (optional) Augment pattern data with rotations and reflections.
     \item Create an array with the dimensions of the output (called ''wave'' in the source). Each element of this array represents a state of an NxN region in the output. A state of an NxN region is a superposition of NxN patterns of the input with boolean coefficients (so a state of a pixel in the output is a superposition of input colors with real coefficients). False coefficient means that the corresponding pattern is forbidden, true coefficient means that the corresponding pattern is not yet forbidden.
@@ -62,65 +62,66 @@
     \subsubitem Collapse this element into a definite state according to its coefficients and the distribution of NxN patterns in the input.
     \item Propagation: propagate information gained on the previous observation step.
     \item By now all the wave elements are either in a completely observed state (all the coefficients except one being zero) or in the contradictory state (all the coefficients being zero). In the first case return the output. In the second case finish the work without returning anything.
-\end{enumerate}
+    \end{enumerate}
 
 
 
 \subsubsection{Oskar Stålberg}
 
-\begin{itemize}
+    \begin{itemize}
     \item usage in Bad North and Town Scaper
     \item aperiodic infinite deterministic irregular relaxed quadrilateral grids
-\end{itemize}
+    \end{itemize}
 
 
 \subsection{Von Gittern zu Graphen}
 
-\at{@incomplete} Definition von Gitter und Graph in dieser Arbeit
+    \at{@incomplete} Definition von Gitter und Graph in dieser Arbeit
 
 \subsubsection{Unregelmäßige Gitter}
 
-% https://en.wikipedia.org/wiki/Delaunay_triangulation
-% https://en.wikipedia.org/wiki/Voronoi_diagram
-% https://de.wikipedia.org/wiki/Polygonnetz
-% https://en.wikipedia.org/wiki/Triangulated_irregular_network
+    % https://en.wikipedia.org/wiki/Delaunay_triangulation
+    % https://en.wikipedia.org/wiki/Voronoi_diagram
+    % https://de.wikipedia.org/wiki/Polygonnetz
+    % https://en.wikipedia.org/wiki/Triangulated_irregular_network
 
 \subsubsection{Delaunay Triangulation}
 
-\begin{itemize}
+    \begin{itemize}
     \item Defintion der Triangulierung
     \item Bowyer-Watson Algorithmus
     \item Umwandlung zu Voronoi Diagramm:
     \item vertices -> voronoi cell centers
     \item edges -> cell neighbours
     \item perpendicular bisector of edges -> cells vertices on its boundary
-\end{itemize}
+    \end{itemize}
 
 \subsubsection{Voronoi Diagramm}
 
-\begin{itemize}
+    \begin{itemize}
     \item Definition
     \item nützliche Eigenschaften
-\end{itemize}
+    \end{itemize}
 
 \section{Konzept}
 \subsection{Wave Function Collapse auf Graphen}
 
-\url{https://en.wikipedia.org/wiki/Lattice_graph}
-\at{@incomplete} Welche Formel für Richtung? Mehr als eine Richtung. Welche Heuristik für Strictness? Warum auch Diagonalen extrahieren?
-\at{@incomplete} Welche Nachbarn hat eine Zelle? Wie beeinflusst eine Zelle seine Nachbarn und was hat Heat damit zutun? Zustand/Richtungsmengen erklären. Overlap Lookup Table
+    \url{https://en.wikipedia.org/wiki/Lattice_graph}
+    \at{@incomplete} Mehr als eine Richtung. Welche Heuristik für Strictness?
+    \at{@incomplete} Welche Nachbarn hat eine Zelle? Wie beeinflusst eine Zelle seine Nachbarn und was hat Heat damit zutun? Zustand/Richtungsmengen erklären.
 
 \section{Umsetzung}
 \section{Ergebnisse und Diskussion}
-\begin{itemize}
+    
+    \begin{itemize}
     \item Bilder
     \item Base Case - reguläres Gitter
     \item geringe Striktheit/höhere Heat - Richtung verliert einfluss auf output, lokale Verzerrungen dominieren, sobald entgegengesetze richtungen wählbar sind dominiert Adjazenz
     \item Lokale Ähnlichkeit im Vergleich zum Input
     \item Pixel/Linienmuster und Flächenmuster
     \item Zu kleiner Lösungsraum ergibt uniformen Output, nur eine Farbe die flächenartig ist.
-\end{itemize}
-
+    \end{itemize}
+    
 \section{Fazit}
 
 \subsection{Vergleich zum Original}
