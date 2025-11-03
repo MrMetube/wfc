@@ -40,8 +40,35 @@
 
     Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthalten, während dass Gitter uniforme Beschränkung auf Zellen ergibt. Zur Erinnerung: es muss nur eine Zelle eine Widerspruch verursachen damit der Algorithmus fehlschlägt. Also sind solche Regionen starker Beschränkung besonderns entscheident für die Chance einen validen Output zu generieren, weil hier der Lösungsraum am kleinsten ist.
 
-\at{@incomplete} Entropy erwähnen und für Regionen mit einer Grafik von der App darstellen
-\subsection{Regelextrahierung}
+    \at{@incomplete} Entropy erwähnen und für Regionen mit einer Grafik von der App darstellen
+
+\subsection{Regelextrahierung \at{@naming}}
+    \at{@translation} Eingabe nennt Merrel Example, also wäre Beispiel vielleicht besser
+    \at{@citation merrel}
+    \at{@flow} Die Absätze sind okay aber ihre Reihenfolge muss überdacht werden
+    
+    Ziel des Wave Function Collapse ist es, eine große Anzahl lokal ähnlicher Ausgaben zu generieren. Ähnlichkeit wird erreicht, wenn jede kleine Region der Ausgabe zu Regionen der Eingabe passt. Der Algorithmus weist jeder Zelle des Output-Graphen einen Zustand zu, so dass zwei Bedingungen gelten. Erstens muss der Zustand einer Zelle in mindestens einer Richtung mit den Zuständen aller Nachbarzellen überlappen können. Zweistens soll die Richtung der Überlappung möglichst ähnlich der Richtung zum Nachbarn sein.
+    
+    Ein Umfeld ist die Region um einen Pixel der Eingabe. Ein Zustand besteht aus dessen Umfeld und Frequenz in der Eingabe. In der Eingabe, die ein Quadratgitter ist, können Umfelder in acht Richtungen überlappen; im Norden, Süden, Westen, Osten und in den diagonalen Himmelsrichtungen. 
+
+    Für jeden Pixel der Eingabe wird sein Umfeld notiert. Die Frequenz eines Umfelds stellt die Anzahl an Pixeln in der Eingabe mit diesem Umfeld dar. Aus der Gesamtanzahl an Muster und deren Frequenzen lässt sich die Wahrscheinlichkeit jedes Umfelds berechen. Dies wird im Collapse genutzt, damit nicht nur lokale Ähnlichkeit sondern auch die globale Verteilung von Umfeldern der Eingabe ungefähr ähnelt (\at{@incomplete} das nicht nur hier so knapp sagen sondern auch später nochmal erwähnen). 
+    
+    \at{@incomplete} Algorithmus zur Extrahierung genauer und was zu Wrapping
+    
+    \at{@incomplete} \at{@visual} Grafik zur Erklärung
+    
+    \at{@placement} Das ist eher Implementierung
+    Während des Collapse werden die Regeln, welche Zustände überlappen, nach jedem Schritt für alle benachbarten Zellen geprüft. Da sich diese Eigenschaft aber nicht während des Verlauf des Algorithmus ändert, kann eine Datenstruktur zuvor zur Speicherung erstellt werden. Die Überlappungs-Lookuptabelle gibt für jedes Zustandspaar die Richtungen an, in denen die Zustände überlappen. Wenn Zellen nun geprüft werden, kann nun aus der Lookuptabelle abgelesen werden, wodurch viel wiederholte Arbeit vermieden wird.
+            
+    Ist der Output-Graph ein Quadratgitter können die diagonalen Richtungen bei der Betrachtung entfallen, ohne dass es einen Einfluss auf die Qualität der Ausgabe hat. Die reguläre Struktur führt dazu, dass wenn für eine Zelle A der Nachbar von A im Norden(An) passt und der Nachbar im Westen von An passt, dann muss auch der Nachbar von A im Nordwesten passen. 
+    
+    \at{@incomplete} Symmetrie der Regeln
+    \at{@incomplete} Transitivität der Regeln
+    
+    Ein Umfeld wird im Umfang dieser Arbeit als ein 3x3 Gitter von Pixeln definiert. Es können auch andere Formen und Größen gewählt werden, aber diese müssen zu den genutzen Eingaben passen, damit die in den Eingaben existierenden Muster optimal genutzt werden. Wird das Umfeld zu klein gewählt, können nur Ausschnitte der gewünschten Muster erhalten werden, die Muster selbst gehen verloren. Während ein zu großes Umfeld auch die Anordnung der Muster in der Eingabe erhällt, was unerwünscht ist und im extremen Fall dazu führt, dass nur noch exakte Kopien der Eingabe ohne Variation in der Ausgabe vorkommen.
+    
+    Den Zellen des Output-Graphen sind, nach einem erfolreichem Collapse, je ein Zustand zugewiesen. Dieser kann aber nicht direkt durch sein Umfeld dargestellt werden, da das Umfeld eines Zustands zur Ermittlung der Überlappungen dient und deswegen aus mehr als einem Pixel, also einem Farbwert besteht. In dieser Arbeit wird der Pixel in der Mitte des Umfelds als der tatsächliche Farbwert einer Zelle zur Darstellung genutzt.
+    
 \section{Umsetzung}
 \subsection{Generierung von Voronoi-Graphen}
 
@@ -109,6 +136,10 @@
     Um diese Fälle ordentlich zu behandeln können wir nun aber einfach auch in solchen Fällen einen Widerspruch deklarieren und Backtracken. Schließlich haben wir alle noch möglichen Entscheidungen bereits getroffen und ausgewertet und keine Lösung gefunden. Somit führt dieser Schritt zwar nicht direkt zu einem Widerspruch in einer Zelle, aber alle folgen Schritte werden irgendwann zu einem Widerspruch führen. Zu Bemerken ist, dass wenn auf diese Weise bis zum ersten Schritt gebacktrackt wird und auch die erste Entscheidung einen Widerspruch verursacht, so kann die Kombination aus Eingabe und Graph keine Ausgabe ergeben.
     
 \subsection{Overlap - Direction Mask / State Buckets / rule sets}
+    % strictness to heat for now, support to overlap
+    
+    
+
 \section{Ergebnisse und Diskussion}
 \section{Fazit}
 \subsection{Vergleich zum Original}
