@@ -42,9 +42,7 @@
     \begin{itemize}
     \item The name is inspired by Quantum Mechanics, the link being that cells are in a state of superposition before they are observed and collapse into a single state. besides this structural pun, there is no usage of the mathematics of QM
     \item in the collapse/observation phase, we pick the cell with the lowest\\ Shannon-Entropy, before we just iterate through the array of cells without regard for their properties or arrangement in the output
-    \item Overlapping tiles in extraction and for overlap checking
-    \item search for lowest entropy (find explaination for added noise in code)
-    \item \@todo(viktor):{ Tilesets and Overlapping Model(NxM), automatic extraction of rules, }
+    \item \at{@citation \#used work} Paul C. Merrell, Model Synthesis, 2009. Merrell derives adjacency constraints between tiles from an example model and generates a new larger model with the AC-3 algorithm. We generalize his approach to work with NxN overlapping patterns of tiles instead of individual tiles. This allows to use a single image as the input to the algorithm. By varying N, we can make the output look more like the input or less. We introduce the lowest entropy heuristic that removes the directional bias in generated results, is defined for irregular grids and is better suited for pre-constrained problems. We implement a tile symmetry system to reduce the sizes of inputs. We visualize partially observed states, either with color averaging or per-voxel voting. Merrell also introduced a method of incrementally modifying the model in parts to reduce the failure rate (which we don't use here). Recently the author created a page for model synthesis and published code.
     \end{itemize}
 
 \subsubsection{WFC Algorithm}
