@@ -5,27 +5,27 @@
 \subsection{Aufbau der Arbeit}
 
 \section{Hintergrund}
-    \at{@incomplete} Einleitender Satz, was zu prozeduraler Generierung
+    \at{@incomplete Einleitender Satz, was zu prozeduraler Generierung}
 
     \subsection{Model Synthesis}
         \at{@citation model synthesis}
         Mit dem \textit{Model Synthesis} Algorithmus können, basiert auf einem 3D Beispielmodell, eine große Menge an ähnlichen 3D Modellen prozedural generiert werden. Das synthesierte/generierte Model wird auf einem 3D Gitter iterativ generiert, indem jedem Knotenpunkt des Gitters ein Teil des Beispielmodells zugewiesen wird. Das Beispiel muss vorher in kleinere gleichgroße Bauteile zerlegt werden. Jedem Knotenpunkt wird zu Beginn die Menge aller Bauteile als seine Auswahlmöglichkeiten zugewiesen. Mit jeder Iteration wird bei einem Knotenpunkt ein Bauteil seiner Zustandsmenge ausgewählt. Danach werden alle Nachbarn geprüft, so dass sie nur noch passende Bauteile in ihrer Zustandsmenge behalten. Hierfür wird eine globale Suche verwendet, andere Methoden beschränkten sich zuvor nur auf lokale Suchen. Eine globale Suche ist besser, weil jedes Bauteil einen weitreichenden Einfluss auf das gesamte Gitter haben kann.
 
-        \at{@incomplete} Consistency
+        \at{@incomplete Consistency}
         Damit die Ausgabe eine sinnvolle Anordnung der Bauteile ergibt, werden nur Bauteile die nebeneinander in einer bestimmten Richtung im Beispiel sind, in der Ausgabe nebeneinander in dieser Richtung platziert. Dadurch ist garantiert, dass jede kleine Region der Ausgabe mindestens einer Region im Beispiel gleicht. Da an jedem Knotenpunkt meist mehr als ein Bauteil passen würde und die Auswahl per Zufall geschieht, ist es unwahrscheinlich, dass die Ausgabe genau dem Beispiel im ganzen gleicht. Bei der Auswahl des Bauteils für einen Knoten wird die Wahrscheinlichkeit jedes Bauteils auch mit seiner Häufigkeit im Beispiel gewichtet, wodurch über eine große Menge an Ausgaben die Häufigkeit einzelner Bauteile der tatsächlichen Häufigkeit im Beispiel gleicht. Für eine einzelne Ausgabe bedeutet dies, dass die globale Verteilung der Bauteile auch tendenziell der Verteilung im Beispiel gleicht. 
-        \at{@incomplete} Resemblance
+        \at{@incomplete Resemblance}
         \at{@visual from ms paper}
 
         Die selbe Methodik kann auch auf 2D Gittern angewendet werden; dies wird dann \textit{Texture Synthesis} genannt. Desweiteren kann der Algorithmus um andere Techniken der prozeduralen Generierung erweitert werden, so können z.B. andere beliebige Beschränkungen auf die Ausgabe angewendet werden. \at{@visual}
-        \at{@incomplete} NP-Completeness
-        \at{@incomplete} Unused: Soft Constraints \& Symmetry \& iterative small area solves
+        \at{@incomplete NP-Completeness}
+        \at{@incomplete Unused: Soft Constraints \& Symmetry \& iterative small area solves}
 
 \subsection{Wave Function Collapse}
     \at{@citation wfc}
     \textit{Wave Function Collapse} ist eine Weiterentwicklung des Model Sythesis Algorithmus. Die Kernidee der Generierung mittels einem Beispiel bleibt und wird um drei Aspekte erweitert. Anstatt nur Bauteile nebeneinander anzuordnen, können nun auch überlappende Teile des Beispiels automatisch aus einem Beispiel extrahiert werden. In jeder Iteration wird die Zelle mit der niedrigsten Entropie zuerst betrachtet. Bei Bauteil-basierten Beispielen werden Symmetrien von Bauteilen zur kompakteren Definition ausgenutzt.
-    \at{@incomplete} renamings: model synthesis/wfc, observe \& collapse, vertex/cell, widerspruch
+    \at{@incomplete renamings: model synthesis/wfc, observe \& collapse, vertex/cell, widerspruch}
 
-    \at{@incomplete} generalization to NxN Überlappung
+    \at{@incomplete generalization to NxN Überlappung}
 
 
     Die Reihenfolge in der die Zellen observiert werden, hat einen Einfluss auf die Laufzeit. Bei Model Synthesis werden Zellen einfach nach ihrer Reihenfolge im Gitter abgearbeitet. Der Vorteil ist, dass keine Suche der nächsten Zelle nötig ist, aber es hat zum Nachteil, dass die Ausgabe sichtbare Artefakte enthällt. Man kann erkennen, ob zuerst die Reihen oder erst die Spalten abgearbeitet wurden \at{@visual von github links}. Wäre bekannt welche Zelle den meisten Fortschritt zur Lösung und die geringste Chance auf einen Widerspruch birgt, könnte stets diese Zelle zuerst betrachtet werden (\at{@incomplete} NP-Hardness). 
@@ -34,13 +34,13 @@
 
 
     Der Zerteilung eines Beispiels in Bauteile muss manuell passieren. Soll nun ein Bauteil auch in einer anderen Orientierung oder Spiegelung in der Ausgabe vorkommen müssen diese Variationen explizit angelegt werden. Will man nun ein Bauteil leicht verändern, so muss man auch alle Variationen manuel anpassen. Um diesen aufwendigen Prozess zu automatisieren definiert Gumin eine Gruppe von Symmetriearten mit denen eine Nutzerin ihre Bauteile annotieren kann. Der Algorithmus erkennt diese Annotationen und generiert vor Beginn automatisch die Variationen.
-    \at{@incomplete} interesting but unused for this work
+    \at{@incomplete interesting but unused for this work}
 
 \subsection{Gitter, Graphen, Triangulierung, Voronoi}
-    \at{@incomplete} Definition von Gitter und Graph in dieser Arbeit
+    \at{@incomplete Definition von Gitter und Graph in dieser Arbeit}
     
     \subsubsection{Oskar Stålberg}
-        \at{@incomplete} WFC on irregular quadrilations, oskar sta°lberg
+        \at{@incomplete WFC on irregular quadrilations, oskar sta°lberg}
         \begin{itemize}
         \item usage in Bad North and Town Scaper
         \item aperiodic infinite deterministic irregular relaxed quadrilateral grids
@@ -49,8 +49,8 @@
         
 \section{Konzept}
 \@todo(viktor):{alles nachfolgende lesen und duplikate weiter nach vorne holen oder auslassen}
-\at{@incomplete} Heuristik für Heat oder manuell?
-\at{@incomplete} Welche Nachbarn hat eine Zelle? Wie beeinflusst eine Zelle seine Nachbarn im Graph und was hat Heat damit zutun? Zustand/Richtungsmengen erklären.
+\at{@incomplete Heuristik für Heat oder manuell?}
+\at{@incomplete Welche Nachbarn hat eine Zelle? Wie beeinflusst eine Zelle seine Nachbarn im Graph und was hat Heat damit zutun? Zustand/Richtungsmengen erklären.}
 
 \subsection{Einschränkung des Algorithmus und Idee zur Erweiterung}
     
@@ -65,7 +65,7 @@
 
     Wenn man mit WFC eine Ausgabe erstellen will, die sich selbst tiled \at{@translation} (also linker Rand gleich rechter Rand und so) kann man eine imaginäre Kante von einer Zelle am rechten Rand zu einer Zelle am linken Rand erstellen und dem Algorithmus definieren dass diese Benachbarung in Richtung Osten geht. Nun sind die Ränder des Gitters benachbart und das Ergebnis ist, dass die Ränder, wenn eine Lösung gefunden wird, zueinander passen. Wenn man dies für einen Rand macht, so ist die Form der Zellen mit ihren Nachbarn nicht mehr eine flache Ebene, sondern die Oberfläche eines Zylinders(ohne Deckel und Boden). Verbindet man auf die selbe Weise auch den anderen Rand, ist die Form nun ein Torus. Der Algorithmus selbst muss also nur auf diese Weise angepasst werden, um auf anderen Anordnungen von Zellen zu funktionieren.
 
-\at{@incomplete} Diagonale Regeln, besseres Sampling der Eingabe, Regelmengen, höhere Entropie durch Strictness
+\at{@incomplete Diagonale Regeln, besseres Sampling der Eingabe, Regelmengen, höhere Entropie durch Strictness}
 
 \subsection{Wave Function Collapse auf Graphen}
 
@@ -77,11 +77,11 @@
 
     Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthalten, während dass Gitter uniforme Beschränkung auf Zellen ergibt. Zur Erinnerung: es muss nur eine Zelle eine Widerspruch verursachen damit der Algorithmus fehlschlägt. Also sind solche Regionen starker Beschränkung besonderns entscheident für die Chance einen validen Output zu generieren, weil hier der Lösungsraum am kleinsten ist.
 
-    \at{@incomplete} Entropy erwähnen und für Regionen mit einer Grafik von der App darstellen
+    \at{@incomplete Entropy erwähnen und für Regionen mit einer Grafik von der App darstellen}
 
 \subsection{Regelextrahierung \at{@naming}}
     \at{@citation merrel}
-    \at{@flow} Die Absätze sind okay aber ihre Reihenfolge muss überdacht werden
+    \at{@flow Die Absätze sind okay aber ihre Reihenfolge muss überdacht werden}
     
     Ziel des Wave Function Collapse ist es, eine große Anzahl lokal ähnlicher Ausgaben zu generieren. Ähnlichkeit wird erreicht, wenn jede kleine Region der Ausgabe zu Regionen der Eingabe passt. Der Algorithmus weist jeder Zelle des Output-Graphen einen Zustand zu, so dass zwei Bedingungen gelten. Erstens muss der Zustand einer Zelle in mindestens einer Richtung mit den Zuständen aller Nachbarzellen überlappen können. Zweistens soll die Richtung der Überlappung möglichst ähnlich der Richtung zum Nachbarn sein.
     
@@ -92,12 +92,12 @@
     
     \input{data/extract_wrapping/figure.tex}
     
-    \at{@placement} Das ist eher Implementierung
+    \at{@placement Das ist eher Implementierung}
     Während des Collapse werden die Regeln, welche Zustände überlappen, nach jedem Schritt für alle benachbarten Zellen geprüft. Da sich diese Eigenschaft aber nicht während des Verlauf des Algorithmus ändert, kann eine Datenstruktur zuvor zur Speicherung erstellt werden. Die Überlappungs-Lookuptabelle gibt für jedes Zustandspaar die Richtungen an, in denen die Zustände überlappen. Wenn Zellen nun geprüft werden, kann nun aus der Lookuptabelle abgelesen werden, wodurch viel wiederholte Arbeit vermieden wird.
       
     Ist der Output-Graph ein Quadratgitter können die diagonalen Richtungen bei der Betrachtung entfallen, ohne dass es einen Einfluss auf die Qualität der Ausgabe hat. Die reguläre Struktur führt dazu, dass wenn für eine Zelle A der Nachbar von A im Norden(An) passt und der Nachbar im Westen von An passt, dann muss auch der Nachbar von A im Nordwesten passen. \at{@wording}
     
-    \at{@incomplete} Symmetrie und Transitivität der Regeln
+    \at{@incomplete Symmetrie und Transitivität der Regeln}
     
     Ein Umfeld wird im Umfang dieser Arbeit als ein 3x3 Gitter von Pixeln definiert. Es können auch andere Formen und Größen gewählt werden, aber diese müssen zu den genutzen Eingaben passen, damit die in den Eingaben existierenden Muster optimal genutzt werden. Wird das Umfeld zu klein gewählt, können nur Ausschnitte der gewünschten Muster erhalten werden, die Muster selbst gehen verloren. Während ein zu großes Umfeld auch die Anordnung der Muster in der Eingabe erhällt, was unerwünscht ist und im extremen Fall dazu führt, dass nur noch exakte Kopien der Eingabe ohne Variation in der Ausgabe vorkommen.
     
@@ -114,8 +114,8 @@
         \item Zu Beginn des Wave Function Collapse werden alle Zellen mit einer Superposition aller möglichen Zustände initialisiert.
     \end{itemize}
 
-    \at{@incomplete} Warum generieren wir die Graphen und kurz wie und welche Settings gibt einem die App dafür. 
-    \at{@visual} Beispiele der Generierung
+    \at{@incomplete Warum generieren wir die Graphen und kurz wie und welche Settings gibt einem die App dafür. }
+    \at{@visual Beispiele der Generierung}
 
     \at{@placement}
     Man kann ein regelmäßiges Quadratgitter als eine spezielle Form von Voronoigraph ansehen. Jedes Quadrat kann als eine Voronoizelle angesehen werden, welche genau alle Punkte die am nächsten zu seinem Mittelpunkt enthällt. Die Nachbarn können nun explizit über die Kanten der Voronoizelle gefunden werden. Zuvor waren diese auch implizit durch die Koordinate des Quadrats im Gitter gegeben.
@@ -125,7 +125,7 @@
 
     Um einen Voronoigraphen zu generieren nutze ich die Eigenschaft, dass der duale Graph zu jedem Voronoigraph eine Delaunay-Triangulierung ist. Eine Delaunay Triangulierung kann man auf unterschiedlich Weise aus einer beliebigen Point-Cloud, einer Menge an Punkten im 2D Raum, generieren. Dies ist optimal für mich, da ich nun einfach eine Point-Cloud auf beliebige Weise, also mit oder ohne Struktur und so komplex oder simpel wie ich es will, erstellen und aus dieser ein validen Voronoigraph erhalten kann.
 
-    \at{@incomplete} Eigenschaften einer Delauney-Triangulierung nennen
+    \at{@incomplete Eigenschaften einer Delauney-Triangulierung nennen}
 
     Für die Triangulierung habe ich mich ohne tiefere Beweggründe für den Boywer-Watson Algorithmus entschieden. Der Algorithmus generiert die Triangulierung iterativ in dem jeder Punkt nacheinander eingefügt wird und der Graph angepasst wird, so dass es wieder eine Delaunay-Triangulierung ist.
     Zur Hilfe erstellen wir ein Superdreieck, welches alle Punkte enthällt. Nun fügen wir einen Punkt ein und prüfen all bisher gefundenen Dreiecke, ob ihr Umkreis diesen Punkt enhällt. Ist der Punkt innerhalb des Umkreises kann das Dreieck nicht zur finalen Triangulierung gehören. Für alle diese Dreieck sammeln wir nun die Kanten. Jede Kante die nur einmal vorkommt ist teil der Hülle dieser Dreiecke, alle anderen Kanten sind innerhalb dieser Hülle, da sich zwei Dreiecke diese teilen. Diese inneren Kanten werden entfernt und für jede Ecke entlang der Hülle wird eine neue Kante zum eingefügten Punkt erstellt.
@@ -180,3 +180,6 @@
 \subsection{Vergleich zum Original}
 \subsection{Mögliche Anwendungsbereiche?}
 \subsection{Ausblick und zukünftige Forschung}
+
+\section{Literaturverzeichnis}
+% figure out how to use maybe this: \bibliography{}

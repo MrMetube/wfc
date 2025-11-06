@@ -1,11 +1,31 @@
 \documentclass{article}
 
-\input{Header.tex}
+\usepackage[ngerman]{babel} % german translation for document elements
+\usepackage{hyperref}       % clickable links
+
+% for figures and subfigures
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+
+% ////////////////////////////////////////////////
+
+\input{Write.tex}
+% \input{Publish.tex}
+
+% ////////////////////////////////////////////////
+
+\title{Wave Function Collapse auf Graphen}
+\author{Viktor Berengar Askan Graf von Westarp}
 
 \begin{document}
+
 \maketitle
+\tableofcontents
 
 \input{Fassung 03.tex}
+
+% ////////////////////////////////////////////////
 
 \pagebreak
 \pagebreak
@@ -19,5 +39,8 @@
 
 \pagebreak
 
-\input{Footer.tex}
+\input{Notizen}
+
+% ////////////////////////////////////////////////
+
 \end{document}
