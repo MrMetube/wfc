@@ -3,19 +3,55 @@
 \subsection{Problemstellung und Ziel}
 \subsection{Problemlösung}
 \subsection{Aufbau der Arbeit}
+
 \section{Hintergrund}
-\subsection{Prozedurale Generierung}
+    \at{@incomplete} Einleitender Satz, was zu prozeduraler Generierung
+
+    \subsection{Model Synthesis}
+        \at{@citation model synthesis}
+        Mit dem \textit{Model Synthesis} Algorithmus können, basiert auf einem 3D Beispielmodell, eine große Menge an ähnlichen 3D Modellen prozedural generiert werden. Das synthesierte/generierte Model wird auf einem 3D Gitter iterativ generiert, indem jedem Knotenpunkt des Gitters ein Teil des Beispielmodells zugewiesen wird. Das Beispiel muss vorher in kleinere gleichgroße Bauteile zerlegt werden. Jedem Knotenpunkt wird zu Beginn die Menge aller Bauteile als seine Auswahlmöglichkeiten zugewiesen. Mit jeder Iteration wird bei einem Knotenpunkt ein Bauteil seiner Zustandsmenge ausgewählt. Danach werden alle Nachbarn geprüft, so dass sie nur noch passende Bauteile in ihrer Zustandsmenge behalten. Hierfür wird eine globale Suche verwendet, andere Methoden beschränkten sich zuvor nur auf lokale Suchen. Eine globale Suche ist besser, weil jedes Bauteil einen weitreichenden Einfluss auf das gesamte Gitter haben kann.
+
+        \at{@incomplete} Consistency
+        Damit die Ausgabe eine sinnvolle Anordnung der Bauteile ergibt, werden nur Bauteile die nebeneinander in einer bestimmten Richtung im Beispiel sind, in der Ausgabe nebeneinander in dieser Richtung platziert. Dadurch ist garantiert, dass jede kleine Region der Ausgabe mindestens einer Region im Beispiel gleicht. Da an jedem Knotenpunkt meist mehr als ein Bauteil passen würde und die Auswahl per Zufall geschieht, ist es unwahrscheinlich, dass die Ausgabe genau dem Beispiel im ganzen gleicht. Bei der Auswahl des Bauteils für einen Knoten wird die Wahrscheinlichkeit jedes Bauteils auch mit seiner Häufigkeit im Beispiel gewichtet, wodurch über eine große Menge an Ausgaben die Häufigkeit einzelner Bauteile der tatsächlichen Häufigkeit im Beispiel gleicht. Für eine einzelne Ausgabe bedeutet dies, dass die globale Verteilung der Bauteile auch tendenziell der Verteilung im Beispiel gleicht. 
+        \at{@incomplete} Resemblance
+        \at{@visual from ms paper}
+
+        Die selbe Methodik kann auch auf 2D Gittern angewendet werden; dies wird dann \textit{Texture Synthesis} genannt. Desweiteren kann der Algorithmus um andere Techniken der prozeduralen Generierung erweitert werden, so können z.B. andere beliebige Beschränkungen auf die Ausgabe angewendet werden. \at{@visual}
+        \at{@incomplete} NP-Completeness
+        \at{@incomplete} Unused: Soft Constraints \& Symmetry \& iterative small area solves
+
 \subsection{Wave Function Collapse}
-\subsection{Stand der Technik}
-\subsubsection{Model Synthesis - Paul Merrell}
-\subsubsection{Wave Function Collapse - Maxim Gumin}
-\subsubsection{WFC Algorithm}
-\subsubsection{Oskar Stålberg}
-\subsection{Von Gittern zu Graphen}
-\subsubsection{Unregelmäßige Gitter}
-\subsubsection{Delaunay Triangulation}
-\subsubsection{Voronoi Diagramm}
+    \at{@citation wfc}
+    \textit{Wave Function Collapse} ist eine Weiterentwicklung des Model Sythesis Algorithmus. Die Kernidee der Generierung mittels einem Beispiel bleibt und wird um drei Aspekte erweitert. Anstatt nur Bauteile nebeneinander anzuordnen, können nun auch überlappende Teile des Beispiels automatisch aus einem Beispiel extrahiert werden. In jeder Iteration wird die Zelle mit der niedrigsten Entropie zuerst betrachtet. Bei Bauteil-basierten Beispielen werden Symmetrien von Bauteilen zur kompakteren Definition ausgenutzt.
+    \at{@incomplete} renamings: model synthesis/wfc, observe \& collapse, vertex/cell, widerspruch
+
+    \at{@incomplete} generalization to NxN Überlappung
+
+
+    Die Reihenfolge in der die Zellen observiert werden, hat einen Einfluss auf die Laufzeit. Bei Model Synthesis werden Zellen einfach nach ihrer Reihenfolge im Gitter abgearbeitet. Der Vorteil ist, dass keine Suche der nächsten Zelle nötig ist, aber es hat zum Nachteil, dass die Ausgabe sichtbare Artefakte enthällt. Man kann erkennen, ob zuerst die Reihen oder erst die Spalten abgearbeitet wurden \at{@visual von github links}. Wäre bekannt welche Zelle den meisten Fortschritt zur Lösung und die geringste Chance auf einen Widerspruch birgt, könnte stets diese Zelle zuerst betrachtet werden (\at{@incomplete} NP-Hardness). 
+
+    Einfacher ist es eine Heuristik zu definieren, die simpel zu berechnen ist und meistens einen besseren Ansatz bietet. Hierfür wird die Entropie als Maß eingeführt. Sie beschreibt das Maß an Ungewissheit über den finalen Zustand einer Zelle. Ist eine Zelle observiert, hat sie nur noch einen Zustand und die Entropie ist minimal, während eine Zelle mit vielen Möglichkeiten eine hohe Entropie hat. Die Entropie gibt auch Information darüber wie sehr eine Zelle durch ihre Umgebung beschränkt wird. Sie mit der Formel der Shannon-Entropie \at{@citation} berechnet.
+
+
+    Der Zerteilung eines Beispiels in Bauteile muss manuell passieren. Soll nun ein Bauteil auch in einer anderen Orientierung oder Spiegelung in der Ausgabe vorkommen müssen diese Variationen explizit angelegt werden. Will man nun ein Bauteil leicht verändern, so muss man auch alle Variationen manuel anpassen. Um diesen aufwendigen Prozess zu automatisieren definiert Gumin eine Gruppe von Symmetriearten mit denen eine Nutzerin ihre Bauteile annotieren kann. Der Algorithmus erkennt diese Annotationen und generiert vor Beginn automatisch die Variationen.
+    \at{@incomplete} interesting but unused for this work
+
+\subsection{Gitter, Graphen, Triangulierung, Voronoi}
+    \at{@incomplete} Definition von Gitter und Graph in dieser Arbeit
+    
+    \subsubsection{Oskar Stålberg}
+        \at{@incomplete} WFC on irregular quadrilations, oskar sta°lberg
+        \begin{itemize}
+        \item usage in Bad North and Town Scaper
+        \item aperiodic infinite deterministic irregular relaxed quadrilateral grids
+        \end{itemize}
+
+        
 \section{Konzept}
+\@todo(viktor):{alles nachfolgende lesen und duplikate weiter nach vorne holen oder auslassen}
+\at{@incomplete} Heuristik für Heat oder manuell?
+\at{@incomplete} Welche Nachbarn hat eine Zelle? Wie beeinflusst eine Zelle seine Nachbarn im Graph und was hat Heat damit zutun? Zustand/Richtungsmengen erklären.
+
 \subsection{Einschränkung des Algorithmus und Idee zur Erweiterung}
     
     Die ursprüngliche Form des Wave Function Collapse nimmt in 2D Pixelmuster oder Tilesets als Eingabe und produziert darauß wieder 2D Muster. 
@@ -136,7 +172,10 @@
     Nun haben wir unwissentlich auch eine Schwachstelle in den Algorithmus eingeführt. Wenn wir zuvor in der Search-Phase keine Zellen in Superposition mehr gefunden haben, waren alle Zellen tatsächlich collapsed. Nun kann es auch sein, dass alle Zellen, die wir finden, zu einem Widerspruch führen. Auch in der Observe-Phase war es unmöglich keinen Zustand mehr auswählen zu können, da eine Zelle mit leerer Zustandmenge bereits zuvor als Widerspruch identifiziert wurden wäre. 
     Um diese Fälle ordentlich zu behandeln können wir nun aber einfach auch in solchen Fällen einen Widerspruch deklarieren und Backtracken. Schließlich haben wir alle noch möglichen Entscheidungen bereits getroffen und ausgewertet und keine Lösung gefunden. Somit führt dieser Schritt zwar nicht direkt zu einem Widerspruch in einer Zelle, aber alle folgen Schritte werden irgendwann zu einem Widerspruch führen. Zu Bemerken ist, dass wenn auf diese Weise bis zum ersten Schritt gebacktrackt wird und auch die erste Entscheidung einen Widerspruch verursacht, so kann die Kombination aus Eingabe und Graph keine Ausgabe ergeben.
 
+    
+
 \section{Ergebnisse und Diskussion}
+
 \section{Fazit}
 \subsection{Vergleich zum Original}
 \subsection{Mögliche Anwendungsbereiche?}

@@ -1,49 +1,6 @@
-\section{Einleitung}
-\subsection{Motivation}
-\subsection{Problemstellung und Ziel}
-\subsection{Problemlösung}
-\subsection{Aufbau der Arbeit}
-
 \section{Hintergrund}
-\subsection{Prozedurale Generierung}
-
-    % https://en.wikipedia.org/wiki/Procedural_generation
-
-\subsection{Wave Function Collapse}
-
-    \begin{itemize}
-    \item Ein Algorithmus zur prozeduralen Generierung von 2D oder 3D Strukturen 
-    \item Generiert aus minimalen Input eine große Menge an ähnlichem Output
-    \item wfc arbeitet ursprünglich mit quadratgittern hierbei sind die position jeder zelle und dessen nachbar zellen durch das gitter definiert und können zB. mittels 2D Indizes identifiziert werden. Die Nachbar sind dann über je einen schritt in eine der 4 Richtungen im Gitter, siehe 2 Achsen je positiv oder negativ, erreicht werden
-    \item allgemeiner kann jeder zelle eine 2D Koordinate zugewiesen werden und nun sind die nachbar stets durch je einen der zwei Basisvektoren des Koordinatensystems zu erreichen, auch hier positiv oder negativ
-    \item Nun auf unregelmäßigen gittern sind zellen frei in der Ebene des 2D Koordinatensystems angeordnet. Nun muss die Menge der Nachbarn für jede Zelle berechnet werden
-    \item Wie im regelmäßigen gitter wollen wir, dass wenn zwei Zellen benachbart sind, dass sie eine Kante Teilen, also tatsächlich eine Verbindung besteht. für unregelmäßige gitter können wir ein Voronoi Diagramm erstellen, wodurch die Ebene in Regionen aufgeteilt wird die je alle Punkte umfässt die einer unserer Zelle am nächsten sind. 
-    \item Um dieses Voronoi diagramm zu erstellen gibt es mehrere Wege. Einer ist, eine Delaunay Triangulierung zu generieren, da dies die Inverse des Voronoi Diagramm darstellt. Die Zellen im Voronoi Diagramm entsprechen den Ecken in der Delaunay Triangulierung und die Kanten den Seitenhalbierenden der Kanten zwischen den Ecken. Aus der Delaunay Triangulierung lassen sich auch die Nachbarn einer Zelle direkt auslesen, da es einfach alle Punkte sind die mit dem Mittelpunkte der Zelle eine Kante teilen.
-    \end{itemize}
 
 \subsection{Stand der Technik}
-
-\subsubsection{Model Synthesis - Paul Merrell}
-    
-    \url{https://gamma.cs.unc.edu/synthesis/papers/model_synthesis.pdf}
-    \begin{itemize}
-    \item Improvements on texture synthesis: Global Search, iterative overlapping Local Area Solves 
-    \item better consistency and higher success rate, because we take into account that some choice have global or large areas of effect
-    \item local area solves are faster and overlapping allows for information to pass from one subarea to another and patterns to be created that are larger than one subarea
-    \item the complete grid is initialized to an 'empty' value and only subareas are set to the complete superposition and then collapsed
-    \item can also easily enforce symmetry by adapting the transition function T with the symmetry function S
-    \item can also solve with soft constraints to the output
-    \end{itemize}
-
-\subsubsection{Wave Function Collapse - Maxim Gumin}
-
-\url{https://github.com/mxgmn/WaveFunctionCollapse?tab=readme-ov-file}
-
-    \begin{itemize}
-    \item The name is inspired by Quantum Mechanics, the link being that cells are in a state of superposition before they are observed and collapse into a single state. besides this structural pun, there is no usage of the mathematics of QM
-    \item in the collapse/observation phase, we pick the cell with the lowest\\ Shannon-Entropy, before we just iterate through the array of cells without regard for their properties or arrangement in the output
-    \item \at{@citation \#used work} Paul C. Merrell, Model Synthesis, 2009. Merrell derives adjacency constraints between tiles from an example model and generates a new larger model with the AC-3 algorithm. We generalize his approach to work with NxN overlapping patterns of tiles instead of individual tiles. This allows to use a single image as the input to the algorithm. By varying N, we can make the output look more like the input or less. We introduce the lowest entropy heuristic that removes the directional bias in generated results, is defined for irregular grids and is better suited for pre-constrained problems. We implement a tile symmetry system to reduce the sizes of inputs. We visualize partially observed states, either with color averaging or per-voxel voting. Merrell also introduced a method of incrementally modifying the model in parts to reduce the failure rate (which we don't use here). Recently the author created a page for model synthesis and published code.
-    \end{itemize}
 
 \subsubsection{WFC Algorithm}
 
@@ -63,52 +20,31 @@
     \end{enumerate}
 
 
-
-\subsubsection{Oskar Stålberg}
-
-    \begin{itemize}
-    \item usage in Bad North and Town Scaper
-    \item aperiodic infinite deterministic irregular relaxed quadrilateral grids
-    \end{itemize}
-
-
-\subsection{Von Gittern zu Graphen}
-
-    \at{@incomplete} Definition von Gitter und Graph in dieser Arbeit
-
-\subsubsection{Unregelmäßige Gitter}
-
-    % https://en.wikipedia.org/wiki/Delaunay_triangulation
-    % https://en.wikipedia.org/wiki/Voronoi_diagram
-    % https://de.wikipedia.org/wiki/Polygonnetz
-    % https://en.wikipedia.org/wiki/Triangulated_irregular_network
-
-\subsubsection{Delaunay Triangulation}
-
-    \begin{itemize}
-    \item Defintion der Triangulierung
-    \item Bowyer-Watson Algorithmus
-    \item Umwandlung zu Voronoi Diagramm:
-    \item vertices -> voronoi cell centers
-    \item edges -> cell neighbours
-    \item perpendicular bisector of edges -> cells vertices on its boundary
-    \end{itemize}
-
-\subsubsection{Voronoi Diagramm}
-
-    \begin{itemize}
-    \item Definition
-    \item nützliche Eigenschaften
-    \end{itemize}
-
-\section{Konzept}
-\subsection{Wave Function Collapse auf Graphen}
-
+\subsection{Gitter, Graphen, Triangulierung, Voronoi}
+    \url{https://en.wikipedia.org/wiki/Delaunay_triangulation}
+    \url{https://en.wikipedia.org/wiki/Voronoi_diagram}
+    \url{https://de.wikipedia.org/wiki/Polygonnetz}
+    \url{https://en.wikipedia.org/wiki/Triangulated_irregular_network}
     \url{https://en.wikipedia.org/wiki/Lattice_graph}
-    \at{@incomplete} Mehr als eine Richtung. Welche Heuristik für Strictness?
-    \at{@incomplete} Welche Nachbarn hat eine Zelle? Wie beeinflusst eine Zelle seine Nachbarn und was hat Heat damit zutun? Zustand/Richtungsmengen erklären.
+    
+    \subsubsection{Gitter}
+    \subsubsection{Graphen}
+    \subsubsection{Triangulierung, Quadrilierung}
+    \subsubsection{Delaunay Triangulation}
+        \begin{itemize}
+        \item Defintion der Triangulierung
+        \item Bowyer-Watson Algorithmus
+        \item Umwandlung zu Voronoi Diagramm:
+        \item vertices -> voronoi cell centers
+        \item edges -> cell neighbours
+        \item perpendicular bisector of edges -> cells vertices on its boundary
+        \end{itemize}
+    \subsubsection{Voronoi Diagramm}
+        \begin{itemize}
+        \item Definition
+        \item nützliche Eigenschaften
+        \end{itemize}
 
-\section{Umsetzung}
 \section{Ergebnisse und Diskussion}
     
     \begin{itemize}
