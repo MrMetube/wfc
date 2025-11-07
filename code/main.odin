@@ -487,7 +487,7 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, generates: ^[dynamic] 
         generate_points(&points, area, generate)
     }
     
-    dt: Delauney_Triangulation
+    dt: Delaunay_Triangulation
     begin_triangulation(&dt, points[:], allocator = context.temp_allocator)
     complete_triangulation(&dt)
     voronoi_cells := end_triangulation_voronoi_cells(&dt)

@@ -20,7 +20,7 @@ Work_Triangle :: struct {
     circum_circle: Circle,
 }
 
-Delauney_Triangulation :: struct {
+Delaunay_Triangulation :: struct {
     allocator: mem.Allocator,
     points:    [] v2d,
     
@@ -48,7 +48,7 @@ Voronoi_Cell :: struct {
 
 ////////////////////////////////////////////////
 
-begin_triangulation :: proc(dt: ^Delauney_Triangulation, points: []v2d, allocator := context.allocator) {
+begin_triangulation :: proc(dt: ^Delaunay_Triangulation, points: []v2d, allocator := context.allocator) {
     dt.allocator = allocator
     dt.points = points
     
@@ -81,7 +81,7 @@ begin_triangulation :: proc(dt: ^Delauney_Triangulation, points: []v2d, allocato
     triangulation_append(dt, dt.super_tri_index, dt.super_triangle)
 }
 
-triangulation_append :: proc (dt: ^Delauney_Triangulation, index: TriIndex, triangle: Triangle) {
+triangulation_append :: proc (dt: ^Delaunay_Triangulation, index: TriIndex, triangle: Triangle) {
     circle := circum_circle(triangle)
     
     wt := Work_Triangle{ index, circle }
@@ -93,14 +93,14 @@ triangulation_append :: proc (dt: ^Delauney_Triangulation, index: TriIndex, tria
     dt.triangle_count += 1
 }
 
-complete_triangulation :: proc (dt: ^Delauney_Triangulation) {
+complete_triangulation :: proc (dt: ^Delaunay_Triangulation) {
     for dt.point_index < auto_cast len(dt.points) {
         step_triangulation(dt)
     }
 }
 
-step_triangulation :: proc(dt: ^Delauney_Triangulation) {
-    // @note(viktor): We use the Bowyer-Watson algorithm to create the delauney triangulation
+step_triangulation :: proc(dt: ^Delaunay_Triangulation) {
+    // @note(viktor): We use the Bowyer-Watson algorithm to create the delaunay triangulation
     // See: https://en.wikipedia.org/wiki/Bowyer%E2%80%93Watson_algorithm
     
     point := dt.points[dt.point_index]
@@ -155,7 +155,7 @@ step_triangulation :: proc(dt: ^Delauney_Triangulation) {
     }
 }
 
-triangle_from_index :: proc (dt: ^Delauney_Triangulation, index: TriIndex) -> (result: Triangle) {
+triangle_from_index :: proc (dt: ^Delaunay_Triangulation, index: TriIndex) -> (result: Triangle) {
     result[0] = index[0] >= 0 ? dt.points[index[0]] : dt.super_triangle[index[0]+3]
     result[1] = index[1] >= 0 ? dt.points[index[1]] : dt.super_triangle[index[1]+3]
     result[2] = index[2] >= 0 ? dt.points[index[2]] : dt.super_triangle[index[2]+3]
@@ -179,7 +179,7 @@ collect_points :: proc (node: ^Quad_Node(v2d), dest: ^Array(v2d)) {
     }
 }
 
-collect_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^[dynamic] Triangle, points: [] v2d, dt: ^Delauney_Triangulation) {
+collect_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^[dynamic] Triangle, points: [] v2d, dt: ^Delaunay_Triangulation) {
     if node.children != nil {
         for &child in node.children {
             collect_triangles(&child, dest, points, dt)
@@ -212,7 +212,7 @@ collect_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^[dynamic] Tri
     }
 }
 
-collect_work_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^[dynamic] Work_Triangle, points: [] v2d, dt: ^Delauney_Triangulation) {
+collect_work_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^[dynamic] Work_Triangle, points: [] v2d, dt: ^Delaunay_Triangulation) {
     if node.children != nil {
         for &child in node.children {
             collect_work_triangles(&child, dest, points, dt)
@@ -229,7 +229,7 @@ collect_work_triangles :: proc (node: ^Quad_Node(Work_Triangle), dest: ^[dynamic
     }
 }
 
-end_triangulation :: proc(dt: ^Delauney_Triangulation) -> (result: [] Triangle) {
+end_triangulation :: proc(dt: ^Delaunay_Triangulation) -> (result: [] Triangle) {
     buffer := make([dynamic] Triangle, 0, dt.triangle_count, dt.allocator)
     
     collect_triangles(&dt.tree.root, &buffer, dt.points, dt)
@@ -258,7 +258,7 @@ bounds_line_intersection :: proc (a, b: $V, bounds: Rectangle(V)) -> (ok: b32, r
     return ok, result
 }
 
-end_triangulation_voronoi_cells :: proc(dt: ^Delauney_Triangulation) -> (result: [] Voronoi_Cell) {
+end_triangulation_voronoi_cells :: proc(dt: ^Delaunay_Triangulation) -> (result: [] Voronoi_Cell) {
     buffer := make([dynamic] Work_Triangle, 0, dt.triangle_count, context.temp_allocator)
     
     collect_work_triangles(&dt.tree.root, &buffer, dt.points, dt)

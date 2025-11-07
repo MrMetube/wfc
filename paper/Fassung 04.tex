@@ -1,0 +1,85 @@
+\section{Einleitung}
+\subsection{Motivation}
+\subsection{Problemstellung und Ziel}
+\subsection{Problemlösung}
+\subsection{Aufbau der Arbeit}
+
+\section{Hintergrund}
+
+    \subsection{Model Synthesis}
+        \at{@citation model synthesis}
+        Mit dem \textit{Model Synthesis} Algorithmus können, basiert auf einem 3D Beispielmodell, eine große Menge an ähnlichen 3D Modellen prozedural generiert werden. Das synthesierte/generierte Model wird auf einem 3D Gitter iterativ generiert, indem jedem Knotenpunkt des Gitters ein Teil des Beispielmodells zugewiesen wird. Das Beispiel muss vorher in kleinere gleichgroße Bauteile zerlegt werden. Jedem Knotenpunkt wird zu Beginn die Menge aller Bauteile als seine Auswahlmöglichkeiten zugewiesen. Mit jeder Iteration wird bei einem Knotenpunkt ein Bauteil seiner Zustandsmenge ausgewählt. Danach werden alle Nachbarn geprüft, so dass sie nur noch passende Bauteile in ihrer Zustandsmenge behalten. Hierfür wird eine globale Suche verwendet, andere Methoden beschränkten sich zuvor nur auf lokale Suchen. Eine globale Suche ist besser, weil jedes Bauteil einen weitreichenden Einfluss auf das gesamte Gitter haben kann.
+
+        \at{@incomplete Consistency}
+        Damit die Ausgabe eine sinnvolle Anordnung der Bauteile ergibt, werden nur Bauteile die nebeneinander in einer bestimmten Richtung im Beispiel sind, in der Ausgabe nebeneinander in dieser Richtung platziert. Dadurch ist garantiert, dass jede kleine Region der Ausgabe mindestens einer Region im Beispiel gleicht. Da an jedem Knotenpunkt meist mehr als ein Bauteil passen würde und die Auswahl per Zufall geschieht, ist es unwahrscheinlich, dass die Ausgabe genau dem Beispiel im ganzen gleicht. Bei der Auswahl des Bauteils für einen Knoten wird die Wahrscheinlichkeit jedes Bauteils auch mit seiner Häufigkeit im Beispiel gewichtet, wodurch über eine große Menge an Ausgaben die Häufigkeit einzelner Bauteile der tatsächlichen Häufigkeit im Beispiel gleicht. Für eine einzelne Ausgabe bedeutet dies, dass die globale Verteilung der Bauteile auch tendenziell der Verteilung im Beispiel gleicht. 
+        \at{@incomplete Resemblance}
+        \at{@visual from ms paper}
+
+        Die selbe Methodik kann auch auf 2D Gittern angewendet werden; dies wird dann \textit{Texture Synthesis} genannt. Desweiteren kann der Algorithmus um andere Techniken der prozeduralen Generierung erweitert werden, so können z.B. andere beliebige Beschränkungen auf die Ausgabe angewendet werden. \at{@visual}
+        \at{@incomplete NP-Completeness}
+        \at{@incomplete Unused: Soft Constraints \& Symmetry \& iterative small area solves}
+
+    \subsection{Wave Function Collapse}
+        \at{@citation wfc}
+        \textit{Wave Function Collapse} ist eine Weiterentwicklung des Model Sythesis Algorithmus. Die Kernidee der Generierung mittels einem Beispiel bleibt und wird um drei Aspekte erweitert. Anstatt nur Bauteile nebeneinander anzuordnen, können nun auch überlappende Teile des Beispiels automatisch aus einem Beispiel extrahiert werden. In jeder Iteration wird die Zelle mit der niedrigsten Entropie zuerst betrachtet. Bei Bauteil-basierten Beispielen werden Symmetrien von Bauteilen zur kompakteren Definition ausgenutzt.
+        \at{@incomplete renamings: model synthesis/wfc, observe \& collapse, vertex/cell, widerspruch}
+
+        \at{@incomplete generalization to NxN Überlappung}
+
+
+        Die Reihenfolge in der die Zellen observiert werden, hat einen Einfluss auf die Laufzeit. Bei Model Synthesis werden Zellen einfach nach ihrer Reihenfolge im Gitter abgearbeitet. Der Vorteil ist, dass keine Suche der nächsten Zelle nötig ist, aber es hat zum Nachteil, dass die Ausgabe sichtbare Artefakte enthällt. Man kann erkennen, ob zuerst die Reihen oder erst die Spalten abgearbeitet wurden \at{@visual von github links}. Wäre bekannt welche Zelle den meisten Fortschritt zur Lösung und die geringste Chance auf einen Widerspruch birgt, könnte stets diese Zelle zuerst betrachtet werden (\at{@incomplete} NP-Hardness). 
+
+        Einfacher ist es eine Heuristik zu definieren, die simpel zu berechnen ist und meistens einen besseren Ansatz bietet. Hierfür wird die Entropie als Maß eingeführt. Sie beschreibt das Maß an Ungewissheit über den finalen Zustand einer Zelle. Ist eine Zelle observiert, hat sie nur noch einen Zustand und die Entropie ist minimal, während eine Zelle mit vielen Möglichkeiten eine hohe Entropie hat. Die Entropie gibt auch Information darüber wie sehr eine Zelle durch ihre Umgebung beschränkt wird. Sie mit der Formel der Shannon-Entropie \at{@citation} berechnet.
+
+
+        Der Zerteilung eines Beispiels in Bauteile muss manuell passieren. Soll nun ein Bauteil auch in einer anderen Orientierung oder Spiegelung in der Ausgabe vorkommen müssen diese Variationen explizit angelegt werden. Will man nun ein Bauteil leicht verändern, so muss man auch alle Variationen manuel anpassen. Um diesen aufwendigen Prozess zu automatisieren definiert Gumin eine Gruppe von Symmetriearten mit denen eine Nutzerin ihre Bauteile annotieren kann. Der Algorithmus erkennt diese Annotationen und generiert vor Beginn automatisch die Variationen.
+        \at{@incomplete interesting but unused for this work}
+
+\subsection{Gitter, Graphen, Triangulierung, Voronoi}
+
+\section{Konzept}
+    \subsection{Einschränkung des Algorithmus und Idee zur Erweiterung}
+    \subsection{Wave Function Collapse auf Graphen}
+        \subsubsection{Output Graphen}
+
+    \subsection{Regelextrahierung \at{@naming}}
+        \at{@citation merrel}
+        \at{@flow Die Absätze sind okay aber ihre Reihenfolge muss überdacht werden}
+        
+        Ziel des Wave Function Collapse ist es, eine große Anzahl lokal ähnlicher Ausgaben zu generieren. Ähnlichkeit wird erreicht, wenn jede kleine Region der Ausgabe zu Regionen der Eingabe passt. Der Algorithmus weist jeder Zelle des Output-Graphen einen Zustand zu, so dass zwei Bedingungen gelten. Erstens muss der Zustand einer Zelle in mindestens einer Richtung mit den Zuständen aller Nachbarzellen überlappen können. Zweistens soll die Richtung der Überlappung möglichst ähnlich der Richtung zum Nachbarn sein.
+        
+        Ein Umfeld ist die Region um einen Pixel der Eingabe. Ein Zustand besteht aus dessen Umfeld und Frequenz in der Eingabe. In der Eingabe, die ein Quadratgitter ist, können Umfelder in acht Richtungen überlappen; im Norden, Süden, Westen, Osten und in den diagonalen Himmelsrichtungen. 
+        
+        Die Regeln welche Zustände überlappen und welche nicht, werden vor Beginn des Collapse aus der Eingabe extrahiert. Dafür wird für jeden Pixel der Eingabe sein Umfeld notiert. Liegt ein Pixel am Rand der Eingabe, so kann es sein, dass sein Umfeld zum Teil außerhalb der Eingabe liegne würde. Ist die Eingabe so erstellt, dass der linke Rand an den rechten Rand passt, bzw. der Obere an den Unteren, so nimmt man für das Umfeld von Randpixeln auch die Pixel vom der anderen Seite hinzu. Ist dies nicht erwünscht für eine Eingabe so können diese Umfelder einfach verworfen werden. Dies wird in dieser Arbeit als Wrapping bezeichnet, wobei Wrapping für die vertikalen Ränder und die horizontalen Ränder separat erlaubt oder verboten werden kann.
+        Jedes einzigartige Umfeld wird ein möglicher Zustand der einer Zelle zugewiesen werden kann. Tritt ein Umfeld mehr als einmal in der Eingabe auf, so wird dem entsprechenden Zustand eine höhere Frequenz zugewiesen. Aus der Gesamtanzahl an Zuständen und deren Frequenzen lässt sich die Wahrscheinlichkeit jedes Zustands berechen. Dies wird im Collapse genutzt, damit nicht nur lokale Ähnlichkeit sondern auch die globale Verteilung von Umfeldern der Eingabe ungefähr ähnelt (\at{@incomplete} das nicht nur hier so knapp sagen sondern auch später nochmal erwähnen). 
+        
+        \input{data/extract_wrapping/figure.tex}
+        
+        \at{@placement Das ist eher Implementierung}
+        Während des Collapse werden die Regeln, welche Zustände überlappen, nach jedem Schritt für alle benachbarten Zellen geprüft. Da sich diese Eigenschaft aber nicht während des Verlauf des Algorithmus ändert, kann eine Datenstruktur zuvor zur Speicherung erstellt werden. Die Überlappungs-Lookuptabelle gibt für jedes Zustandspaar die Richtungen an, in denen die Zustände überlappen. Wenn Zellen nun geprüft werden, kann nun aus der Lookuptabelle abgelesen werden, wodurch viel wiederholte Arbeit vermieden wird.
+        
+        Ist der Output-Graph ein Quadratgitter können die diagonalen Richtungen bei der Betrachtung entfallen, ohne dass es einen Einfluss auf die Qualität der Ausgabe hat. Die reguläre Struktur führt dazu, dass wenn für eine Zelle A der Nachbar von A im Norden(An) passt und der Nachbar im Westen von An passt, dann muss auch der Nachbar von A im Nordwesten passen. \at{@wording}
+        
+        \at{@incomplete Symmetrie und Transitivität der Regeln}
+        
+        Ein Umfeld wird im Umfang dieser Arbeit als ein 3x3 Gitter von Pixeln definiert. Es können auch andere Formen und Größen gewählt werden, aber diese müssen zu den genutzen Eingaben passen, damit die in den Eingaben existierenden Muster optimal genutzt werden. Wird das Umfeld zu klein gewählt, können nur Ausschnitte der gewünschten Muster erhalten werden, die Muster selbst gehen verloren. Während ein zu großes Umfeld auch die Anordnung der Muster in der Eingabe erhällt, was unerwünscht ist und im extremen Fall dazu führt, dass nur noch exakte Kopien der Eingabe ohne Variation in der Ausgabe vorkommen.
+        
+        Den Zellen des Output-Graphen sind, nach einem erfolreichem Collapse, je ein Zustand zugewiesen. Dieser kann aber nicht direkt durch sein Umfeld dargestellt werden, da das Umfeld eines Zustands zur Ermittlung der Überlappungen dient und deswegen aus mehr als einem Pixel, also einem Farbwert besteht. In dieser Arbeit wird der Pixel in der Mitte des Umfelds als der tatsächliche Farbwert einer Zelle zur Darstellung genutzt.
+    
+\section{Umsetzung}
+    \subsection{Generierung von Voronoi-Graphen}
+    \subsection{Überlappung und Heat}
+    \subsection{Collapse Cells - Step \at{@naming}}
+    \subsection{Backtracking}
+    
+    
+    
+\section{Ergebnisse und Diskussion}
+
+\section{Fazit}
+\subsection{Vergleich zum Original}
+\subsection{Mögliche Anwendungsbereiche?}
+\subsection{Ausblick und zukünftige Forschung}
+
+\section{Literaturverzeichnis}
+% figure out how to use maybe this: \bibliography{}
