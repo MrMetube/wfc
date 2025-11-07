@@ -69,8 +69,24 @@
     
 \section{Umsetzung}
     \subsection{Generierung von Voronoi-Graphen}
-    \subsection{Überlappung und Heat}
+    
     \subsection{Collapse Cells - Step \at{@naming}}
+    
+    \subsection{Überlappung und Heat \at{@naming}}
+    
+    \at{ @flow}
+    In einem 2D Gitter sind die Nachbarn jeder Zelle per Definition des Gitters in festen Richtungen und Abständen zu finden. Bei Graphen ist diese Anordnung frei. 
+    Die Überlappung von zwei Zuständen hängt von der Richtung zwischen den beiden Umfeldern, also von der Verschiebung des einen Umfeld zum anderen. 
+    Während der Propagate-Phase werden die möglichen Zustände von Nachbarzellen auf Überlappung geprüft.
+    Ein Zustand einer Zelle ist möglich\at{@translation}, wenn er mit mindestens einem Zustand jeder Nachbarzelle überlappen kann.
+    Die Überlappung zweier Zustände hängt von der Richtung zwischen den Umfeldern der Zustände abhängt ab. Das heißt, dass für den Nachbar im Norden einer Zelle nur die Überlappung der Zustände im Norden relevant ist. Die Richtung zu einer Nachbarzelle auf einem Graphen wird als der Vektor von Mittelpunkt der Zelle zum Mittelpunkt der Nachbarzelle definiert. Der wichtigste Unterschied ist, dass die Richtung nun nicht mehr auf die acht Himmelsrichtungen (N, NO, O, SO, S, SW, W, NW) beschränkt ist. 
+    
+    \@todo(viktor):{ beliebige Richtungen müssen auf die acht Himmelsrichtungen gemappt werden}
+    \\ \@todo(viktor):{ wir können nur die 8 HR aus der Eingabe extrahieren, interpolation(bilineares sampling) nicht möglich da wir diskrete zustände haben}
+    \\ \at{@visual Vergleich von Hexgrid mit Heat 1 und Heat 2}
+    
+    
+    
     \subsection{Backtracking}
     
     
