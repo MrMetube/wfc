@@ -34,6 +34,7 @@
 
         Der Zerteilung eines Beispiels in Bauteile muss manuell passieren. Soll nun ein Bauteil auch in einer anderen Orientierung oder Spiegelung in der Ausgabe vorkommen müssen diese Variationen explizit angelegt werden. Will man nun ein Bauteil leicht verändern, so muss man auch alle Variationen manuel anpassen. Um diesen aufwendigen Prozess zu automatisieren definiert Gumin eine Gruppe von Symmetriearten mit denen eine Nutzerin ihre Bauteile annotieren kann. Der Algorithmus erkennt diese Annotationen und generiert vor Beginn automatisch die Variationen.
         \at{@incomplete interesting but unused for this work}
+        % @todo(viktor): \ref{fig:wfc_gumin}
 
 \subsection{Gitter, Graphen, Triangulierung, Voronoi}
 
@@ -53,7 +54,7 @@
         Die Regeln welche Zustände überlappen und welche nicht, werden vor Beginn des Collapse aus der Eingabe extrahiert. Dafür wird für jeden Pixel der Eingabe sein Umfeld notiert. Liegt ein Pixel am Rand der Eingabe, so kann es sein, dass sein Umfeld zum Teil außerhalb der Eingabe liegne würde. Ist die Eingabe so erstellt, dass der linke Rand an den rechten Rand passt, bzw. der Obere an den Unteren, so nimmt man für das Umfeld von Randpixeln auch die Pixel vom der anderen Seite hinzu. Ist dies nicht erwünscht für eine Eingabe so können diese Umfelder einfach verworfen werden. Dies wird in dieser Arbeit als Wrapping bezeichnet, wobei Wrapping für die vertikalen Ränder und die horizontalen Ränder separat erlaubt oder verboten werden kann.
         Jedes einzigartige Umfeld wird ein möglicher Zustand der einer Zelle zugewiesen werden kann. Tritt ein Umfeld mehr als einmal in der Eingabe auf, so wird dem entsprechenden Zustand eine höhere Frequenz zugewiesen. Aus der Gesamtanzahl an Zuständen und deren Frequenzen lässt sich die Wahrscheinlichkeit jedes Zustands berechen. Dies wird im Collapse genutzt, damit nicht nur lokale Ähnlichkeit sondern auch die globale Verteilung von Umfeldern der Eingabe ungefähr ähnelt (\at{@incomplete} das nicht nur hier so knapp sagen sondern auch später nochmal erwähnen). 
         
-        \input{data/extract_wrapping/figure.tex}
+        % @todo(viktor): \ref{fig:extract_wrapping}
         
         \at{@placement Das ist eher Implementierung}
         Während des Collapse werden die Regeln, welche Zustände überlappen, nach jedem Schritt für alle benachbarten Zellen geprüft. Da sich diese Eigenschaft aber nicht während des Verlauf des Algorithmus ändert, kann eine Datenstruktur zuvor zur Speicherung erstellt werden. Die Überlappungs-Lookuptabelle gibt für jedes Zustandspaar die Richtungen an, in denen die Zustände überlappen. Wenn Zellen nun geprüft werden, kann nun aus der Lookuptabelle abgelesen werden, wodurch viel wiederholte Arbeit vermieden wird.
