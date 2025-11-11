@@ -30,7 +30,7 @@
 
         Wenn man mit WFC eine Ausgabe erstellen will, die sich selbst tiled \at{@translation} (also linker Rand gleich rechter Rand und so) kann man eine imaginäre Kante von einer Zelle am rechten Rand zu einer Zelle am linken Rand erstellen und dem Algorithmus definieren dass diese Benachbarung in Richtung Osten geht. Nun sind die Ränder des Gitters benachbart und das Ergebnis ist, dass die Ränder, wenn eine Lösung gefunden wird, zueinander passen. Wenn man dies für einen Rand macht, so ist die Form der Zellen mit ihren Nachbarn nicht mehr eine flache Ebene, sondern die Oberfläche eines Zylinders(ohne Deckel und Boden). Verbindet man auf die selbe Weise auch den anderen Rand, ist die Form nun ein Torus. Der Algorithmus selbst muss also nur auf diese Weise angepasst werden, um auf anderen Anordnungen von Zellen zu funktionieren.
 
-    \at{@incomplete Diagonale Regeln, besseres Sampling der Eingabe, Regelmengen, höhere Entropie durch Strictness}
+    \at{@incomplete Diagonale Regeln, besseres Sampling der Eingabe, Regelmengen, höhere Entropie durch Heat}
 
     \subsection{Wave Function Collapse auf Graphen}
 
@@ -80,7 +80,7 @@
             Siehe Abbildung \ref{fig:voronoi_clipping}.
 
 \subsection{Überlappung und Heat}
-    % strictness to heat for now, support to overlap
+    % support to overlap
     
 \subsection{Collapse Cells - Step \at{@naming}}
     Der Algorithmus generiert die Ausgabe iterativ. Eine Iteration, ein Schritt, kann in vier Phasen geteilt werden: Search, Pick, Observe und Propagate.
