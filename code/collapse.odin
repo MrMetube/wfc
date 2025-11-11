@@ -98,9 +98,10 @@ collapse_reset :: proc (c: ^Collapse) {
 
 get_direction_mask :: proc (sampling_direction: v2, heat: u8) -> (result: Direction_Mask) {
     threshold := cos((cast(f32) heat) / 16 * Tau)
+    
+    sampling_normal := normalize(sampling_direction)
     for other in Direction {
-        sampling_normal := normalize(sampling_direction)
-        other_normal    := normalized_direction(other)
+        other_normal := normalized_direction(other)
         
         closeness := dot(sampling_normal, other_normal)
         if closeness >= threshold {

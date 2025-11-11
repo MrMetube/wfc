@@ -21,8 +21,8 @@ TargetFrameTime :: 1./TargetFps
 // App
 
 voronoi_shape_t: f32 = 1
-cooling_chance: f32 = 0.7
-heating_chance: f32 = 0.1
+cooling_chance: f32 = 0
+heating_chance: f32 = 0
 
 total_duration: time.Duration
 
@@ -512,19 +512,20 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, generates: ^[dynamic] 
                     inside ||= contains(region, point)
                   
                   case Generate_Noise:
-                    dimension := 1.0
-                    region := rectangle_center_dimension(v2d{0.5, 0.5}, dimension)
+                    dimension := vec_cast(f64, kind.radius)
+                    center := vec_cast(f64, kind.center)
+                    region := rectangle_center_dimension(center, dimension)
                     inside = contains(region, point)
                         
                   case Generate_Circle:
                     center: v2d = 0.5
-                    radius := 0.5 - 0.001
+                    radius := cast(f64) kind.radius - 0.001
                     inside = length_squared(point - center) < square(radius)
                 }
             }
             
             if !inside {
-                cell.flags +=  { .edge }
+                // cell.flags +=  { .edge }
             }
         }
         
