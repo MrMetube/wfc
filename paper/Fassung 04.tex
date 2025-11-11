@@ -85,7 +85,7 @@
     
     Es bleibt also nur die Möglichkeit, dass der tatsächlichen Richtung eine der messbaren Himmelsrichtungen zugewiesen wird. Hierfür wird die Kosinus-Ähnlichkeit \at{@citation} berechnet. Es wird die Himmelsrichtung mit der höchsten Ähnlichkeit gewählt. \at{@incomplete Kann auch mehr als eine Richtung sein}.
     
-    \at{@incomplete Globale Heat und mögliche Heuristiken zur lokalen anpassung in Future Work}
+    \at{@incomplete Globale Heat}
     
     Abbildung \ref{fig:hex_heat} zeigt den Einfluss von Heat auf die Qualität der Ausgabe bei gleichem Beispiel und Output-Graph. Das Beispiel kann auf dem Quadratgitter ohne weitere Probleme genutzt werden, während der Graph mit den Sechsecken bei geringer Heat uninteressante Ausgaben generiert. 
     
@@ -98,6 +98,9 @@
     \at{@placement}
     Tatsächlich werden solche Konflikte durch die globale Suche vorher vom Algoritmus ausgeschlossen und es bleiben z.B. bei (b) nur die Zustände über, die horizontale Linien bilden. 
     
+    \at{@incomplete Heat als lokale Verzerrung, mit Rotation gleichstellen} \at{@visual Quadratgitter mit ~27° angle und heat 1 und 2}
+    
+    \at{@incomplete Entropie erwähnen}
     Der Effekt von höherer Heat ist, das die Menge an möglichen Zuständen vergrößert wird, indem mehr Überlappungsregeln in Betracht gezogen werden. Dadurch ist es auch unwahrscheinlicher, dass für eine Zelle keine Zustände mehr möglich sind und ein Widerspruch entsteht. Gleichzeitig werden nun aber auch Ausgaben generiert, die eine tatsächlich geringere Ähnlickkeit zum Beispiel haben. So ist die Ausgabe in (b) zwar weniger interessant als die in (c), aber die horizontalen Linien und die grauen Flächen dazwischen passen exakt zur Teilen des Beispiels. Bei (c) werden auch vertikalen Linien generiert, aber diese haben knicke und sind eher zickzackartig als die Senkrechten des Beispiels. Eine Erhöhung der Heat verschlechtert die lokale Ähnlichkeit der Ausgabe zum Beispiel und verbessert die Wahrscheinlichkeit erfolgreich eine nicht triviale Lösung zu generieren.
     
     Abbildung \ref{fig:more_heat} zeigt wie die Qualität der Ausgabe, bei steigender Heat, sinken kann.
@@ -114,6 +117,11 @@
 \subsection{Vergleich zum Original}
 \subsection{Mögliche Anwendungsbereiche?}
 \subsection{Ausblick und zukünftige Forschung}
+    \subsubsection{Heat}
+        \begin{itemize}
+        \item Eine globale Strictness für alle Zellen hat einen negativen Effekt auf lokal regelmäßige Regionen eines Gitters und ein postiven Effekt auf sehr unregelmäßige Regionen des Gitters.
+        \item Anstatt dass die Strictness global für alle Zellen zu Beginn bestimmt wird, kann man auch während des Collapse 'lernen' welche Regionen 'schwerer' zu lösen sind und dort die Strictness schrittweise erhöhen bis eine Lösung gefunden werden kann.
+        \end{itemize}
 
 \section{Literaturverzeichnis}
 % figure out how to use maybe this: \bibliography{}
