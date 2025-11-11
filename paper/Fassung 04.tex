@@ -81,9 +81,26 @@
     Ein Zustand einer Zelle ist möglich\at{@translation}, wenn er mit mindestens einem Zustand jeder Nachbarzelle überlappen kann.
     Die Überlappung zweier Zustände hängt von der Richtung zwischen den Umfeldern der Zustände abhängt ab. Das heißt, dass für den Nachbar im Norden einer Zelle nur die Überlappung der Zustände im Norden relevant ist. Die Richtung zu einer Nachbarzelle auf einem Graphen wird als der Vektor von Mittelpunkt der Zelle zum Mittelpunkt der Nachbarzelle definiert. Der wichtigste Unterschied ist, dass die Richtung nun nicht mehr auf die acht Himmelsrichtungen (N, NO, O, SO, S, SW, W, NW) beschränkt ist. 
     
-    \@todo(viktor):{ beliebige Richtungen müssen auf die acht Himmelsrichtungen gemappt werden}
-    \\ \@todo(viktor):{ wir können nur die 8 HR aus der Eingabe extrahieren, interpolation(bilineares sampling) nicht möglich da wir diskrete zustände haben}
-    \\ \at{@visual Vergleich von Hexgrid mit Heat 1 und Heat 2}
+    Es ist nicht möglich Regeln für eine beliebige Richtung aus dem Beispiel zu extrahieren, da jeder Pixel nur 8 angrenzende Pixel hat. Sieht man das Beispiel als eine Funktion an, so ist diese nicht an allen Punkten definiert \at{(@incomplete Bilder als diskreten oder kontinuierliche Funktionen)}. Man könnte durch Interpolation einen Mittelwert zwischen gegebenen Werten berechnen, wenn das Bild eine kontinuierliche Funktion aproximiert. Handelt es sich aber tatsächlich um eine diskrete Funktion, würde eine Interpolation Werte ergeben die vielleicht nicht teil des Wertebereichs waren, in anderen Worten würde man Farbwerte erhalten die vorher nicht im Bild waren. Da die Ausgabe dem Beispiel ähnlich seien muss, entfällt diese Option.
+    
+    Es bleibt also nur die Möglichkeit, dass der tatsächlichen Richtung eine der messbaren Himmelsrichtungen zugewiesen wird. Hierfür wird die Kosinus-Ähnlichkeit \at{@citation} berechnet. Es wird die Himmelsrichtung mit der höchsten Ähnlichkeit gewählt. \at{@incomplete Kann auch mehr als eine Richtung sein}.
+    
+    \at{@incomplete Globale Heat und mögliche Heuristiken zur lokalen anpassung in Future Work}
+    
+    Abbildung \ref{fig:hex_heat} zeigt den Einfluss von Heat auf die Qualität der Ausgabe bei gleichem Beispiel und Output-Graph. Das Beispiel kann auf dem Quadratgitter ohne weitere Probleme genutzt werden, während der Graph mit den Sechsecken bei geringer Heat uninteressante Ausgaben generiert. 
+    
+    \at{@incomplete (a) erwähnen}
+    
+    Die intuitive Erklärung ist, dass die Linien im Beispiel stets nur eine Zelle breit sind. Im Graph können die horizontalen Linien generiert werden, weil die Sechsecke selbst horizontal in Reihen angeordnet sind, während es keine rein vertikalen Zellenspalten gibt. Jedes Sechseck hat zwei Nachbarzellen oberhalb und zwei unterhalb. Bei Heat=1 wird beiden Norden/Süden zugewiesen. Will der Algoritmus nun bei einer Zelle eine vertikalen Linie, also die Zustände die dieses Muster abbilden, platzieren, so müssen nun beide oberen Nachbarzellen auch eine Zustand, der eine vertikale Linie darstellt, erhalten. Hier kommt es zum Konflikt, da diese beiden Zellen horizontal in der gleichen Reihe liegen, es aber im Beispiel keine vertikalen Linien direkt nebeneinander gibt. Es kann also keine Zelle Teil einer vertikalen Linie sein. 
+    
+    Bei (c) können dennoch \textbf{scheinbar} vertikale Linien generiert werden, da nun die oberen Zellen jeweils als im Norden und imd Nordosten/-westen betrachtet werden. Ebenso können die horizontalen Nachbarn als im Westen oder im Süd-/Nord-westen behandelt werden. Soll eine Zelle nun Teil einer vertikalen Linie sein, kann nur eine der oberen Nachbarnzellen als im Norden behandelt werden und die andere als die jeweilige Diagonale. 
+    
+    \at{@placement}
+    Tatsächlich werden solche Konflikte durch die globale Suche vorher vom Algoritmus ausgeschlossen und es bleiben z.B. bei (b) nur die Zustände über, die horizontale Linien bilden. 
+    
+    Der Effekt von höherer Heat ist, das die Menge an möglichen Zuständen vergrößert wird, indem mehr Überlappungsregeln in Betracht gezogen werden. Dadurch ist es auch unwahrscheinlicher, dass für eine Zelle keine Zustände mehr möglich sind und ein Widerspruch entsteht. Gleichzeitig werden nun aber auch Ausgaben generiert, die eine tatsächlich geringere Ähnlickkeit zum Beispiel haben. So ist die Ausgabe in (b) zwar weniger interessant als die in (c), aber die horizontalen Linien und die grauen Flächen dazwischen passen exakt zur Teilen des Beispiels. Bei (c) werden auch vertikalen Linien generiert, aber diese haben knicke und sind eher zickzackartig als die Senkrechten des Beispiels. Eine Erhöhung der Heat verschlechtert die lokale Ähnlichkeit der Ausgabe zum Beispiel und verbessert die Wahrscheinlichkeit erfolgreich eine nicht triviale Lösung zu generieren.
+    
+    Abbildung \ref{fig:more_heat} zeigt wie die Qualität der Ausgabe, bei steigender Heat, sinken kann.
     
     
     
