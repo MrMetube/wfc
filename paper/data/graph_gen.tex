@@ -1,0 +1,45 @@
+\begin{figure}[ht]
+    \centering
+    \begin{minipage}{\linewidth}
+        \rule{\linewidth}{0.4pt}
+        
+        \begin{enumerate}
+        \item Erstelle eine Menge an Punkten
+        
+        \item Generiere die Delaunay-Triangulierung \at{@citation Bowyer-Watson Algorithmus} \at{@visual} \begin{enumerate}
+            \item Erstelle das Super-Dreieck so dass jeder Punkt innerhalb liegt
+            
+            \item Füge jeden Punkt schrittweise in die Triangulierung ein: \begin{enumerate}
+                \item Finde die Dreiecke in dessen Umkreis der Punkt liegt
+                \subitem Ist der Punkt innerhalb des Umkreises kann dieses Dreieck nicht zur finalen Triangulierung gehören
+                \item Sammel alle Kanten dieser Dreiecke
+                \subitem Kommt eine Kante nur einmal vor, ist sie Teil der Hülle dieser Dreiecke
+                \subitem Alle anderen Kanten sind innerhalb dieser Hülle, da sich zwei Dreiecke diese Kante teilen
+                \item Erstelle eine neue Kante zum eingefügten Punkt für jede Ecke der Hülle
+                \item Erstelle neue Dreiecke aus diesen Kanten und der Hülle
+                \item Füge die neuen Dreiecke in die Triangulierung ein
+            \end{enumerate}
+            
+            \item Enferne alle Dreiecke die eine Kanten mit dem Super-Dreieck teilen
+            \item Die Ecken und Kanten aller Dreiecke bilden den Output-Graphen
+            \subitem Jede Ecke wird der Mittelpunkt einer Voronoizelle
+            \subitem Die Kanten zeigen welche Zellen benachbart sind
+        \end{enumerate}
+        
+        \item Erstelle die Voronoizellen aus der Triangulierung \begin{enumerate}
+            \item Finde alle Dreiecke einen Punkt teilen
+            \item Die Schwerpunkte der Dreiecke sind die Eckpunkte der Zelle
+            \item Verbinde die Eckpunkte der Zelle zu Kanten
+            \item Begrenze die Voronoizellen auf den gewünschten Bereich \ref{fig:voronoi_clipping}
+        \end{enumerate}
+        
+        \item 
+        \end{enumerate}
+        
+        \rule{\linewidth}{0.4pt}
+    \end{minipage}
+    
+    \caption{Algorithmus zur Generierung der Output-Graphen}
+    
+    \label{fig:graph_gen}
+\end{figure}

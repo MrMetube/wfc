@@ -87,8 +87,6 @@
         Den Zellen des Output-Graphen sind, nach einem erfolreichem Collapse, je ein Zustand zugewiesen. Dieser kann aber nicht direkt durch sein Umfeld dargestellt werden, da das Umfeld eines Zustands zur Ermittlung der Überlappungen dient und deswegen aus mehr als einem Pixel, also einem Farbwert besteht. In dieser Arbeit wird der Pixel in der Mitte des Umfelds als der tatsächliche Farbwert einer Zelle zur Darstellung genutzt.
     
 \section{Umsetzung}
-    \at{@incomplete Einleitender Satz und Begründung für die Ansätze}
-    
     \subsection{Generierung von Output-Graphen}
     
         \at{@flow}
@@ -101,6 +99,7 @@
         \at{@incomplete Voronoi}
         \at{@incomplete welche Settings gibt einem die App dafür}\at{@visual Beispiele der Generierung}
         \at{@visual Delaunay Triangulierung und Voronoi Diagramme, dualer Graph}
+        \at{@visual \ref{fig:graph_gen}}
         \at{@visual \ref{fig:voronoi_clipping}}
     
     
@@ -122,16 +121,9 @@
         Entweder man macht die Änderung nur lokal rückgängig und berechnet immer alle Zellen neu, bis sich keine mehr ändern. Oder man speichert ab, zu welchem Zeitpunkt ein Zustand unmöglich geworden ist und prüft ob dieser Zeitpunkt nach dem Schritt zurück weiterhin in der Vergangenheit oder nun in der Zukunft liegt. Bei zweiterem müssen alle solche Zustände als wieder möglich betrachtet werden.
         Diese Art die Menge an Zuständen darzustellen ist okay, weil sich für jede Zelle die Zustandsmenge in jedem Schritt des Algorithmus immer nur verkleinert oder gleichbleibt. Ist ein Zustand durch die Nachbar unmöglich so wird er auch nie wieder an späterem Zeitpunkt möglich.
 
-        Desweiteren sollen bereits gemachte Entscheidungen, die zu einem Widerspruch führen, nicht noch einmal wiederholt werden. Die Entscheidungspunkte in der  Pick- und Observe-Phase können gleich behandelt werden. Wir können die List an Auswahlmöglichkeiten für später speichern und die ausgewählte Zelle oder den ausgewählten Zustand von der Liste entfernen. Wird auf einen Schritt gebacktrackt, so kann einfach die nächste Möglichkeit auswählt werden. Der Algorithmus läuft ab dann normal weiter.
-
-        \at{@incomplete Pseudo-Code oder Diagramme für Algorithmus and Backtracking?}
-
-        In der Umsetzung wird für jede Zelle eine Liste aller Zustände gespeichert. Jeder Zustand ist entweder möglich und wurde noch nicht entfernt oder ist unmöglich und speichert den Zeitpunkt an dem er unmöglich wurde. Hierbei ist der Zeitpunkt einfach die Nummer des Schritts an dem der Zustand unmöglich wurde. 
-        Für jeden Schritt des Algorithmus wird auch die Liste der gefundenen Zellen in der Search-Phase gespeichert. Wenn in der Pick-Phase eine Zelle ausgewählt wird, wird diese aus der Liste entfernt, damit diese beim Backtracken nicht erneut gewählt wird. Ebenso werden in der Observe-Phase alle wählbaren Zustände gespeichert und mit jedem Lösungsversuch wird der gewählte Zustand entfernt.
-
-        Nun wurde aber eine Schwachstelle in den Algorithmus eingeführt. Wenn zuvor in der Search-Phase keine Zellen in Superposition mehr gefunden wurden, bedeutete dies, dass alle Zellen tatsächlich collapsed waren. Nun kann es sein, dass alle Zellen, die gefunden wurden, zu einem Widerspruch führen würden und entfernt wurden. Somit würde keine Zelle mehr wählbar sein. Auch in der Observe-Phase war es zuvor unmöglich keinen Zustand mehr auswählen zu können, da eine Zelle mit leerer Zustandsmenge bereits zuvor als Widerspruch identifiziert wurden wäre.
+        Desweiteren sollen bereits gemachte Entscheidungen, die zu einem Widerspruch führen, nicht noch einmal wiederholt werden. Die Entscheidungspunkte in der  Pick- und Observe-Phase können gleich behandelt werden. Wir können die List an Auswahlmöglichkeiten für später speichern und die ausgewählte Zelle oder den ausgewählten Zustand von der Liste entfernen. Wird auf einen Schritt gebacktrackt, so kann einfach die nächste Möglichkeit auswählt werden. Der Algorithmus läuft ab dann normal weiter.In der Umsetzung wird für jede Zelle eine Liste aller Zustände gespeichert. Jeder Zustand ist entweder möglich und wurde noch nicht entfernt oder ist unmöglich und speichert den Zeitpunkt an dem er unmöglich wurde. Hierbei ist der Zeitpunkt einfach die Nummer des Schritts an dem der Zustand unmöglich wurde. 
         
-        In diesen Fällen wurde ein Widerspruch erreicht und es muss zum Backtracking kommen. Schließlich wurden alle noch möglichen Entscheidungen bereits getroffen und ausgewertet und keine Lösung gefunden. Somit führt dieser Schritt zwar nicht direkt zu einem Widerspruch in einer Zelle, aber alle folgen Schritte werden irgendwann zu einem Widerspruch führen. Als Anmerkung: wird auf diese Weise bis zum ersten Schritt gebacktrackt und führen dann auch dort alle möglichen Entscheidungen zu einem Widerspruch, so kann die Kombination aus Eingabe und Graph keine Ausgabe ergeben.
+        Der Algorithmus ist in Abbildung \ref{fig:wfc_back} dargestellt. Für jeden Schritt des Algorithmus wird auch die Liste der gefundenen Zellen in der Search-Phase gespeichert. Wenn in der Pick-Phase eine Zelle ausgewählt wird, wird diese aus der Liste entfernt, damit diese beim Backtracken nicht erneut gewählt wird. Ebenso werden in der Observe-Phase alle wählbaren Zustände gespeichert und mit jedem Lösungsversuch wird der gewählte Zustand entfernt. Nun wurde aber eine Schwachstelle in den Algorithmus eingeführt. Wenn zuvor in der Search-Phase keine Zellen in Superposition mehr gefunden wurden, bedeutete dies, dass alle Zellen tatsächlich collapsed waren. Nun kann es sein, dass alle Zellen, die gefunden wurden, zu einem Widerspruch führen würden und entfernt wurden. Somit würde keine Zelle mehr wählbar sein. Auch in der Observe-Phase war es zuvor unmöglich keinen Zustand mehr auswählen zu können, da eine Zelle mit leerer Zustandsmenge bereits zuvor als Widerspruch identifiziert wurden wäre. In diesen Fällen wurde ein Widerspruch erreicht und es muss zum Backtracking kommen. Schließlich wurden alle noch möglichen Entscheidungen bereits getroffen und ausgewertet und keine Lösung gefunden. Somit führt dieser Schritt zwar nicht direkt zu einem Widerspruch in einer Zelle, aber alle folgen Schritte werden irgendwann zu einem Widerspruch führen. Als Anmerkung: wird auf diese Weise bis zum ersten Schritt gebacktrackt und führen dann auch dort alle möglichen Entscheidungen zu einem Widerspruch, so kann die Kombination aus Eingabe und Graph keine Ausgabe ergeben.
         
     \subsection{Überlappung und Heat \at{@naming}}
     
