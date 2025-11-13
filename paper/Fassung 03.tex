@@ -4,6 +4,30 @@
 \subsection{Gitter, Graphen, Triangulierung, Voronoi}
     \at{@incomplete Definition von Gitter und Graph in dieser Arbeit}
     
+    \url{https://en.wikipedia.org/wiki/Delaunay_triangulation}\\
+    \url{https://en.wikipedia.org/wiki/Voronoi_diagram}\\
+    \url{https://de.wikipedia.org/wiki/Polygonnetz}\\
+    \url{https://en.wikipedia.org/wiki/Triangulated_irregular_network}\\
+    \url{https://en.wikipedia.org/wiki/Lattice_graph}\\
+    
+    \subsubsection{Gitter}
+    \subsubsection{Graphen}
+    \subsubsection{Triangulierung, Quadrilierung}
+    \subsubsection{Delaunay Triangulation}
+        \begin{itemize}
+        \item Defintion der Triangulierung
+        \item Bowyer-Watson Algorithmus
+        \item Umwandlung zu Voronoi Diagramm:
+        \subitem vertices $\rightarrow$ voronoi cell centers
+        \subitem edges $\rightarrow$ cell neighbours
+        \subitem perpendicular bisector of edges $\rightarrow$ cells vertices on its boundary
+        \item \at{@visual}
+        \end{itemize}
+    \subsubsection{Voronoi Diagramm}
+        \begin{itemize}
+        \item Definition
+        \item nützliche Eigenschaften
+        \end{itemize}
     \subsubsection{Oskar Stålberg}
         \at{@incomplete WFC on irregular quadrilations, Oskar Stålberg}
         \begin{itemize}
@@ -13,101 +37,48 @@
 
         
 \section{Konzept}
-    \@todo(viktor):{alles nachfolgende lesen und duplikate weiter nach vorne holen oder auslassen}
-    \at{@incomplete Heuristik für Heat oder manuell?}
-    \at{@incomplete Welche Nachbarn hat eine Zelle? Wie beeinflusst eine Zelle seine Nachbarn im Graph und was hat Heat damit zutun? Zustand/Richtungsmengen erklären.}
-
     \subsection{Einschränkung des Algorithmus und Idee zur Erweiterung}
-        
-        Die ursprüngliche Form des Wave Function Collapse nimmt in 2D Pixelmuster oder Tilesets als Eingabe und produziert darauß wieder 2D Muster. 
-        Pixel liegen stets auf einem quadratischen Gitter. Bei Tilesets ist die grafische Gestaltung des Tiles uneingeschränkt. Dennoch sind die Tiles selbst quadratisch. Dies schränkt die Gestaltung des Inhalts der Tiles in sofern ein, dass die Kanten zu anderen Kanten passen müssen. Auch bei 3D Inputs werden die Modelle in blockförmige Bausteine zerschnitten, damit der Collapse auf einem 3D Gitter von Würfeln arbeiten kann.
-
-        Man beschränkt sich auf regelmäßige quadratische Gitter, da ihre Struktur bestimmte Vorteile mit sich bringt. Benachbarung von Zellen ist implizit durch die Struktur des Gitters mitgeliefert. Eine Zelle des Ausgabegitters ist durch seine Koordinaten im Gitter definiert und seine Nachbarn lassen sich einfach durch Schritte in vier festen Richtungen in 2D oder sechs Richtungen in 3D finden. Diese Eigenschaft gilt durch die Regelmäßigkeit des Gitters für alle Zellen gleichermaßen. Dies ist nützlich, da die Benachbarungsregeln, die aus der Eingabe herausgezogen werden, eben auch auf einem regelmäßigem Gitter basieren und direkt im Algorithmus verwendet werden können.
-
-        Der Nachteil dadurch, dass die Generierung immer auf einem regelmäßigem quadratischen Gitter läuft, ist, dass die Ausgabe im Ganzen Artefakte des Gitter aufweist. Vertikale und horizontale Linien können im Pixelgitter dargestellt werden, aber bei diagonalen oder frei geformte Kurven und Linien müsste eine Zelle des Ausgabegitters anteilmäßig ausgefüllt sein, was aber nicht möglich ist. Eine Zelle kann immer nur einen diskreten finalen Zustand wählen. Es kommt zu Aliasing.
-
-        Wenn man sich den Kern des Wave Function Collapse Algorithmus genauer anguckt, erkennt man, dass die Entscheidung, welchen Zustand eine Zelle erhällt, nur von den möglichen Zuständen ihrer Nachbarn abhängt. Deren Zuständ geschränken die Menge aller in der Eingabe existierenden Zustände, auf genau diese, die in der Eingabe nebeneinander gefunden wurden. Dabei ist auf dem Gitter immer eindeutig, dass z.B. die Zelle N nördlich einer betrachteten Zelle M, nur Zustände wählen kann die in der Eingabe nördlich von einem von M's Zuständen gefunden wurde. Damit der Algorithmus die Menge an möglichen Zuständen einer Zelle finden kann, braucht es also nur eine Funktion die aus der tatsächlichen Richtung von M zu N die betrachtete Richtung der Benachbarungregeln ergibt. Im Gitter ist gibt diese Funktion meißt die Identität; die Richtung zum Nachbarn ist die Richtung für die Regeln. 
-
+        \at{@placement}
         Wenn man mit WFC eine Ausgabe erstellen will, die sich selbst tiled \at{@translation} (also linker Rand gleich rechter Rand und so) kann man eine imaginäre Kante von einer Zelle am rechten Rand zu einer Zelle am linken Rand erstellen und dem Algorithmus definieren dass diese Benachbarung in Richtung Osten geht. Nun sind die Ränder des Gitters benachbart und das Ergebnis ist, dass die Ränder, wenn eine Lösung gefunden wird, zueinander passen. Wenn man dies für einen Rand macht, so ist die Form der Zellen mit ihren Nachbarn nicht mehr eine flache Ebene, sondern die Oberfläche eines Zylinders(ohne Deckel und Boden). Verbindet man auf die selbe Weise auch den anderen Rand, ist die Form nun ein Torus. Der Algorithmus selbst muss also nur auf diese Weise angepasst werden, um auf anderen Anordnungen von Zellen zu funktionieren.
-
-    \at{@incomplete Diagonale Regeln, besseres Sampling der Eingabe, Regelmengen, höhere Entropie durch Heat}
-
-    \subsection{Wave Function Collapse auf Graphen}
-
-        \subsubsection{Output Graphen}
-
-        Wave Function Collapse arbeitet normalerweise mit einem regelmäßigem Gitter. Hier ist die Anordnung der Zellen eindeutig; die Position einer Zelle und welche Nachbarn sie hat und in welcher Richtung die relativ zur Zelle sind implizit in der Datenstruktur eingebaut. Bei einem Graphen müssen diese Informationen explizit gespeichert werden. Jede Zelle kann eine beliebige Position haben und beliebig viele Nachbar in beliebigen Richtungen haben. 
-
-        Jede Kante des Graphen stellt eine Beschränkung des Lösungsraums dar. Bei einem Gitter ist jede Zelle, mit Ausnahme der Zellen am Rand, gleichermaßen beschränkt, jedoch kann die Anordnung des Graphen dazu führen dass einzelne Zelle weniger und andere stärker eingeschränkt werden. Eine Zelle mit zehn Nachbarn muss in einen Zustand collapsen welcher zu den Zuständen der zehn Nachbaren passt.
-
-        Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthalten, während dass Gitter uniforme Beschränkung auf Zellen ergibt. Zur Erinnerung: es muss nur eine Zelle eine Widerspruch verursachen damit der Algorithmus fehlschlägt. Also sind solche Regionen starker Beschränkung besonderns entscheident für die Chance einen validen Output zu generieren, weil hier der Lösungsraum am kleinsten ist.
-
-        \at{@incomplete Entropy erwähnen und für Regionen mit einer Grafik von der App darstellen}
-
     
 \section{Umsetzung}
 
 \subsection{Generierung von Voronoi-Graphen}
-    \@todo(viktor):{ Erklärung der Generierung separat zur erklärung der Anforderung an den Graphen auf dem der Algorithmus laufen soll \\}
-    \begin{itemize}
-        \item Der Algorithmus arbeitet auf einem gegebenen Graphen. Die Verteilung der Zellen kann regelmäßig oder ohne Struktur sein. Es muss kann auch über den Graphen hinweg variieren. Jede Zelle hat eine 2D Position und jeder Zelle müssen alle ihre Nachbarzellen zugewiesen werden. Zellen sind benachbart, wenn sie eine Kante teilen. Eine Kante sind alle Punkte die gleichweit von zwei Zellenmittelpunkten entfernt sind. 
-        \item In meiner Anwendung erstelle ich die Graphen prozedural aus einfachen Mustern oder mittels Zufallsprinzip. 
-        \item Meine generierten Graphen sind immer planar, da ich immer dem selben Ablauf folge. Erst erstelle ich eine Menge an 2D Punkten, die wie gesagt eine beliebige Anordnung habe. Dann erstelle ich auf diesen Punkten eine Delaunay-Triangulierung. Das Gegenstück einer solchen Triangulierung ist ein Voronoi-Diagramm. Man findet es in dem man die Eckpunkte der Dreiecke als Mittelpunkte der Voronoizellen nimmt und die Kanten der Dreiecke enden in den Nachbarzellen jeder Zelle. Da Zellen am Rand von diesem Voronoi-Diagramm nach außen unendlich groß sind, begrenzen wir diese Zellen auf eine freigewählte rechteckige Fläche. 
-        \item Zu Beginn des Wave Function Collapse werden alle Zellen mit einer Superposition aller möglichen Zustände initialisiert.
-    \end{itemize}
-
-    \at{@incomplete Warum generieren wir die Graphen und kurz wie und welche Settings gibt einem die App dafür. }
-    \at{@visual Beispiele der Generierung}
-
-    \at{@placement}
-    Man kann ein regelmäßiges Quadratgitter als eine spezielle Form von Voronoigraph ansehen. Jedes Quadrat kann als eine Voronoizelle angesehen werden, welche genau alle Punkte die am nächsten zu seinem Mittelpunkt enthällt. Die Nachbarn können nun explizit über die Kanten der Voronoizelle gefunden werden. Zuvor waren diese auch implizit durch die Koordinate des Quadrats im Gitter gegeben.
-
-    Für den Algorithmus ist diese Unterscheidung egal und er generiert die gleiche Art von Ausgaben ohne weitere Anpassungen. \at{@visual}
-    Also können wir auch andere Voronoigraphen als Outputgraphen verwenden.
-
-    Um einen Voronoigraphen zu generieren nutze ich die Eigenschaft, dass der duale Graph zu jedem Voronoigraph eine Delaunay-Triangulierung ist. Eine Delaunay Triangulierung kann man auf unterschiedlich Weise aus einer beliebigen Point-Cloud, einer Menge an Punkten im 2D Raum, generieren. Dies ist optimal für mich, da ich nun einfach eine Point-Cloud auf beliebige Weise, also mit oder ohne Struktur und so komplex oder simpel wie ich es will, erstellen und aus dieser ein validen Voronoigraph erhalten kann.
-
-    \at{@incomplete Eigenschaften einer Delaunay-Triangulierung nennen}
 
     Für die Triangulierung habe ich mich ohne tiefere Beweggründe für den Boywer-Watson Algorithmus entschieden. Der Algorithmus generiert die Triangulierung iterativ in dem jeder Punkt nacheinander eingefügt wird und der Graph angepasst wird, so dass es wieder eine Delaunay-Triangulierung ist.
     Zur Hilfe erstellen wir ein Superdreieck, welches alle Punkte enthällt. Nun fügen wir einen Punkt ein und prüfen all bisher gefundenen Dreiecke, ob ihr Umkreis diesen Punkt enhällt. Ist der Punkt innerhalb des Umkreises kann das Dreieck nicht zur finalen Triangulierung gehören. Für alle diese Dreieck sammeln wir nun die Kanten. Jede Kante die nur einmal vorkommt ist teil der Hülle dieser Dreiecke, alle anderen Kanten sind innerhalb dieser Hülle, da sich zwei Dreiecke diese teilen. Diese inneren Kanten werden entfernt und für jede Ecke entlang der Hülle wird eine neue Kante zum eingefügten Punkt erstellt.
     Am Ende entfernt alle Kanten zur den Eckpunkten des Superdreiecks aus der Triangulierung und erhällt die Delaunay-Triagulierung der Point-Cloud.
 
     Aus der Triangulierung erstellen wir das Voronoidiagram indem wir die Eckpunkte als Mittelpunkte der Voronoizellen nehmen. Die Kanten sagen uns welche Zellen benachbart sind. Um die Kanten der Voronoizelle zu finden nehmen wir von alle Dreiecke in denen der Punkt liegt den Mittelpunkt des Umkreises. Die Umkreismittelpunkte sind die Ecken der Voronoizelle. Die Kanten finden wir indem wir die Punkte nach ihrem Winkel um den Mittelpunkt der Zelle sortieren und dann der Reihe nach verbinden.
-    \at{@visual}
 
     Es ist normal, dass ein solches Voronoidiagram an den Rändern der Point-Cloud auch Zellen ergeben kann die auf einer Seite offen sind, weil die Kanten zwischen den Ecken der Zelle, den Umkreismittelpunkten, keinen Schnittpunkt haben. Ich habe mich dazu entschieden, bei solchen Zellen weitere Eckpunkte einzufügen, so dass das alle Zellen durch einen freigewählten rechteckigem Bereich begrenzt sind. Dafür prüfe ich ob ein Eckpunkt außerhalb des Bereichs liegt und finde dann den Schnittpunkt von der Kante zu dem Eckpunkt mit dem Rechteck des Bereichs und ersetze den Eckpunkt mit diesem Schnittpunkt. Dieser Schritt passiert so lange bis alle Eckpunkte innerhalb oder auf dem Rand des Bereichs liegen.
             Siehe Abbildung \ref{fig:voronoi_clipping}.
-
-\subsection{Überlappung und Heat}
-    % support to overlap
+            
+            
+\section{Ergebnisse}
+    \begin{itemize}
+    \item Bilder
+    \item Base Case - reguläres Gitter
+    \item Lokale Ähnlichkeit im Vergleich zum Input
+    \item Pixel/Linienmuster und Flächenmuster
+    \item Zu kleiner Lösungsraum ergibt uniformen Output, nur eine Farbe die flächenartig ist.
+    \end{itemize}
     
-\subsection{Collapse Cells - Step \at{@naming}}
-    Der Algorithmus generiert die Ausgabe iterativ. Eine Iteration, ein Schritt, kann in vier Phasen geteilt werden: Search, Pick, Observe und Propagate.
     
-    Zu Beginn wird die Zelle mit der geringsten Entropie gesucht, die noch nicht collapsed ist. Die Entropie einer Zelle wird als die Shannon-Entropy \at{@citation} der noch möglichen Zustände berechnet. 
-    
-    Es ist möglich, dass mehrere Zellen die gleiche Entropie haben. Zum Beispiel haben am Anfang, bevor dem ersten Schritt, sind alle Zellen in der Superposition aller Zustände, wodurch alle Zellen die selbe Entropie haben. Aus der Menge an gefundenen Zellen wird in diesem Fall in der Pick-Phase eine Zelle zufällig ausgewählt.
-
-    In der Observe-Phase wird ein Zustand zufällig aus der Superposition ausgewählt und die Zelle collapsed. Die Wahrscheinlichkeit eines Zustands gewählt zu werden hängt von dessen Häufigkeit in der Eingabe ab. Dadurch generiert der Algorithmus Ausgaben die lokal ähnlich sind, sondern auch global eine ähnliche Verteilung an allen Mustern aufweisen.
-            Die anderen Zustände werden entfernt was Einfluss auf die Nachbarzellen haben kann. 
-    
-    Danach beginnt die Propagate-Phase. Eine Liste aller geänderten Zellen wird mit der observierten Zelle initialisiert. Für jede Zelle in dieser Liste werden alle Nachbarn überprüft, ob nun einer der Zustände nicht mehr möglich ist. Solange mindestens ein Zustand der aktuellen Zelle zu einem Zustand der Nachbarzelle passt, also sie entsprechend der Richtung zum Nachbarn überlappen, dann behält die Nachbarzellen diesen Zustand. Ansonsten ist der Zustand nicht mehr möglich und wird entfernt. Sollte nun auch der letzte mögliche Zustand entfernt werden, so wurde ein Widerspruch erreicht. Der Graph kann nun nicht mehr gelöst werden. Sind nach der Prüfung aber noch Zustände möglich so, wird die Zelle der Liste zu prüfender Zelle angefügt.
-    Diese Phase dauert so lange, bis sich keine Zellen mehr ändern.
-    
-\subsection{Backtracking}
-    Wenn der Algorithmus einen Widerspruch entdeckt, muss nicht immer alle Arbeit verworfen werden. Gerade bei größeren oder komplizierteren Mustern oder Graphen ist es wahrscheinlich, dass beim ersten Versuch keine Lösung gefunden wird, weil die Komplexität den Lösungsraum stärker einschränkt. Wenn ein Widerspruch in einer Zelle aber nun nur von den direkten Nachbar abhängt, so ist es wahrscheinlich dass weiter entfernte bereits gelöste Zellen dennoch kompatibel sind. Um einen lokalen Widerspruch aufzulösen muss meistens nur lokal eine andere Entscheidung getroffen werden.
-
-    Um Backtracking umzusetzen müssen mehr Informationen behalten werden als nur der Zustand des Gitters zum aktuellen Zeitpunkt. Will man nun wieder einen Schritt zurückgehen muss man wissen, welche Entscheidung man zuvor bereits getroffen hat um dessen Effekt rückgängig zu machen. Dabei genügt es nicht nur die Collapste Zelle und den Zustand wieder zu entfernen, weil jede Zelle von mehreren Nachbarn beeinflusst wird. Die Zustandsmenge einer Zelle ist die Schnittmenge der möglichen Nachbarzuständen der Nachbar. Somit kann es sein, dass ein Zustand A aus der Menge wegen mehreren Einschränkungen von mehreren Nachbarn fehlt. Nimmt man nun durch Backtracking eine dieser Einschränkungen wieder zurück, so ist es nicht offensichtlich, ob Zustand A nun wieder möglich ist, ohne alle Einschränkungen auf die Zelle neu zu berechnen.
-    Entweder man macht die Änderung nur lokal rückgängig und berechnet immer alle Zellen neu, bis sich keine mehr ändern. Oder man speichert ab, zu welchem Zeitpunkt ein Zustand unmöglich geworden ist und prüft ob dieser Zeitpunkt nach dem Schritt zurück weiterhin in der Vergangenheit oder nun in der Zukunft liegt. Bei zweiterem müssen alle solche Zustände als wieder möglich betrachtet werden.
-    Diese Art die Menge an Zuständen darzustellen ist gut, weil sich für jede Zelle die Zustandsmenge in jedem Schritt des Algorithmus immer nur verkleinert oder gleichbleibt. Ist ein Zustand durch die Nachbar unmöglich so wird er auch nie wieder an späterem Zeitpunkt möglich.
-
-    Desweiteren wollen wir bereits gemachte Entscheidungen nicht noch einmal wiederholen, wenn diese zu einem Widerspruch führen werden. Die Entscheidungspunkte in der  Pick- und Observe-Phase können gleich behandelt werden. Wir können die List an Auswahlmöglichkeiten für später speichern und die ausgewählte Zelle oder den ausgewählten Zustand von der Liste entfernen. Kommen wir nun zu diesem Schritt zurück können wir einfach die nächste Möglichkeit auswählen und den Algorithmus normal weiterlaufen lassen.
-
-    \@todo(viktor):{ Pseudo-Code oder Diagramme für Algorithmus and Backtracking?}
-
-    In der Umsetzung speichere ich für jede Zelle eine Liste aller Zustände. Jeder Zustand ist entweder möglich und wurde noch nicht entfernt oder ist unmöglich und speichert den Zeitpunkt an dem er unmöglich wurde. Hierbei ist der Zeitpunkt einfach die Anzahl an Schritten des Algorithmus. 
-    Für jeden Schritt des Algorithmus speichern wir nun die Liste der gefundenen Zellen in Search. Wenn in Pick eine Zelle ausgewählt wird, entfernen wir diese aus der Liste und wählen beim Backtracken nun eine andere. Ebenso speichern wir vor der Observe-Phase alle wählbaren Zustände und entfernen mit jedem Lösungsversuch den gewählten Zustand. 
-
-    Nun haben wir unwissentlich auch eine Schwachstelle in den Algorithmus eingeführt. Wenn wir zuvor in der Search-Phase keine Zellen in Superposition mehr gefunden haben, waren alle Zellen tatsächlich collapsed. Nun kann es auch sein, dass alle Zellen, die wir finden, zu einem Widerspruch führen. Auch in der Observe-Phase war es unmöglich keinen Zustand mehr auswählen zu können, da eine Zelle mit leerer Zustandmenge bereits zuvor als Widerspruch identifiziert wurden wäre. 
-    Um diese Fälle ordentlich zu behandeln können wir nun aber einfach auch in solchen Fällen einen Widerspruch deklarieren und Backtracken. Schließlich haben wir alle noch möglichen Entscheidungen bereits getroffen und ausgewertet und keine Lösung gefunden. Somit führt dieser Schritt zwar nicht direkt zu einem Widerspruch in einer Zelle, aber alle folgen Schritte werden irgendwann zu einem Widerspruch führen. Zu Bemerken ist, dass wenn auf diese Weise bis zum ersten Schritt gebacktrackt wird und auch die erste Entscheidung einen Widerspruch verursacht, so kann die Kombination aus Eingabe und Graph keine Ausgabe ergeben.
+\section{Diskussion}
+    \subsection{Vergleich zum Original}
+    \subsection{Mögliche Anwendungsbereiche?}
+    \subsection{Ausblick und zukünftige Forschung}
+        \begin{itemize}
+        \item WFC auf 3D Graphen
+        \item Eigenschaften des Musters(Linien und Flächen) in Bezug auf Heat
+        \item Eigenschaften des Gitters analysieren, Engpässe, unförmige Zellen, Abstände, Form der Zelle beachten
+        \end{itemize}
+        
+        \subsubsection{Heat}
+            \begin{itemize}
+            \item Eine globale Heat für alle Zellen hat einen negativen Effekt auf lokal regelmäßige Regionen eines Gitters und ein postiven Effekt auf sehr unregelmäßige Regionen des Gitters.
+            \item Anstatt dass die Heat global für alle Zellen zu Beginn bestimmt wird, kann man auch während des Collapse 'lernen' welche Regionen 'schwerer' zu lösen sind und dort die Heat schrittweise erhöhen bis eine Lösung gefunden werden kann.
+            \item Lokales Heating mit heating chance und cooling chance
+            \item simmulated annealing
+            \end{itemize}
