@@ -1,25 +1,32 @@
 \documentclass{article}
 
-\usepackage[ngerman]{babel} % german translation for document elements
-\usepackage{hyperref}       % clickable links
-\usepackage{amsmath}        % formeln
-\usepackage{amssymb}        % mathe symbole
-
-% for figures and subfigures
-\usepackage{graphicx}
-\usepackage{caption}
-\usepackage{subcaption}
+\usepackage[ngerman]{babel}                % german translation for document elements
+\usepackage{hyperref}                      % clickable links
+\usepackage{amsmath, amssymb}              % mathe formeln
+\usepackage{graphicx, caption, subcaption} % for figures and subfigures
 
 % ////////////////////////////////////////////////
 
 \input{Write.tex}
 % \input{Publish.tex}
 
+% 
+% figures inline oder alle am ende
+% zitieren, in wie vielen abschnitten 
+% 
+
 % ////////////////////////////////////////////////
 
 \title{Wave Function Collapse auf Graphen}
-\author{Viktor Berengar Askan Graf von Westarp}
+\author{
+       Viktor Berengar Askan Graf von Westarp
+    \\ \textit{FB5 Informatik und Sprachen}
+    \\ \textit{HS Anhalt}
+    \\ \texttt{viktor.grafvonwestarp@student.hs-anhalt.de}
+}
+\date{\today}
 
+% ////////////////////////////////////////////////
 \begin{document}
 
 \maketitle
@@ -49,8 +56,7 @@
 \input{data/hex_heat/figure.tex}
 \input{data/more_heat/figure.tex}
 
-
-
+% ////////////////////////////////////////////////
 
 \bibliographystyle{plain}
 \bibliography{my}
