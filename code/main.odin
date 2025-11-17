@@ -763,17 +763,12 @@ draw_cell :: proc (cell: Cell, color: v4) {
     rl.DrawTriangleFan(raw_data(buffer), auto_cast len(buffer), v4_to_rl_color(color))
 }
 draw_cell_outline :: proc (cell: Cell, color: rl.Color) {
-    if len(cell.points) == 0 do return
-    
-    @(static) buffer: [dynamic] v2 // @leak
-    clear(&buffer)
-    
-    for point in cell.points {
-        append(&buffer, world_to_screen(point))
+    for i in 0..<len(cell.points) {
+        j := (i + 1) % len(cell.points)
+        a := world_to_screen(cell.points[i])
+        b := world_to_screen(cell.points[j])
+        rl.DrawLineEx(a, b, 2, color)
     }
-    append(&buffer, buffer[0])
-    
-    rl.DrawLineStrip(raw_data(buffer), auto_cast len(buffer), color)
 }
 
 world_to_screen :: proc { world_to_screen_rec, world_to_screen_vec, world_to_screen_v2i }

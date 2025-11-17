@@ -123,7 +123,9 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
                 imgui.push_item_width(region.x/2); defer imgui.pop_item_width()
                 switch &kind in generate {
                 case Generate_Grid:
-                    imgui.slider_float("angle", &kind.angle, 0, Tau/4)
+                    degrees := kind.angle * DegreesPerRadian
+                    imgui.slider_float("angle", &degrees, 0, 90, format = "%.0f°")
+                    kind.angle = degrees * RadiansPerDegree
                     imgui.slider_float2("center", &kind.center, 0, 1)
                     imgui.slider_float2("radius", &kind.radius, 0, 1)
                     imgui.checkbox("hexagonal", &kind.is_hex)
