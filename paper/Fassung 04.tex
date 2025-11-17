@@ -19,7 +19,6 @@ To be done.
         \at{@visual from ms paper}
 
         Die selbe Methodik kann auch auf 2D Gittern angewendet werden; dies wird dann \textit{Texture Synthesis} genannt. Desweiteren kann der Algorithmus um andere Techniken der prozeduralen Generierung erweitert werden, so können z.B. andere beliebige Beschränkungen auf die Ausgabe angewendet werden. \at{@visual}
-        \at{@incomplete NP-Completeness}
         \at{@incomplete Unused: Soft Constraints \& Symmetry \& iterative small area solves}
 
     \subsection{Wave Function Collapse}
@@ -127,8 +126,9 @@ To be done.
         Der Algorithmus ist in Abbildung \ref{fig:wfc_back} dargestellt. Für jeden Schritt des Algorithmus wird auch die Liste der gefundenen Zellen in der Search-Phase gespeichert. Wenn in der Pick-Phase eine Zelle ausgewählt wird, wird diese aus der Liste entfernt, damit diese beim Backtracken nicht erneut gewählt wird. Ebenso werden in der Observe-Phase alle wählbaren Zustände gespeichert und mit jedem Lösungsversuch wird der gewählte Zustand entfernt. Nun wurde aber eine Schwachstelle in den Algorithmus eingeführt. Wenn zuvor in der Search-Phase keine Zellen in Superposition mehr gefunden wurden, bedeutete dies, dass alle Zellen tatsächlich collapsed waren. Nun kann es sein, dass alle Zellen, die gefunden wurden, zu einem Widerspruch führen würden und entfernt wurden. Somit würde keine Zelle mehr wählbar sein. Auch in der Observe-Phase war es zuvor unmöglich keinen Zustand mehr auswählen zu können, da eine Zelle mit leerer Zustandsmenge bereits zuvor als Widerspruch identifiziert wurden wäre. In diesen Fällen wurde ein Widerspruch erreicht und es muss zum Backtracking kommen. Schließlich wurden alle noch möglichen Entscheidungen bereits getroffen und ausgewertet und keine Lösung gefunden. Somit führt dieser Schritt zwar nicht direkt zu einem Widerspruch in einer Zelle, aber alle folgen Schritte werden irgendwann zu einem Widerspruch führen. Als Anmerkung: wird auf diese Weise bis zum ersten Schritt gebacktrackt und führen dann auch dort alle möglichen Entscheidungen zu einem Widerspruch, so kann die Kombination aus Eingabe und Graph keine Ausgabe ergeben.
         
     \subsection{Überlappung und Heat \at{@naming}}
-    
-        \at{ @flow}
+        \at{@placement das konzept, die implementierung und die bewertung jeweils trennen?}
+
+        \at{@flow}
         In einem 2D Gitter sind die Nachbarn jeder Zelle per Definition des Gitters in festen Richtungen und Abständen zu finden. Bei Graphen ist diese Anordnung frei. 
         Die Überlappung von zwei Zuständen hängt von der Richtung zwischen den beiden Umfeldern, also von der Verschiebung des einen Umfeld zum anderen. 
         Während der Propagate-Phase werden die möglichen Zustände von Nachbarzellen auf Überlappung geprüft.
@@ -152,23 +152,22 @@ To be done.
         \at{@placement}
         Tatsächlich werden solche Konflikte durch die globale Suche vorher vom Algoritmus ausgeschlossen und es bleiben z.B. bei (b) nur die Zustände über, die horizontale Linien bilden. 
         
-        \at{@incomplete Heat als lokale Verzerrung, mit Rotation gleichstellen} \at{@visual Quadratgitter mit ~27° angle und heat 1 und 2}
-        
         \at{@incomplete Entropie erwähnen}
         Der Effekt von höherer Heat ist, das die Menge an möglichen Zuständen vergrößert wird, indem mehr Überlappungsregeln in Betracht gezogen werden. Dadurch ist es auch unwahrscheinlicher, dass für eine Zelle keine Zustände mehr möglich sind und ein Widerspruch entsteht. Gleichzeitig werden nun aber auch Ausgaben generiert, die eine tatsächlich geringere Ähnlickkeit zum Beispiel haben. So ist die Ausgabe in (b) zwar weniger interessant als die in (c), aber die horizontalen Linien und die grauen Flächen dazwischen passen exakt zur Teilen des Beispiels. Bei (c) werden auch vertikalen Linien generiert, aber diese haben knicke und sind eher zickzackartig als die Senkrechten des Beispiels. Eine Erhöhung der Heat verschlechtert die lokale Ähnlichkeit der Ausgabe zum Beispiel und verbessert die Wahrscheinlichkeit erfolgreich eine nicht triviale Lösung zu generieren.
-        
-        Abbildung \ref{fig:more_heat} zeigt wie die Qualität der Ausgabe, bei steigender Heat, sinken kann.
-        \at{@incomplete sinnvollen bereich für Heat nennen, ab 5 sind entgegengesetze Richtungen erlaubt}
-    
     
     
 \section{Ergebnisse und Diskussion}
-
-\section{Fazit}
-\subsection{Vergleich zum Original}
-\subsection{Mögliche Anwendungsbereiche?}
-\subsection{Ausblick und zukünftige Forschung}
+    \at{@incomplete Linien und Flächenmuster in Beispielen}
     
-
-\section{Literaturverzeichnis}
-% figure out how to use maybe this: \bibliography{}
+    \at{@placement hex heat vor heat rotation}
+    
+    In Abbildung \ref{fig:heat_rotation} ist dargestellt, wie Heat auch als eine lokale Drehung des Gitters verstanden werden kann. In (a) ist das gewählte Beispiel auf einem Quadratgitter ohne Drehung angewendet. Es können gute Ausgaben generiert werden. Dreht man das gesamte Quadratgitter nun um 22° so können die geraden Linien des Beispiels immernoch fehlerfrei platziert werden. Zwar sind die Zellen zueinander nicht mehr genau entlang der Himmelsrichtungen angeordnet, doch wird bei Heat=1 auf die nächste Richtung gerundet. Bei 8 Richtungen wird z.B. Osten von -22,5° bis 22,5° ausgewählt. Somit ist das Gitter bei (b) zwar optisch gedreht, aber kann genau wie das Gitter in (a) behandelt werden. Wird nun aber, wie in (c) noch weiter gedreht, so wird nun eine Benachbarung die vorher z.B. als Osten behandelt wurde nun als Nordosten behandelt. Der Effekt ist, dass die geradlinigen Muster des Beispiels nun (wie zuvor bei Abbildung \ref{fig:hex_heat}) nicht mehr platziert werden können. In der Ausgabe können nur noch flächenartige Muster vorkommen. In (d) ist zu sehen, dass dennoch gute Ausgaben generiert werden können, indem die Heat=2 gesetzt wird und jede Benachbarung nun z.B. als Nordosten und Osten behandelt wird. Der Algorithmus kann nun Ausgaben wie bei (b) generieren, da die Benachbarungen nun auch lokal wie die Benachbarungen aus (a) und (b) behandelt werden können. Heat kann also auch als eine lokale Drehung entgegen der tatsächlichen Ausrichtung des Gitters wirken. 
+    
+    Der selbe Effekt kommt auch bei unregelmäßigen Graphen zum Spiel. Hier existiert zwar kein Winkel um den man den gesamten Graphen drehen kann, um ein Quadratgitter zu erhalten. Aber da Heat lokal und von Nachbar zu Nachbar unabhängig wirkt, kann es als eine lokale Drehung oder Verzerrung verstanden werden. Es ist so, als könnte der Algorithmus die Zellen lokal so verschieben und verdrehen, dass einen breitere Menge an Lösungen möglich ist. Es muss dabei beachtet werden, dass der Algorithmus nicht gezielt arbeitet. Ist eine Graph bereits mit geringer Heat gut lösbar, so wird höhere Heat nicht unbedingt auch bessere Ergebnisse liefern. Es ist sogar wahrscheinlich, dass die Ausgabe schlechter wird da die höhere Heat ja auch zu Regionen in der Ausgabe führt die nicht im Beispiel existieren und den Einfluss der Richtung mindert.
+    
+    Abbildung \ref{fig:more_heat} zeigt wie die Qualität der Ausgabe, bei steigender Heat, sinken kann. Der Graph ist hier ein Quadratgitter und kann somit schon bei einer Heat von 1 gute Ausgaben generieren. Mit jedem Schritt wird der jeder tatsächlichen Benachbarung eine größere Menge an Möglichkeiten gegeben. Es entstehen mehr fehlerhafte Regionen in der Ausgabe. Ab einer Heat von 5 kann der Algorithmus einer perfekt nach Osten laufenden Benachbarung nicht nur Nordosten und Südosten sondern auch Norden und Süden zuweisen, also zu einander entgegengesetzte Himmelrichtgen. Liegt z.B. eine Zelle östlich von einer anderen so könnten beide sich als südlich der anderen behandeln. Ab Heat=6 könnte jede Benachbarung auch als eine der entgegengesetze Himmelrichtungen behandelt werden. Schließlich verliert die Anordnung der Zellen bei Heat=8 komplett die Bedeutung. Zur Vollständigkeit sind hier Ausgaben mit hoher Heat dargestellt, in der Praxis sollte man Heat so gering wie möglich halten.
+    
+\section{Fazit}
+    \subsection{Vergleich zum Original}
+    \subsection{Mögliche Anwendungsbereiche?}
+    \subsection{Ausblick und zukünftige Forschung}
