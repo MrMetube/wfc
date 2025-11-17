@@ -19,25 +19,25 @@ To be done.
         \at{@visual from ms paper}
         
         Die selbe Methodik kann auch auf 2D Gittern angewendet werden; dies wird dann \textit{Texture Synthesis} genannt. Desweiteren kann der Algorithmus um andere Techniken der prozeduralen Generierung erweitert werden, so können z.B. andere beliebige Beschränkungen auf die Ausgabe angewendet werden. \at{@visual}
-        \at{@incomplete Unused: Soft Constraints \& Symmetry \& iterative small area solves}
+        
+        Die Ausgabe des Algorithmus kann auch durch Soft-Constraints beschränkt werden. Ebenso kann Symmetrie, Spiegelung und Drehung, in der Ausgabe erzwungen werden. Beide Ansätze wurden nicht weiter in dieser Arbeit betrachetet. Es wird empfohlen, dass der Algorithmus nicht das ganze Gitter auf einmal löst, damit Widersprüche nicht zu einem kompletten Neustart führen. Stattdessen sollen iterativ kleine Abschnitte für sich solange gelöst werden bis eine valide Ausgabe entsteht \at{@visual}. In dieser Arbeit wurde darauf verzichtet.
     
     \subsection{Wave Function Collapse}
-        \textit{Wave Function Collapse} ist eine Weiterentwicklung des Model Sythesis Algorithmus \cite{gumin}. Die Kernidee der Generierung mittels einem Beispiel bleibt und wird um drei Aspekte erweitert. Anstatt nur Bauteile nebeneinander anzuordnen, können nun auch überlappende Teile des Beispiels automatisch aus einem Beispiel extrahiert werden. In jeder Iteration wird die Zelle mit der niedrigsten Entropie zuerst betrachtet. Bei Bauteil-basierten Beispielen werden Symmetrien von Bauteilen zur kompakteren Definition ausgenutzt.
-        \at{@incomplete renamings: model synthesis/wfc, observe \& collapse, vertex/cell, widerspruch}
+        \textit{Wave Function Collapse} ist eine Weiterentwicklung des Model Sythesis Algorithmus \cite{gumin}. Die Kernidee der Generierung mittels einem Beispiel bleibt und wird um drei Aspekte erweitert. Anstatt nur Bauteile nebeneinander anzuordnen, können nun auch überlappende Teile des Beispiels automatisch aus einem Beispiel extrahiert werden. In jeder Iteration wird die Zelle mit der niedrigsten Entropie zuerst betrachtet. Und bei Bauteil-basierten Beispielen werden Symmetrien von Bauteilen für eine kompaktere Definition ausgenutzt. Der Algorithmus ist in Abbildung \ref{fig:wfc_gumin} dargestellt.
+        
+        Der Name Wave Function Collapse ist eine Anspielung auf die Quantenphysik. So könnte man Quantenpartikel in Superposition mit den Zellen des Gitters vergleichen. Die Zellen haben auch mehrere mögliche finale Zustände bis sie observiert werden und in einen festen Zustand collapsen. Mathematisch besteht aber keine Beziehung. Auch werden andere Begriffe wie z.B. Knoten zu Zelle umbenannt und das Gitter als Wave bezeichnet.
         
         \at{@incomplete generalization to NxN Überlappung}
         
-        
         Die Reihenfolge in der die Zellen observiert werden, hat einen Einfluss auf die Laufzeit. Bei Model Synthesis werden Zellen einfach nach ihrer Reihenfolge im Gitter abgearbeitet. Der Vorteil ist, dass keine Suche der nächsten Zelle nötig ist, aber es hat zum Nachteil, dass die Ausgabe sichtbare Artefakte enthällt. Man kann erkennen, ob zuerst die Reihen oder erst die Spalten abgearbeitet wurden \at{@visual von github links}. Wäre bekannt welche Zelle den meisten Fortschritt zur Lösung und die geringste Chance auf einen Widerspruch birgt, könnte stets diese Zelle zuerst betrachtet werden (\at{@incomplete} NP-Hardness). 
         
-        Einfacher ist es eine Heuristik zu definieren, die simpel zu berechnen ist und meistens einen besseren Ansatz bietet. Hierfür wird die Entropie als Maß eingeführt. Sie beschreibt das Maß an Ungewissheit über den finalen Zustand einer Zelle. Ist eine Zelle observiert, hat sie nur noch einen Zustand und die Entropie ist minimal, während eine Zelle mit vielen Möglichkeiten eine hohe Entropie hat. Die Entropie gibt auch Information darüber wie sehr eine Zelle durch ihre Umgebung beschränkt wird. Sie wird mit der Formel der Shannon-Entropie \cite{shannon} berechnet.
+        Einfacher ist es eine Heuristik zu definieren, die simpel zu berechnen ist und meistens einen besseren Ansatz bietet. Hierfür wird die Entropie als Maß eingeführt. Sie beschreibt das Maß an Ungewissheit über den finalen Zustand einer Zelle. Ist eine Zelle observiert, hat sie nur noch einen Zustand und die Entropie ist minimal, während eine Zelle mit vielen Möglichkeiten eine hohe Entropie hat. Die Entropie gibt auch Information darüber wie sehr eine Zelle durch ihre Umgebung beschränkt wird. Sie wird mit der Formel der Shannon-Entropie \cite{shannon} berechnet. 
         
-        
-        Der Zerteilung eines Beispiels in Bauteile muss manuell passieren. Soll nun ein Bauteil auch in einer anderen Orientierung oder Spiegelung in der Ausgabe vorkommen müssen diese Variationen explizit angelegt werden. Will man nun ein Bauteil leicht verändern, so muss man auch alle Variationen manuel anpassen. Um diesen aufwendigen Prozess zu automatisieren definiert Gumin eine Gruppe von Symmetriearten mit denen eine Nutzerin ihre Bauteile annotieren kann. Der Algorithmus erkennt diese Annotationen und generiert vor Beginn automatisch die Variationen.
-        \at{@incomplete interesting but unused for this work}
-        % @todo(viktor): \ref{fig:wfc_gumin}
+        Der Zerteilung eines Beispiels in Bauteile muss manuell passieren. Soll nun ein Bauteil auch in einer anderen Orientierung oder Spiegelung in der Ausgabe vorkommen müssen diese Variationen explizit angelegt werden. Will man nun ein Bauteil leicht verändern, so muss man auch alle Variationen manuel anpassen. Um diesen aufwendigen Prozess zu automatisieren definiert Gumin eine Gruppe von Symmetriearten mit denen eine Nutzerin ihre Bauteile annotieren kann. Der Algorithmus erkennt diese Annotationen und generiert vor Beginn automatisch die Variationen. Da sich diese Arbeit nicht mit Beispielen aus Bauteilen befässt, bleibt dieser Aspekt ungenutzt.
         
     \subsection{Gitter, Graphen, Triangulierung, Voronoi}
+
+
 
 \section{Konzept}
     \subsection{Einschränkung des Algorithmus und Idee zur Erweiterung}
@@ -49,7 +49,7 @@ To be done.
         
         Im Kern des Wave Function Collapse wird geprüft, dass nur Zustände gewählt werden, die mit der Ausgabe bis dahin überlappen könnten. Die möglichen Überlappungen hängen dabei von der Richtung zwischen den Zellen ab. In einem Gitter kann jede Richtung zu einer Nachbarzelle aus dem Beispiel extrahiert werden. Wird die Anordnung und Benachbarung der Zellen nun aber vom Gitter gelöst, so ist es nicht mehr garantiert, dass die Richtungen zwischen Nachbarzellen auch im Beispiel existieren, stattdessen muss eine Funktion zur Übersetzung der tatsächlichen Richtung zu einer der extrahierbaren Richtungen definiert werden. Danach kann der Algorithmus wie zuvor mit den Überlappungen arbeiten um nun den Graphen zu befüllen.
         
-        \at{@incomplete Diagonale Regeln, besseres Sampling des Beispiels, Regelmengen, höhere Entropie durch Heat}
+        \at{@incomplete Diagonale Regeln, besseres Sampling des Beispiels, höhere Entropie durch Heat}
     
     \subsection{Wave Function Collapse auf Graphen}
     
@@ -84,7 +84,9 @@ To be done.
         Ein Umfeld wird im Umfang dieser Arbeit als ein 3x3 Gitter von Pixeln definiert. Es können auch andere Formen und Größen gewählt werden, aber diese müssen zu den genutzen Beispielen passen, damit die in den Beispielen existierenden Muster optimal genutzt werden. Wird das Umfeld zu klein gewählt, können nur Ausschnitte der gewünschten Muster erhalten werden, die Muster selbst gehen verloren. Während ein zu großes Umfeld auch die Anordnung der Muster im Beispiel erhällt, was unerwünscht ist und im extremen Fall dazu führt, dass nur noch exakte Kopien des Beispiels ohne Variation in der Ausgabe vorkommen.
         
         Den Zellen des Output-Graphen sind, nach einem erfolreichem Collapse, je ein Zustand zugewiesen. Dieser kann aber nicht direkt durch sein Umfeld dargestellt werden, da das Umfeld eines Zustands zur Ermittlung der Überlappungen dient und deswegen aus mehr als einem Pixel, also einem Farbwert besteht. In dieser Arbeit wird der Pixel in der Mitte des Umfelds als der tatsächliche Farbwert einer Zelle zur Darstellung genutzt.
-    
+
+
+
 \section{Umsetzung}
     \subsection{Generierung von Output-Graphen}
     
@@ -136,9 +138,7 @@ To be done.
         
         \at{@incomplete Globale Heat}
         
-        Abbildung \ref{fig:hex_heat} zeigt den Einfluss von Heat auf die Qualität der Ausgabe bei gleichem Beispiel und Output-Graph. Das Beispiel kann auf dem Quadratgitter ohne weitere Probleme genutzt werden, während der Graph mit den Sechsecken bei geringer Heat uninteressante Ausgaben generiert. 
-        
-        \at{@incomplete (a) erwähnen}
+        Abbildung \ref{fig:hex_heat} zeigt den Einfluss von Heat auf die Qualität der Ausgabe bei gleichem Beispiel und Output-Graph. Das Beispiel kann auf dem Quadratgitter ohne weitere Probleme genutzt werden, während der Graph mit den Sechsecken bei geringer Heat uninteressante Ausgaben generiert. \at{@incomplete (a) erwähnen}
         
         Die intuitive Erklärung ist, dass die Linien im Beispiel stets nur eine Zelle breit sind. Im Graph können die horizontalen Linien generiert werden, weil die Sechsecke selbst horizontal in Reihen angeordnet sind, während es keine rein vertikalen Zellenspalten gibt. Jedes Sechseck hat zwei Nachbarzellen oberhalb und zwei unterhalb. Bei Heat=1 wird beiden Norden/Süden zugewiesen. Will der Algoritmus nun bei einer Zelle eine vertikalen Linie, also die Zustände die dieses Muster abbilden, platzieren, so müssen nun beide oberen Nachbarzellen auch eine Zustand, der eine vertikale Linie darstellt, erhalten. Hier kommt es zum Konflikt, da diese beiden Zellen horizontal in der gleichen Reihe liegen, es aber im Beispiel keine vertikalen Linien direkt nebeneinander gibt. Es kann also keine Zelle Teil einer vertikalen Linie sein. 
         
@@ -146,8 +146,7 @@ To be done.
         
         \at{@placement} Tatsächlich werden solche Konflikte durch die globale Suche vorher vom Algoritmus ausgeschlossen und es bleiben z.B. bei (b) nur die Zustände über, die horizontale Linien bilden. 
         
-        \at{@incomplete Entropie erwähnen}
-        Der Effekt von höherer Heat ist, das die Menge an möglichen Zuständen vergrößert wird, indem mehr Überlappungsregeln in Betracht gezogen werden. Dadurch ist es auch unwahrscheinlicher, dass für eine Zelle keine Zustände mehr möglich sind und ein Widerspruch entsteht. Gleichzeitig werden nun aber auch Ausgaben generiert, die eine tatsächlich geringere Ähnlickkeit zum Beispiel haben. So ist die Ausgabe in (b) zwar weniger interessant als die in (c), aber die horizontalen Linien und die grauen Flächen dazwischen passen exakt zur Teilen des Beispiels. Bei (c) werden auch vertikalen Linien generiert, aber diese haben knicke und sind eher zickzackartig als die Senkrechten des Beispiels. Eine Erhöhung der Heat verschlechtert die lokale Ähnlichkeit der Ausgabe zum Beispiel und verbessert die Wahrscheinlichkeit erfolgreich eine nicht triviale Lösung zu generieren.
+        \at{@incomplete Entropie erwähnen} Der Effekt von höherer Heat ist, das die Menge an möglichen Zuständen vergrößert wird, indem mehr Überlappungsregeln in Betracht gezogen werden. Dadurch ist es auch unwahrscheinlicher, dass für eine Zelle keine Zustände mehr möglich sind und ein Widerspruch entsteht. Gleichzeitig werden nun aber auch Ausgaben generiert, die eine tatsächlich geringere Ähnlickkeit zum Beispiel haben. So ist die Ausgabe in (b) zwar weniger interessant als die in (c), aber die horizontalen Linien und die grauen Flächen dazwischen passen exakt zur Teilen des Beispiels. Bei (c) werden auch vertikalen Linien generiert, aber diese haben knicke und sind eher zickzackartig als die Senkrechten des Beispiels. Eine Erhöhung der Heat verschlechtert die lokale Ähnlichkeit der Ausgabe zum Beispiel und verbessert die Wahrscheinlichkeit erfolgreich eine nicht triviale Lösung zu generieren.
     
     
 \section{Ergebnisse und Diskussion}
