@@ -9,7 +9,9 @@
 % ////////////////////////////////////////////////
 
 % 
-%  @important
+% @important
+% 
+% Vor Abgabe:
 % 
 
 %  Für Publish dies löschen:
@@ -18,7 +20,6 @@
 \definecolor{mgreen}{HTML}{009052}
 \DeclareRobustCommand{\@todo(viktor):}[1]{\textcolor{mred}{@todo:} \textcolor{mred}{#1}} 
 \DeclareRobustCommand{\at}[1]{\textcolor{mgreen}{#1}}
-
 
 % ////////////////////////////////////////////////
 % ////////////////////////////////////////////////
@@ -35,9 +36,9 @@
 % ////////////////////////////////////////////////
 \begin{document}
 
-\@todo(viktor):{titelblatt ordentlich machen}
+\@todo(viktor):{Abbildungen Anordung vor Ende prüfen und verbessern}
 
-\@todo(viktor):{Abbildungen an den richtigen orten inline erzwingen, figure placement parameter alle checken}
+\@todo(viktor):{Titelblatt ordentlich machen}
 
 \@todo(viktor):{\at{@translation} Collapsed und Observed als Begriffe vereinheitlichen}
 
@@ -194,7 +195,7 @@ To be done.
         % @todo(viktor): \ref{fig:extract_wrapping}
         \input{data/extract_wrapping/figure.tex}
         
-    \subsection{Heat}
+    \subsection{Heat \at{@naming}}
         \at{@incomplete introduction and definition}
         
         In einem 2D Gitter sind die Nachbarn jeder Zelle per Definition des Gitters in festen Richtungen und Abständen zu finden. Bei Graphen ist diese Anordnung frei. Während der Propagate-Phase werden die möglichen Zustände von Nachbarzellen auf Überlappung geprüft. Ein Zustand einer Zelle ist möglich, wenn er mit mindestens einem Zustand jeder Nachbarzelle überlappen kann. Die Überlappung zweier Zustände hängt von der Richtung zwischen den Umfeldern der Zustände abhängt ab. Das heißt, dass für den Nachbar im Norden einer Zelle nur die Überlappung der Zustände im Norden relevant ist. Die Richtung zu einer Nachbarzelle auf einem Graphen wird als der Vektor vom Mittelpunkt der Zelle zum Mittelpunkt der Nachbarzelle definiert. Der wichtigste Unterschied ist, dass die Richtung nun nicht mehr auf die acht Himmelsrichtungen (N, NO, O, SO, S, SW, W, NW) beschränkt ist. 
@@ -205,8 +206,8 @@ To be done.
         
         \input{data/cosine.tex}
 
-
-    \at{@incomplete Zusammenfassung der Erweiterung/Änderungen}
+    \subsection{Überblick \at{@naming}}
+        \at{@incomplete Zusammenfassung der Erweiterung/Änderungen}
 
 
 
@@ -231,11 +232,8 @@ To be done.
         \at{@incomplete welche Settings gibt einem die App dafür}\at{@visual Beispiele der Generierung}
         \at{@visual Delaunay Triangulierung und Voronoi Diagramme, dualer Graph}
         \at{@visual \ref{fig:graph_gen}}
-        \at{@visual \ref{fig:voronoi_clipping}}
         % @todo(viktor): reihenfolge
         \input{data/graph_gen.tex} % @todo(viktor): reference this
-        \input{data/voronoi_clipping/figure.tex}
-        
         
         \subsubsection{Generierung von Voronoi-Graphen}
             Für die Triangulierung habe ich mich ohne tiefere Beweggründe für den Boywer-Watson Algorithmus entschieden. Der Algorithmus generiert die Triangulierung iterativ in dem jeder Punkt nacheinander eingefügt wird und der Graph angepasst wird, so dass es wieder eine Delaunay-Triangulierung ist.
@@ -247,10 +245,12 @@ To be done.
             Es ist normal, dass ein solches Voronoidiagram an den Rändern der Point-Cloud auch Zellen ergeben kann die auf einer Seite offen sind, weil die Kanten zwischen den Ecken der Zelle, den Umkreismittelpunkten, keinen Schnittpunkt haben. Ich habe mich dazu entschieden, bei solchen Zellen weitere Eckpunkte einzufügen, so dass das alle Zellen durch einen freigewählten rechteckigem Bereich begrenzt sind. Dafür prüfe ich ob ein Eckpunkt außerhalb des Bereichs liegt und finde dann den Schnittpunkt von der Kante zu dem Eckpunkt mit dem Rechteck des Bereichs und ersetze den Eckpunkt mit diesem Schnittpunkt. Dieser Schritt passiert so lange bis alle Eckpunkte innerhalb oder auf dem Rand des Bereichs liegen.
                 Siehe Abbildung \ref{fig:voronoi_clipping}.
 
+        \input{data/voronoi_clipping/figure.tex}
 
 
     \subsection{Phasen \at{@naming}}
         Der Algorithmus \ref{fig:wfc_back} generiert die Ausgabe schrittweise. Ein Schritt kann in vier Phasen geteilt werden: Search, Pick, Observe und Propagate.
+        \at{@incomplete Schritt als global und festen Begriff im Algorithmus darstellen}
         
         \input{data/wfc_back.tex} 
         
