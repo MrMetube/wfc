@@ -9,6 +9,7 @@ To be done.
 \subsection{Aufbau der Arbeit}
 
 \section{Hintergrund}
+    \at{@incomplete Einleitender Satz, was zu prozeduraler Generierung}
 
     \subsection{Model Synthesis}
         Mit dem \textit{Model Synthesis} \cite{merrel} Algorithmus \ref{fig:ms_merrel} können, basiert auf einem 3D Beispielmodell, eine große Menge an ähnlichen 3D Modellen prozedural generiert werden (siehe Abbildung \ref{fig:ms_output}). Das synthesierte/generierte Model wird auf einem 3D Gitter iterativ generiert, indem jedem Knotenpunkt des Gitters ein Teil des Beispielmodells zugewiesen wird. Das Beispiel muss vorher in kleinere gleichgroße Bauteile zerlegt werden. Jedem Knotenpunkt wird zu Beginn die Menge aller Bauteile als seine Auswahlmöglichkeiten zugewiesen. Mit jeder Iteration wird bei einem Knotenpunkt ein Bauteil seiner Zustandsmenge ausgewählt. Danach werden alle Nachbarn geprüft, so dass sie nur noch passende Bauteile in ihrer Zustandsmenge behalten. Hierfür wird eine globale Suche verwendet, andere Methoden beschränkten sich zuvor nur auf lokale Suchen. Eine globale Suche ist besser, weil jedes Bauteil einen weitreichenden Einfluss auf das gesamte Gitter haben kann. 
@@ -45,14 +46,34 @@ To be done.
         
     \subsection{Gitter, Graphen, Triangulierung, Voronoi}
     
-        \at{@incomplete the content}
+        \at{@incomplete Definition von Gitter und Graph in dieser Arbeit}
+    
+        \url{https://en.wikipedia.org/wiki/Delaunay_triangulation}\\
+        \url{https://en.wikipedia.org/wiki/Voronoi_diagram}\\
+        \url{https://de.wikipedia.org/wiki/Polygonnetz}\\
+        \url{https://en.wikipedia.org/wiki/Triangulated_irregular_network}\\
+        \url{https://en.wikipedia.org/wiki/Lattice_graph}\\
+        
+        \subsubsection{Gitter}
+        \subsubsection{Graphen}
+        \subsubsection{Triangulierung, Quadrilierung}
+        \subsubsection{Delaunay Triangulation}
+            \begin{itemize}
+            \item Defintion der Triangulierung
+            \item \at{@visual}
+            \end{itemize}
+        \subsubsection{Voronoi Diagramm}
+            \begin{itemize}
+            \item Definition
+            \item nützliche Eigenschaften
+            \end{itemize}
         
         
 
 \section{Wave Function Collapse auf Graphen}
-    \at{@incomplete Einleitender Satz}
-
-    \subsection{Beschränkung des Algorithmus und Idee zur Erweiterung}
+    In diesem Abschnitt wir dargestellt wie der Wave Function Collapse Algorithmus erweitert wird, so dass die Ausgabe nicht nur auf einem Gitter von Zellen geschehen kann, sondern auch auf Zellen mit freier Anordnung und Verteilung, einem Graphen, arbeiten kann. Es wird erklärt welche Aspekt des Algorithmus angepasst werden und welche beibehalten werden können. Desweiteren wird ein neues Konzept names \textit{Heat} eingeführt, welches dem Nutzer erlaubt die erzielte Ähnlichkeit zum Beispiel zu verringern um die Erfolgschance des Algorithmus zu verbessern.
+    
+    \subsection{Beschränkung des Wave Function Collapse und Idee zur Erweiterung}
     \@todo(viktor):{titel hat einen umbruch}
     
         Die ursprüngliche Form des Wave Function Collapse nimmt ein 2D Pixelmuster oder Tilesets als Beispiel und produziert darauß wieder 2D Muster. 
@@ -62,13 +83,13 @@ To be done.
         
         Im Kern des Wave Function Collapse wird geprüft, dass nur Zustände gewählt werden, die mit der Ausgabe bis dahin überlappen könnten. Die möglichen Überlappungen hängen dabei von der Richtung zwischen den Zellen ab. In einem Gitter kann jede Richtung zu einer Nachbarzelle aus dem Beispiel extrahiert werden. Wird die Anordnung und Benachbarung der Zellen nun aber vom Gitter gelöst, so ist es nicht mehr garantiert, dass die Richtungen zwischen Nachbarzellen auch im Beispiel existieren, stattdessen muss eine Funktion zur Übersetzung der tatsächlichen Richtung zu einer der extrahierbaren Richtungen definiert werden. Danach kann der Algorithmus wie zuvor mit den Überlappungen arbeiten um nun den Graphen zu befüllen.
         
+        
     \subsection{Von Gittern zu Graphen}
-    
         Ursprünglich arbeit Wave Function Collapse nur auf Gittern. Der Schritt zum Graphen als Fundament für die Ausgabe des Algorithmus ist sinnvoll, da Gitter eine spezielle Art von Graphen darstellen. In dem Umfang dieser Arbeit werden aber auch nicht alle Arten von Graphen betrachtet, meistens ist die freie Anordnung und Verbindung von Knoten nicht notwendig. Da jede Kanten eines Gitters zuvor eine lokale Benachbarung dargestellt haben und die Regelextrahierung nur lokal arbeitet, beschränkt sich diese Arbeit nur auf Graphen in denen Kanten auch primär einen Knotenpunkt mit den Knotenpunkten in einem lokalen Umfeld verbindet. \at{@visual Gitter und Graph des Gitters} Der Algorithmus kann auch auf anderen Arten von Graphen angewendet werden, doch können daraus neue oder unerwartete Effekte hervortreten, die wiederum anderen Lösungswege benötigen.
         
         Ein Gitter bringt mit sich Information über Benachbarung und Position jeder Zelle die nun auf einem Graphen explizit angegeben werden müssen. Je nach Anordnung kann nun nicht nur die Richtung zur Nachbarzelle sondern auch deren Abstand und die Anzahl an Nachbarzellen variieren. Bevor der Algorithmus eine Ausgabe generieren kann, müssen diese Information vom Nutzer angegeben werden.
         
-        Jede Kante des Graphen stellt eine Beschränkung des Lösungsraums dar. Bei einem Gitter ist jede Zelle, mit Ausnahme der Zellen am Rand, gleichermaßen beschränkt, jedoch kann die Anordnung des Graphen dazu führen dass einzelne Zelle weniger und andere stärker eingeschränkt werden. Eine Zelle mit zehn Nachbarn muss in einen Zustand collapsen, welcher zu den Zuständen der zehn Nachbaren passt.Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthalten, während dass Gitter uniforme Beschränkung auf Zellen ergibt. Zur Erinnerung: es muss nur eine Zelle eine Widerspruch verursachen damit der Algorithmus fehlschlägt. Also sind solche Regionen starker Beschränkung besonderns entscheident für die Chance eine valide Ausgabe zu generieren, weil hier der Lösungsraum am kleinsten ist.
+        Jede Kante des Graphen stellt eine Beschränkung des Lösungsraums dar. Bei einem Gitter ist jede Zelle, mit Ausnahme der Zellen am Rand, gleichermaßen beschränkt, jedoch kann die Anordnung des Graphen dazu führen dass einzelne Zelle weniger und andere stärker eingeschränkt werden. Eine Zelle mit zehn Nachbarn muss in einen Zustand collapsen, welcher zu den Zuständen der zehn Nachbaren passt. Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthalten, während dass Gitter uniforme Beschränkung auf Zellen ergibt. Zur Erinnerung: es muss nur eine Zelle eine Widerspruch verursachen damit der Algorithmus fehlschlägt. Also sind solche Regionen starker Beschränkung besonderns entscheident für die Chance eine valide Ausgabe zu generieren, weil hier der Lösungsraum am kleinsten ist.
         
         \at{@incomplete Entropie(höhere Entropie durch Heat) erwähnen und für Regionen mit einer Grafik von der App darstellen}
     
@@ -98,11 +119,26 @@ To be done.
         % @todo(viktor): \ref{fig:extract_wrapping}
         \input{data/extract_wrapping/figure.tex}
 
+    \subsection{Heat}
+        \at{@incomplete introduction and definition}
+        
+        In einem 2D Gitter sind die Nachbarn jeder Zelle per Definition des Gitters in festen Richtungen und Abständen zu finden. Bei Graphen ist diese Anordnung frei. Während der Propagate-Phase werden die möglichen Zustände von Nachbarzellen auf Überlappung geprüft. Ein Zustand einer Zelle ist möglich, wenn er mit mindestens einem Zustand jeder Nachbarzelle überlappen kann. Die Überlappung zweier Zustände hängt von der Richtung zwischen den Umfeldern der Zustände abhängt ab. Das heißt, dass für den Nachbar im Norden einer Zelle nur die Überlappung der Zustände im Norden relevant ist. Die Richtung zu einer Nachbarzelle auf einem Graphen wird als der Vektor vom Mittelpunkt der Zelle zum Mittelpunkt der Nachbarzelle definiert. Der wichtigste Unterschied ist, dass die Richtung nun nicht mehr auf die acht Himmelsrichtungen (N, NO, O, SO, S, SW, W, NW) beschränkt ist. 
+        
+        Es ist nicht möglich Regeln für eine beliebige Richtung aus dem Beispiel zu extrahieren, da jeder Pixel nur 8 angrenzende Pixel hat. Sieht man das Beispiel als eine Funktion an, so ist diese nicht an allen Punkten definiert \at{(@incomplete Bilder als diskreten oder kontinuierliche Funktionen)}. Man könnte durch Interpolation einen Mittelwert zwischen gegebenen Werten berechnen, wenn das Bild eine kontinuierliche Funktion approximiert. Handelt es sich aber tatsächlich um eine diskrete Funktion, würde eine Interpolation Werte ergeben die vielleicht nicht Teil des Wertebereichs waren, in anderen Worten würde man Farbwerte erhalten die vorher nicht im Bild waren. Da die Ausgabe dem Beispiel ähnlich seien muss, entfällt diese Option.
+        
+        Es bleibt also nur die Möglichkeit, dass der tatsächlichen Richtung eine der messbaren Himmelsrichtungen zugewiesen wird. Hierfür wird die Kosinus-Ähnlichkeit \cite{cosine} berechnet. Es wird die Himmelsrichtung mit der höchsten Ähnlichkeit gewählt. \at{@incomplete Kann auch mehr als eine Richtung sein}. \at{@incomplete Globale Heat}
+        
 
 \section{Umsetzung}
-    \subsection{Generierung von Graphen \at{@naming}}
+    \at{@incomplete Einleitender Satz}
     
+    \subsection{Generierung von Graphen \at{@naming}}
         \at{@flow}
+        \at{@flow}
+        \at{@flow}
+        \at{@flow}
+        \at{@flow}
+        
         Für den Algorithmus ist es egal, auf welche Weise der Graph erstellt wurde. Da der Fokus dieser Arbeit nicht in der Generierung von Graphen lag, habe ich mich auf einen Ablauf beschränkt. Es wird eine Menge an Punkten erstellt, darauf wird eine Delaunay-Triangulierung generiert, welche den Graphen darstellt. Gleichzeitig ist der duale Graph einer solchen Triangulierung ein Voronoi-Diagramm, welches zur Darstellung für den Nutzer verwendet wurde.
         
         \at{@placement nochmal überdenken}
@@ -119,6 +155,16 @@ To be done.
         \input{data/graph_gen.tex} % @todo(viktor): reference this
         \input{data/voronoi_clipping/figure.tex}
     
+        \subsubsection{Generierung von Voronoi-Graphen}
+            
+            Für die Triangulierung habe ich mich ohne tiefere Beweggründe für den Boywer-Watson Algorithmus entschieden. Der Algorithmus generiert die Triangulierung iterativ in dem jeder Punkt nacheinander eingefügt wird und der Graph angepasst wird, so dass es wieder eine Delaunay-Triangulierung ist.
+            Zur Hilfe erstellen wir ein Superdreieck, welches alle Punkte enthällt. Nun fügen wir einen Punkt ein und prüfen all bisher gefundenen Dreiecke, ob ihr Umkreis diesen Punkt enhällt. Ist der Punkt innerhalb des Umkreises kann das Dreieck nicht zur finalen Triangulierung gehören. Für alle diese Dreieck sammeln wir nun die Kanten. Jede Kante die nur einmal vorkommt ist teil der Hülle dieser Dreiecke, alle anderen Kanten sind innerhalb dieser Hülle, da sich zwei Dreiecke diese teilen. Diese inneren Kanten werden entfernt und für jede Ecke entlang der Hülle wird eine neue Kante zum eingefügten Punkt erstellt.
+            Am Ende entfernt alle Kanten zur den Eckpunkten des Superdreiecks aus der Triangulierung und erhällt die Delaunay-Triagulierung der Point-Cloud.
+            
+            Aus der Triangulierung erstellen wir das Voronoidiagram indem wir die Eckpunkte als Mittelpunkte der Voronoizellen nehmen. Die Kanten sagen uns welche Zellen benachbart sind. Um die Kanten der Voronoizelle zu finden nehmen wir von alle Dreiecke in denen der Punkt liegt den Mittelpunkt des Umkreises. Die Umkreismittelpunkte sind die Ecken der Voronoizelle. Die Kanten finden wir indem wir die Punkte nach ihrem Winkel um den Mittelpunkt der Zelle sortieren und dann der Reihe nach verbinden.
+            
+            Es ist normal, dass ein solches Voronoidiagram an den Rändern der Point-Cloud auch Zellen ergeben kann die auf einer Seite offen sind, weil die Kanten zwischen den Ecken der Zelle, den Umkreismittelpunkten, keinen Schnittpunkt haben. Ich habe mich dazu entschieden, bei solchen Zellen weitere Eckpunkte einzufügen, so dass das alle Zellen durch einen freigewählten rechteckigem Bereich begrenzt sind. Dafür prüfe ich ob ein Eckpunkt außerhalb des Bereichs liegt und finde dann den Schnittpunkt von der Kante zu dem Eckpunkt mit dem Rechteck des Bereichs und ersetze den Eckpunkt mit diesem Schnittpunkt. Dieser Schritt passiert so lange bis alle Eckpunkte innerhalb oder auf dem Rand des Bereichs liegen.
+                Siehe Abbildung \ref{fig:voronoi_clipping}.
     
     \subsection{Phasen \at{@naming}}
         Der Algorithmus \ref{fig:wfc_back} generiert die Ausgabe schrittweise. Ein Schritt kann in vier Phasen geteilt werden: Search, Pick, Observe und Propagate.
@@ -138,20 +184,26 @@ To be done.
         Entweder man macht die Änderung nur lokal rückgängig und berechnet immer alle Zellen neu, bis sich keine mehr ändern. Oder man speichert ab, zu welchem Zeitpunkt ein Zustand unmöglich geworden ist und prüft ob dieser Zeitpunkt nach dem Schritt zurück weiterhin in der Vergangenheit oder nun in der Zukunft liegt. Bei zweiterem müssen alle solche Zustände als wieder möglich betrachtet werden.
         Diese Art die Menge an Zuständen darzustellen ist okay, weil sich für jede Zelle die Zustandsmenge in jedem Schritt des Algorithmus immer nur verkleinert oder gleichbleibt. Ist ein Zustand durch die Nachbar unmöglich so wird er auch nie wieder an späterem Zeitpunkt möglich.
         
-        Desweiteren sollen bereits gemachte Entscheidungen, die zu einem Widerspruch führen, nicht noch einmal wiederholt werden. Die Entscheidungspunkte in der  Pick- und Observe-Phase können gleich behandelt werden. Wir können die List an Auswahlmöglichkeiten für später speichern und die ausgewählte Zelle oder den ausgewählten Zustand von der Liste entfernen. Wird auf einen Schritt gebacktrackt, so kann einfach die nächste Möglichkeit auswählt werden. Der Algorithmus läuft ab dann normal weiter.In der Umsetzung wird für jede Zelle eine Liste aller Zustände gespeichert. Jeder Zustand ist entweder möglich und wurde noch nicht entfernt oder ist unmöglich und speichert den Zeitpunkt an dem er unmöglich wurde. Hierbei ist der Zeitpunkt einfach die Nummer des Schritts an dem der Zustand unmöglich wurde. 
+        Desweiteren sollen bereits gemachte Entscheidungen, die zu einem Widerspruch führen, nicht noch einmal wiederholt werden. Die Entscheidungspunkte in der  Pick- und Observe-Phase können gleich behandelt werden. Wir können die List an Auswahlmöglichkeiten für später speichern und die ausgewählte Zelle oder den ausgewählten Zustand von der Liste entfernen. Wird auf einen Schritt gebacktrackt, so kann einfach die nächste Möglichkeit auswählt werden. Der Algorithmus läuft ab dann normal weiter .In der Umsetzung wird für jede Zelle eine Liste aller Zustände gespeichert. Jeder Zustand ist entweder möglich und wurde noch nicht entfernt oder ist unmöglich und speichert den Zeitpunkt an dem er unmöglich wurde. Hierbei ist der Zeitpunkt einfach die Nummer des Schritts an dem der Zustand unmöglich wurde. 
         
         \at{@placement}
         Der Algorithmus ist in Abbildung \ref{fig:wfc_back} dargestellt. Für jeden Schritt des Algorithmus wird auch die Liste der gefundenen Zellen in der Search-Phase gespeichert. Wenn in der Pick-Phase eine Zelle ausgewählt wird, wird diese aus der Liste entfernt, damit diese beim Backtracken nicht erneut gewählt wird. Ebenso werden in der Observe-Phase alle wählbaren Zustände gespeichert und mit jedem Lösungsversuch wird der gewählte Zustand entfernt. Nun wurde aber eine Schwachstelle in den Algorithmus eingeführt. Wenn zuvor in der Search-Phase keine Zellen in Superposition mehr gefunden wurden, bedeutete dies, dass alle Zellen tatsächlich collapsed waren. Nun kann es sein, dass alle Zellen, die gefunden wurden, zu einem Widerspruch führen würden und entfernt wurden. Somit würde keine Zelle mehr wählbar sein. Auch in der Observe-Phase war es zuvor unmöglich keinen Zustand mehr auswählen zu können, da eine Zelle mit leerer Zustandsmenge bereits zuvor als Widerspruch identifiziert wurden wäre. In diesen Fällen wurde ein Widerspruch erreicht und es muss zum Backtracking kommen. Schließlich wurden alle noch möglichen Entscheidungen bereits getroffen und ausgewertet und keine Lösung gefunden. Somit führt dieser Schritt zwar nicht direkt zu einem Widerspruch in einer Zelle, aber alle folgen Schritte werden irgendwann zu einem Widerspruch führen. Als Anmerkung: wird auf diese Weise bis zum ersten Schritt gebacktrackt und führen dann auch dort alle möglichen Entscheidungen zu einem Widerspruch, so kann die Kombination aus Beispiel und Graph keine Ausgabe ergeben.
         
     \subsection{Überlappung und Heat \at{@naming}}
-        \at{@placement das konzept, die implementierung und die bewertung jeweils trennen?}
+        \at{@incomplete was muss zur implementierung gesagt werden, was nicht schon an anderer stelle ein zuhause gefunden hat}
+
+    
+\section{Ergebnisse}
+    \at{@incomplete Einleitender Satz}
+    
+    \begin{itemize}
+    \item Base Case - Gitter
+    \item Bilder mit unterschiedlichen Graphen: Einfache, Komposition(vier in eins, außen und innen)
+    \end{itemize}
         
-        \at{@flow}
-        In einem 2D Gitter sind die Nachbarn jeder Zelle per Definition des Gitters in festen Richtungen und Abständen zu finden. Bei Graphen ist diese Anordnung frei. Die Überlappung von zwei Zuständen hängt von der Richtung zwischen den beiden Umfeldern, also von der Verschiebung des einen Umfeld zum anderen. Während der Propagate-Phase werden die möglichen Zustände von Nachbarzellen auf Überlappung geprüft.Ein Zustand einer Zelle ist möglich\at{@translation}, wenn er mit mindestens einem Zustand jeder Nachbarzelle überlappen kann.Die Überlappung zweier Zustände hängt von der Richtung zwischen den Umfeldern der Zustände abhängt ab. Das heißt, dass für den Nachbar im Norden einer Zelle nur die Überlappung der Zustände im Norden relevant ist. Die Richtung zu einer Nachbarzelle auf einem Graphen wird als der Vektor von Mittelpunkt der Zelle zum Mittelpunkt der Nachbarzelle definiert. Der wichtigste Unterschied ist, dass die Richtung nun nicht mehr auf die acht Himmelsrichtungen (N, NO, O, SO, S, SW, W, NW) beschränkt ist. 
+    \subsection{Der Effekt von Heat auf die Ausgabe}
+        \at{@incomplete introduction}
         
-        Es ist nicht möglich Regeln für eine beliebige Richtung aus dem Beispiel zu extrahieren, da jeder Pixel nur 8 angrenzende Pixel hat. Sieht man das Beispiel als eine Funktion an, so ist diese nicht an allen Punkten definiert \at{(@incomplete Bilder als diskreten oder kontinuierliche Funktionen)}. Man könnte durch Interpolation einen Mittelwert zwischen gegebenen Werten berechnen, wenn das Bild eine kontinuierliche Funktion approximiert. Handelt es sich aber tatsächlich um eine diskrete Funktion, würde eine Interpolation Werte ergeben die vielleicht nicht teil des Wertebereichs waren, in anderen Worten würde man Farbwerte erhalten die vorher nicht im Bild waren. Da die Ausgabe dem Beispiel ähnlich seien muss, entfällt diese Option.
-        
-        Es bleibt also nur die Möglichkeit, dass der tatsächlichen Richtung eine der messbaren Himmelsrichtungen zugewiesen wird. Hierfür wird die Kosinus-Ähnlichkeit \cite{cosine} berechnet. Es wird die Himmelsrichtung mit der höchsten Ähnlichkeit gewählt. \at{@incomplete Kann auch mehr als eine Richtung sein}. \at{@incomplete Globale Heat}
         
         Abbildung \ref{fig:hex_heat} zeigt den Einfluss von Heat auf die Qualität der Ausgabe bei gleichem Beispiel und Graph. Das Beispiel kann auf dem Quadratgitter ohne weitere Probleme genutzt werden, während der Graph mit den Sechsecken bei geringer Heat uninteressante Ausgaben generiert. \at{@incomplete (a) erwähnen}
 
@@ -161,16 +213,7 @@ To be done.
         
         Bei (c) können dennoch \textbf{scheinbar} vertikale Linien generiert werden, da nun die oberen Zellen jeweils als im Norden und imd Nordosten/-westen betrachtet werden. Ebenso können die horizontalen Nachbarn als im Westen oder im Süd-/Nord-westen behandelt werden. Soll eine Zelle nun Teil einer vertikalen Linie sein, kann nur eine der oberen Nachbarnzellen als im Norden behandelt werden und die andere als die jeweilige Diagonale. 
         
-        \at{@placement} Tatsächlich werden solche Konflikte durch die globale Suche vorher vom Algoritmus ausgeschlossen und es bleiben z.B. bei (b) nur die Zustände über, die horizontale Linien bilden. 
-        
         \at{@incomplete Entropie erwähnen} Der Effekt von höherer Heat ist, das die Menge an möglichen Zuständen vergrößert wird, indem mehr Überlappungsregeln in Betracht gezogen werden. Dadurch ist es auch unwahrscheinlicher, dass für eine Zelle keine Zustände mehr möglich sind und ein Widerspruch entsteht. Gleichzeitig werden nun aber auch Ausgaben generiert, die eine tatsächlich geringere Ähnlickkeit zum Beispiel haben. So ist die Ausgabe in (b) zwar weniger interessant als die in (c), aber die horizontalen Linien und die grauen Flächen dazwischen passen exakt zur Teilen des Beispiels. Bei (c) werden auch vertikalen Linien generiert, aber diese haben knicke und sind eher zickzackartig als die Senkrechten des Beispiels. Eine Erhöhung der Heat verschlechtert die lokale Ähnlichkeit der Ausgabe zum Beispiel und verbessert die Wahrscheinlichkeit erfolgreich eine nicht triviale Lösung zu generieren.
-    
-    
-\section{Ergebnisse und Diskussion}
-    \at{@incomplete Linien und Flächenmuster in Beispielen}
-    
-    \subsection{Heat \at{@naming}}
-        \at{@placement hex heat vor heat rotation}
         
         In Abbildung \ref{fig:heat_rotation} ist dargestellt, wie Heat auch als eine lokale Drehung des Gitters verstanden werden kann. In (a) ist das gewählte Beispiel auf einem Quadratgitter ohne Drehung angewendet. Es können gute Ausgaben generiert werden. Dreht man das gesamte Quadratgitter nun um 22° so können die geraden Linien des Beispiels immernoch fehlerfrei platziert werden. Zwar sind die Zellen zueinander nicht mehr genau entlang der Himmelsrichtungen angeordnet, doch wird bei Heat=1 auf die nächste Richtung gerundet. Bei 8 Richtungen wird z.B. Osten von -22,5° bis 22,5° ausgewählt. Somit ist das Gitter bei (b) zwar optisch gedreht, aber kann genau wie das Gitter in (a) behandelt werden. Wird nun aber, wie in (c) noch weiter gedreht, so wird nun eine Benachbarung die vorher z.B. als Osten behandelt wurde nun als Nordosten behandelt. Der Effekt ist, dass die geradlinigen Muster des Beispiels nun (wie zuvor bei Abbildung \ref{fig:hex_heat}) nicht mehr platziert werden können. In der Ausgabe können nur noch flächenartige Muster vorkommen. In (d) ist zu sehen, dass dennoch gute Ausgaben generiert werden können, indem die Heat=2 gesetzt wird und jede Benachbarung nun z.B. als Nordosten und Osten behandelt wird. Der Algorithmus kann nun Ausgaben wie bei (b) generieren, da die Benachbarungen nun auch lokal wie die Benachbarungen aus (a) und (b) behandelt werden können. Heat kann also auch als eine lokale Drehung entgegen der tatsächlichen Ausrichtung des Gitters wirken. 
         
@@ -183,7 +226,27 @@ To be done.
         \input{data/more_heat/figure.tex}
     
     
-\section{Fazit}
-    \subsection{Vergleich zum Original}
-    \subsection{Mögliche Anwendungsbereiche?}
-    \subsection{Ausblick und zukünftige Forschung}
+\section{Diskussion}
+    \at{@incomplete Einleitender Satz}
+    
+    \begin{itemize}
+    \item Vergleich zum WFC, wie und was vergleichen?
+    \item Lokale Ähnlichkeit im Vergleich zum Input
+    \item Linienmuster und Flächenmuster  in Beispielen
+    \end{itemize}
+    
+\section{Fazit - Ausblick und zukünftige Forschung \at{@naming}}
+    \begin{itemize}
+    \item Mögliche Anwendungsbereiche
+    \item WFC auf 3D Graphen
+    \item Eigenschaften des Musters(Linien und Flächen) in Bezug auf Heat
+    \item Eigenschaften des Gitters analysieren, Engpässe, unförmige Zellen, Abstände, Form der Zelle beachten
+    \end{itemize}
+        
+    \subsection{Heat}
+        \begin{itemize}
+        \item Eine globale Heat für alle Zellen hat einen negativen Effekt auf lokal regelmäßige Regionen eines Gitters und ein postiven Effekt auf sehr unregelmäßige Regionen des Gitters.
+        \item Anstatt dass die Heat global für alle Zellen zu Beginn bestimmt wird, kann man auch während des Collapse 'lernen' welche Regionen 'schwerer' zu lösen sind und dort die Heat schrittweise erhöhen bis eine Lösung gefunden werden kann.
+        \item Lokales Heating mit heating chance und cooling chance
+        \item simmulated annealing
+        \end{itemize}
