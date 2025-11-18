@@ -8,10 +8,16 @@
 
 % ////////////////////////////////////////////////
 
+% 
 %  @important
-%  Für Publish den input kommentieren
+% 
 
-\input{Write.tex}
+%  Für Publish dies löschen:
+\usepackage{xcolor}
+\definecolor{mred}{HTML}{fe163d}
+\definecolor{mgreen}{HTML}{009052}
+\DeclareRobustCommand{\@todo(viktor):}[1]{\textcolor{mred}{@todo:} \textcolor{mred}{#1}} 
+\DeclareRobustCommand{\at}[1]{\textcolor{mgreen}{#1}}
 
 
 % ////////////////////////////////////////////////
