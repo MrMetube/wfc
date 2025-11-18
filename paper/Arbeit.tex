@@ -30,8 +30,10 @@
 \begin{document}
 
 \@todo(viktor):{titelblatt ordentlich machen}
-\\ \@todo(viktor):{Abbildungen an den richtigen orten inline erzwingen, figure placement parameter alle checken}
-\\ \@todo(viktor):{\at{@translation} Collapsed und Observed als Begriffe vereinheitlichen}
+
+\@todo(viktor):{Abbildungen an den richtigen orten inline erzwingen, figure placement parameter alle checken}
+
+\@todo(viktor):{\at{@translation} Collapsed und Observed als Begriffe vereinheitlichen}
 
 \maketitle
 \pagebreak
@@ -83,7 +85,13 @@ To be done.
         \input{data/ms_algorithm/figure.tex}
         
     \subsection{Wave Function Collapse}
-        \textit{Wave Function Collapse} ist eine Weiterentwicklung des Model Sythesis Algorithmus \cite{gumin}. Die Kernidee der Generierung mittels einem Beispiel bleibt und wird um drei Aspekte erweitert. Anstatt nur Bauteile nebeneinander anzuordnen, können nun auch überlappende Teile des Beispiels automatisch aus einem Beispiel extrahiert werden. In jeder Iteration wird die Zelle mit der niedrigsten Entropie zuerst betrachtet. Und bei Bauteil-basierten Beispielen werden Symmetrien von Bauteilen für eine kompaktere Definition ausgenutzt. Der Algorithmus ist in Abbildung \ref{fig:wfc_gumin} dargestellt. Abbildung \ref{fig:wfc_overview} zeigt ein paar Beispiele und mögliche Ausgaben.
+        \textit{Wave Function Collapse} ist eine Weiterentwicklung des Model Sythesis Algorithmus \cite{gumin}. Die Kernidee der Generierung mittels einem Beispiel bleibt und wird um drei Aspekte erweitert:
+        \begin{enumerate}
+        \item Anstatt nur Bauteile nebeneinander anzuordnen, können nun auch überlappende Teile des Beispiels aus einem Beispiel automatisch extrahiert werden. 
+        \item In jeder Iteration wird die Zelle mit der niedrigsten Entropie zuerst betrachtet. 
+        \item Und bei Bauteil-basierten Beispielen werden Symmetrien von Bauteilen für eine kompaktere Definition ausgenutzt.
+        \end{enumerate}
+        Der Algorithmus ist in Abbildung \ref{fig:wfc_gumin} dargestellt. Abbildung \ref{fig:wfc_overview} zeigt ein paar Beispiele und mögliche Ausgaben.
         
         \input{data/wfc_gumin.tex}
         \input{data/wfc_overview/figure.tex}
@@ -138,7 +146,7 @@ To be done.
         \@todo(viktor):{titel hat einen umbruch}
         
         Die ursprüngliche Form des Wave Function Collapse nimmt ein 2D Pixelmuster oder Tilesets als Beispiel und produziert darauß wieder 2D Muster. 
-        Pixel liegen stets auf einem quadratischen Gitter. Bei Tilesets ist die grafische Gestaltung des Tiles zwar uneingeschränkt, dennoch sind die Tiles selbst quadratisch. Dies schränkt die Gestaltung des Inhalts der Tiles in sofern ein, dass die Kanten zu anderen Kanten passen müssen. Auch bei 3D Beispielen werden die Modelle in blockförmige Bauteile zerschnitten, damit der Collapse auf einem 3D Gitter von Würfeln arbeiten kann.
+        Pixel liegen stets auf einem quadratischen Gitter. Bei Tilesets ist die grafische Gestaltung des Tiles zwar uneingeschränkt, dennoch sind die Tiles selbst quadratisch. Dies schränkt die Gestaltung des Inhalts der Tiles in sofern ein, dass die Kanten zu anderen Kanten passen müssen. Auch bei 3D Beispielen werden die Modelle in blockförmige Bauteile zerschnitten, damit der Algorithmus auf einem 3D Gitter von Würfeln arbeiten kann.
         
         Solche Gitter bringen bestimmte Vorteile durch ihre Struktur mit sich. Die Benachbarung von Zellen ist implizit aus dem Gitter erkennbar, die Nachbarzellen befinden sich stets in festen Abständen in die vier Himmelsrichtungen im 2D Gitter und entlang der drei Achsen, also 6 Richtungen, im 3D Gitter. Die Überlappungsregeln aus dem Beispiel können also direkt von dem einem Gitter auf das andere übertragen werden. Der Nachteil solcher Gitter ist, dass die Ausgabe, im Ganzen, Artefakte des Gitter aufweist. Nur vertikale und horizontale Linien können im Pixelgitter exakt dargestellt werden, frei geformte Kurven oder organische Strukturen lassen sich nur durch Annäherung darstellen und es kann zu Aliasing kommen.
         
@@ -146,7 +154,7 @@ To be done.
     
     
     \subsection{Von Gittern zu Graphen}
-        Ursprünglich arbeit Wave Function Collapse nur auf Gittern. Der Schritt zum Graphen als Fundament für die Ausgabe des Algorithmus ist sinnvoll, da Gitter eine spezielle Art von Graphen darstellen. In dem Umfang dieser Arbeit werden aber auch nicht alle Arten von Graphen betrachtet, meistens ist die freie Anordnung und Verbindung von Knoten nicht notwendig. Da jede Kanten eines Gitters zuvor eine lokale Benachbarung dargestellt haben und die Regelextrahierung nur lokal arbeitet, beschränkt sich diese Arbeit nur auf Graphen in denen Kanten auch primär einen Knotenpunkt mit den Knotenpunkten in einem lokalen Umfeld verbindet. \at{@visual Gitter und Graph des Gitters} Der Algorithmus kann auch auf anderen Arten von Graphen angewendet werden, doch können daraus neue oder unerwartete Effekte hervortreten, die wiederum anderen Lösungswege benötigen.
+        Ursprünglich arbeit Wave Function Collapse nur auf Gittern \cite{merrel} \cite{gumin}. Der Schritt zum Graphen als Fundament für die Ausgabe des Algorithmus ist sinnvoll \at{@wording}, da Gitter eine spezielle Art von Graphen darstellen. In dem Umfang dieser Arbeit werden aber auch nicht alle Arten von Graphen betrachtet, meistens ist die freie Anordnung und Verbindung von Knoten nicht notwendig. Da jede Kanten eines Gitters zuvor eine lokale Benachbarung dargestellt haben und die Regelextrahierung nur lokal arbeitet, beschränkt sich diese Arbeit nur auf Graphen in denen Kanten auch primär einen Knotenpunkt mit den Knotenpunkten in einem lokalen Umfeld verbindet. \at{@visual Gitter und Graph des Gitters} Der Algorithmus kann auch auf anderen Arten von Graphen angewendet werden, doch können daraus neue oder unerwartete Effekte hervortreten, die wiederum anderen Lösungswege benötigen.
         
         Ein Gitter bringt mit sich Information über Benachbarung und Position jeder Zelle die nun auf einem Graphen explizit angegeben werden müssen. Je nach Anordnung kann nun nicht nur die Richtung zur Nachbarzelle sondern auch deren Abstand und die Anzahl an Nachbarzellen variieren. Bevor der Algorithmus eine Ausgabe generieren kann, müssen diese Information vom Nutzer angegeben werden.
         
@@ -163,11 +171,11 @@ To be done.
         
         Ein Umfeld ist die Region um einen Pixel des Beispiels. Ein Zustand besteht aus dessen Umfeld und Frequenz im Beispiel. Im Beispiel, das ein Quadratgitter ist, können Umfelder in acht Richtungen überlappen; im Norden, Süden, Westen, Osten und in den diagonalen Himmelsrichtungen. 
         
-        Die Regeln welche Zustände überlappen und welche nicht, werden vor Beginn des Collapse aus dem Beispiel extrahiert. Dafür wird für jeden Pixel des Beispiels sein Umfeld notiert. Liegt ein Pixel am Rand des Beispiels, so kann es sein, dass sein Umfeld zum Teil außerhalb liegen würde. Ist das Beispiel so erstellt, dass der linke Rand an den rechten Rand passt, bzw. der Obere an den Unteren, so nimmt man für das Umfeld von Randpixeln auch die Pixel vom der anderen Seite hinzu. Ist dies nicht erwünscht, so können diese Umfelder einfach verworfen werden. Dies wird in dieser Arbeit als Wrapping bezeichnet, wobei Wrapping für die vertikalen Ränder und die horizontalen Ränder separat erlaubt oder verboten werden kann.
-        Jedes einzigartige Umfeld wird ein möglicher Zustand der einer Zelle zugewiesen werden kann. Tritt ein Umfeld mehr als einmal im Beispiel auf, so wird dem entsprechenden Zustand eine höhere Frequenz zugewiesen. Aus der Gesamtanzahl an Zuständen und deren Frequenzen lässt sich die Wahrscheinlichkeit jedes Zustands berechen. Dies wird im Collapse genutzt, damit nicht nur lokale Ähnlichkeit sondern auch die globale Verteilung von Umfeldern des Beispiels ungefähr ähnelt (\at{@incomplete} das nicht nur hier so knapp sagen sondern auch später nochmal erwähnen). 
+        Die Regeln welche Zustände überlappen und welche nicht, werden vor dem Start des Algorithmus aus dem Beispiel extrahiert. Dafür wird für jeden Pixel des Beispiels sein Umfeld notiert. Liegt ein Pixel am Rand des Beispiels, so kann es sein, dass sein Umfeld zum Teil außerhalb liegen würde. Ist das Beispiel so erstellt, dass der linke Rand an den rechten Rand passt, bzw. der Obere an den Unteren, so nimmt man für das Umfeld von Randpixeln auch die Pixel vom der anderen Seite hinzu. Ist dies nicht erwünscht, so können diese Umfelder einfach verworfen werden. Dies wird in dieser Arbeit als Wrapping bezeichnet, wobei Wrapping für die vertikalen Ränder und die horizontalen Ränder separat erlaubt oder verboten werden kann.
+        Jedes einzigartige Umfeld wird ein möglicher Zustand der einer Zelle zugewiesen werden kann. Tritt ein Umfeld mehr als einmal im Beispiel auf, so wird dem entsprechenden Zustand eine höhere Frequenz zugewiesen. Aus der Gesamtanzahl an Zuständen und deren Frequenzen lässt sich die Wahrscheinlichkeit jedes Zustands berechen. Dies wird im Algorithmus genutzt, damit nicht nur lokale Ähnlichkeit sondern auch die globale Verteilung von Umfeldern des Beispiels ungefähr ähnelt (\at{@incomplete} das nicht nur hier so knapp sagen sondern auch später nochmal erwähnen). 
         
         \at{@placement Das ist eher Implementierung}
-        Während des Collapse werden die Regeln, welche Zustände überlappen, nach jedem Schritt für alle benachbarten Zellen geprüft. Da sich diese Eigenschaft aber nicht während des Verlauf des Algorithmus ändert, kann eine Datenstruktur zuvor zur Speicherung erstellt werden. Die Überlappungs-Lookuptabelle gibt für jedes Zustandspaar die Richtungen an, in denen die Zustände überlappen. Wenn Zellen nun geprüft werden, kann nun aus der Lookuptabelle abgelesen werden, wodurch viel wiederholte Arbeit vermieden wird.
+        Während des Algorithmus werden die Regeln, welche Zustände überlappen, nach jedem Schritt für alle benachbarten Zellen geprüft. Da sich diese Eigenschaft aber nicht während des Verlauf des Algorithmus ändert, kann eine Datenstruktur zuvor zur Speicherung erstellt werden. Die Überlappungs-Lookuptabelle gibt für jedes Zustandspaar die Richtungen an, in denen die Zustände überlappen. Wenn Zellen nun geprüft werden, kann nun aus der Lookuptabelle abgelesen werden, wodurch viel wiederholte Arbeit vermieden wird.
         
         Ist der Graph ein Quadratgitter können die diagonalen Richtungen bei der Betrachtung entfallen, ohne dass es einen Einfluss auf die Qualität der Ausgabe hat. Die reguläre Struktur führt dazu, dass wenn für eine Zelle A der Nachbar von A im Norden(An) passt und der Nachbar im Westen von An passt, dann muss auch der Nachbar von A im Nordwesten passen. \at{@wording @visual}
         
@@ -175,7 +183,7 @@ To be done.
         
         Ein Umfeld wird im Umfang dieser Arbeit als ein 3x3 Gitter von Pixeln definiert. Es können auch andere Formen und Größen gewählt werden, aber diese müssen zu den genutzen Beispielen passen, damit die in den Beispielen existierenden Muster optimal genutzt werden. Wird das Umfeld zu klein gewählt, können nur Ausschnitte der gewünschten Muster erhalten werden, die Muster selbst gehen verloren. Während ein zu großes Umfeld auch die Anordnung der Muster im Beispiel erhällt, was unerwünscht ist und im extremen Fall dazu führt, dass nur noch exakte Kopien des Beispiels ohne Variation in der Ausgabe vorkommen.
         
-        Den Zellen des Graphen sind, nach einem erfolreichem Collapse, je ein Zustand zugewiesen. Dieser kann aber nicht direkt durch sein Umfeld dargestellt werden, da das Umfeld eines Zustands zur Ermittlung der Überlappungen dient und deswegen aus mehr als einem Pixel, also einem Farbwert besteht. In dieser Arbeit wird der Pixel in der Mitte des Umfelds als der tatsächliche Farbwert einer Zelle zur Darstellung genutzt.
+        Jeder Zelle des Graphen ist am Ende nur noch genau ein Zustand zugewiesen. Dieser kann aber nicht direkt durch sein Umfeld dargestellt werden, da das Umfeld eines Zustands zur Ermittlung der Überlappungen dient und deswegen aus mehr als einem Pixel, also einem Farbwert besteht. In dieser Arbeit wird der Pixel in der Mitte des Umfelds als der tatsächliche Farbwert einer Zelle zur Darstellung genutzt. \at{@visual}
         
         % @todo(viktor): \ref{fig:extract_wrapping}
         \input{data/extract_wrapping/figure.tex}
@@ -192,7 +200,7 @@ To be done.
         \input{data/cosine.tex}
 
 
-
+    \at{@incomplete Zusammenfassung der Erweiterung/Änderungen}
 
 
 
@@ -244,15 +252,15 @@ To be done.
         
         In der Observe-Phase wird ein Zustand aus der Superposition zufällig ausgewählt und die Zelle in diesen Zustand collapsed. Die anderen Zustände werden entfernt, was Einfluss auf die Nachbarzellen haben kann. Die Wahrscheinlichkeit eines Zustands, gewählt zu werden, hängt von dessen Häufigkeit im Beispiel ab. 
         
-        Danach beginnt die Propagate-Phase. Eine Liste aller geänderten Zellen wird mit der observierten Zelle initialisiert. Jede Zelle in der Liste wird einzeln entfernt und wie folgt bearbeitet. Alle Nachbarzellen der betrachten Zellen prüfen, welche ihrer Zustände mit keinem der Zustände der betrachteten Zellen noch überlappen. Diese Zustände werden entfernt und jede Nachbarzelle die sich so verändert hat, wird der Liste angefügt. Sollte dabei auch der letzte mögliche Zustand einer Zelle unmöglich gewurden sein, so wurde ein Widerspruch erreicht; der Graph kann nun nicht mehr gelöst werden. Diese Phase dauert so lange, bis die Liste leer ist, sich also keine Zellen mehr verändern.
+        Danach beginnt die Propagate-Phase. Eine Liste aller geänderten Zellen wird mit der observierten Zelle initialisiert. Jede Zelle in der Liste wird einzeln entfernt und wie folgt bearbeitet. Alle Nachbarzellen der betrachten Zellen prüfen, welche ihrer Zustände mit keinem der Zustände der betrachteten Zellen noch überlappen. Diese Zustände werden entfernt und jede Nachbarzelle die sich so verändert hat, wird der Liste angefügt. Sollte dabei auch der letzte mögliche Zustand einer Zelle unmöglich gewurden sein, so wurde ein Widerspruch erreicht; es kann nun keine Lösung mehr gefunden werden. Diese Phase dauert so lange, bis die Liste leer ist, sich also keine Zellen mehr verändern.
         
         
     \subsection{Backtracking}
         Wenn der Algorithmus einen Widerspruch entdeckt, muss nicht immer alle Arbeit verworfen werden. Gerade bei größeren oder komplizierteren Mustern oder Graphen ist es wahrscheinlich, dass beim ersten Versuch keine Lösung gefunden wird, weil die Komplexität den Lösungsraum stärker einschränkt. Wenn ein Widerspruch in einer Zelle aber nun nur von den direkten Nachbar abhängt, so ist es wahrscheinlich dass weiter entfernte bereits gelöste Zellen dennoch kompatibel sind. Um einen lokalen Widerspruch aufzulösen muss meistens nur lokal eine andere Entscheidung getroffen werden.
         
         Um Backtracking umzusetzen müssen mehr Informationen behalten werden als nur der Zustand des Gitters zum aktuellen Zeitpunkt. Will man nun wieder einen Schritt zurückgehen muss man wissen, welche Entscheidung man zuvor bereits getroffen hat um dessen Effekt rückgängig zu machen. Dabei genügt es nicht nur die collapste Zelle und den Zustand wieder zu entfernen, weil jede Zelle von mehreren Nachbarn beeinflusst wird. Die Zustandsmenge einer Zelle ist die Schnittmenge der möglichen Nachbarzuständen der Nachbar. Somit kann es sein, dass ein Zustand A aus der Menge wegen mehreren Einschränkungen von mehreren Nachbarn fehlt. Nimmt man nun durch Backtracking eine dieser Einschränkungen wieder zurück, so ist es nicht offensichtlich, ob Zustand A nun wieder möglich ist, ohne alle Einschränkungen auf die Zelle neu zu berechnen.
-        Entweder man macht die Änderung nur lokal rückgängig und berechnet immer alle Zellen neu, bis sich keine mehr ändern. Oder man speichert ab, zu welchem Zeitpunkt ein Zustand unmöglich geworden ist und prüft ob dieser Zeitpunkt nach dem Schritt zurück weiterhin in der Vergangenheit oder nun in der Zukunft liegt. Bei zweiterem müssen alle solche Zustände als wieder möglich betrachtet werden.
-        Diese Art die Menge an Zuständen darzustellen ist okay, weil sich für jede Zelle die Zustandsmenge in jedem Schritt des Algorithmus immer nur verkleinert oder gleichbleibt. Ist ein Zustand durch die Nachbar unmöglich so wird er auch nie wieder an späterem Zeitpunkt möglich.
+        Entweder man macht die Änderung nur lokal rückgängig und berechnet immer alle Zellen neu, bis sich keine mehr ändern. Oder man speichert ab, zu welchem Zeitpunkt ein Zustand unmöglich geworden ist und prüft ob dieser Zeitpunkt nach dem Schritt zurück weiterhin in der Vergangenheit oder nun in der Zukunft liegt\at{@wording visualisieren oder eine bessere Metapher finden}. Bei zweiterem müssen alle solche Zustände als wieder möglich betrachtet werden.
+        Diese Art die Menge an Zuständen darzustellen ist okay \at{@wording}, weil sich für jede Zelle die Zustandsmenge in jedem Schritt des Algorithmus immer nur verkleinert oder gleichbleibt. Ist ein Zustand durch die Nachbar unmöglich so wird er auch nie wieder an späterem Zeitpunkt möglich.
         
         Desweiteren sollen bereits gemachte Entscheidungen, die zu einem Widerspruch führen, nicht noch einmal wiederholt werden. Die Entscheidungspunkte in der  Pick- und Observe-Phase können gleich behandelt werden. Wir können die List an Auswahlmöglichkeiten für später speichern und die ausgewählte Zelle oder den ausgewählten Zustand von der Liste entfernen. Wird auf einen Schritt gebacktrackt, so kann einfach die nächste Möglichkeit auswählt werden. Der Algorithmus läuft ab dann normal weiter .In der Umsetzung wird für jede Zelle eine Liste aller Zustände gespeichert. Jeder Zustand ist entweder möglich und wurde noch nicht entfernt oder ist unmöglich und speichert den Zeitpunkt an dem er unmöglich wurde. Hierbei ist der Zeitpunkt einfach die Nummer des Schritts an dem der Zustand unmöglich wurde. 
         
@@ -294,7 +302,7 @@ To be done.
         
         Der selbe Effekt kommt auch bei unregelmäßigen Graphen zum Spiel. Hier existiert zwar kein Winkel um den man den gesamten Graphen drehen kann, um ein Quadratgitter zu erhalten. Aber da Heat lokal und von Nachbar zu Nachbar unabhängig wirkt, kann es als eine lokale Drehung oder Verzerrung verstanden werden. Es ist so, als könnte der Algorithmus die Zellen lokal so verschieben und verdrehen, dass einen breitere Menge an Lösungen möglich ist. Es muss dabei beachtet werden, dass der Algorithmus nicht gezielt arbeitet. Ist eine Graph bereits mit geringer Heat gut lösbar, so wird höhere Heat nicht unbedingt auch bessere Ergebnisse liefern. Es ist sogar wahrscheinlich, dass die Ausgabe schlechter wird da die höhere Heat ja auch zu Regionen in der Ausgabe führt die nicht im Beispiel existieren und den Einfluss der Richtung mindert.
         
-        Abbildung \ref{fig:more_heat} zeigt wie die Qualität der Ausgabe, bei steigender Heat, sinken kann. Der Graph ist hier ein Quadratgitter und kann somit schon bei einer Heat von 1 gute Ausgaben generieren. Mit jedem Schritt wird der jeder tatsächlichen Benachbarung eine größere Menge an Möglichkeiten gegeben. Es entstehen mehr fehlerhafte Regionen in der Ausgabe. Ab einer Heat von 5 kann der Algorithmus einer perfekt nach Osten laufenden Benachbarung nicht nur Nordosten und Südosten sondern auch Norden und Süden zuweisen, also zu einander entgegengesetzte Himmelrichtgen. Liegt z.B. eine Zelle östlich von einer anderen so könnten beide sich als südlich der anderen behandeln. Ab Heat=6 könnte jede Benachbarung auch als eine der entgegengesetze Himmelrichtungen behandelt werden. Schließlich verliert die Anordnung der Zellen bei Heat=8 komplett die Bedeutung. Zur Vollständigkeit sind hier Ausgaben mit hoher Heat dargestellt, in der Praxis sollte man Heat so gering wie möglich halten.
+        Abbildung \ref{fig:more_heat} zeigt wie die Qualität der Ausgabe, bei steigender Heat, sinken kann. Der Graph ist hier ein Quadratgitter und kann somit schon bei einer Heat von 1 gute Ausgaben generieren. Mit jedem Schritt wird der jeder tatsächlichen Benachbarung eine größere Menge an Möglichkeiten gegeben. Es entstehen mehr fehlerhafte Regionen in der Ausgabe. Ab einer Heat von 5 kann der Algorithmus einer perfekt nach Osten laufenden Benachbarung nicht nur Nordosten und Südosten sondern auch Norden und Süden zuweisen, also zu einander entgegengesetzte Himmelrichtungen. Liegt z.B. eine Zelle östlich von einer anderen so könnten beide sich als südlich der anderen behandeln. Ab Heat=6 könnte jede Benachbarung auch als eine der entgegengesetze Himmelrichtungen behandelt werden. Schließlich verliert die Anordnung der Zellen bei Heat=8 komplett die Bedeutung. Zur Vollständigkeit sind hier Ausgaben mit hoher Heat dargestellt, in der Praxis sollte man Heat so gering wie möglich halten.
         
         \input{data/more_heat/figure.tex}
 
@@ -316,6 +324,8 @@ To be done.
 
 
 \section{Fazit - Ausblick und zukünftige Forschung \at{@naming}}
+    \at{@incomplete Einleitender Satz}
+    
     \begin{itemize}
     \item Mögliche Anwendungsbereiche
     \item WFC auf 3D Graphen
@@ -326,7 +336,7 @@ To be done.
     \subsection{Heat}
         \begin{itemize}
         \item Eine globale Heat für alle Zellen hat einen negativen Effekt auf lokal regelmäßige Regionen eines Gitters und ein postiven Effekt auf sehr unregelmäßige Regionen des Gitters.
-        \item Anstatt dass die Heat global für alle Zellen zu Beginn bestimmt wird, kann man auch während des Collapse 'lernen' welche Regionen 'schwerer' zu lösen sind und dort die Heat schrittweise erhöhen bis eine Lösung gefunden werden kann.
+        \item Anstatt dass die Heat global für alle Zellen zu Beginn bestimmt wird, kann man auch innerhalb des Algorithmus 'lernen' welche Regionen 'schwerer' zu lösen sind und dort die Heat schrittweise erhöhen bis eine Lösung gefunden werden kann.
         \item Lokales Heating mit heating chance und cooling chance
         \item simmulated annealing
         \end{itemize}
