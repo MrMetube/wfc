@@ -4,17 +4,13 @@
 \usepackage{hyperref}                      % clickable links
 \usepackage{amsmath, amssymb}              % mathe formeln
 \usepackage{graphicx, caption, subcaption} % for figures and subfigures
+\usepackage{float}                         % enforce figure placement
 
 % ////////////////////////////////////////////////
+% Für Publish beide inputs kommentieren
 
 \input{Write.tex}
-% \input{Publish.tex}
-
-% 
-% figures und algorithmen: inline oder alle am ende
-% zitieren: pro abschnitt oder reicht pro section?
-% digital oder gedruckt?
-% 
+% \input{Present.tex}
 
 % ////////////////////////////////////////////////
 
@@ -30,6 +26,8 @@
 % ////////////////////////////////////////////////
 \begin{document}
 
+\@todo(viktor):{titelblatt ordentlich machen}
+\@todo(viktor):{Abbildungen an den richtigen orten inline erzwingen, figure placement parameter alle checken}
 \maketitle
 \pagebreak
 
@@ -46,14 +44,9 @@
 \pagebreak
 
 \input{Notizen}
-% ////////////////////////////////////////////////
-
-\input{data/graph_gen.tex} % @todo(viktor): reference these
-\input{data/wfc_back.tex}  % @todo(viktor): reference these
-\input{data/wfc_gumin.tex}
 
 % ////////////////////////////////////////////////
-% // @important @todo(viktor): sources for delaunay-triangulation and voronoi-diagrams
+\@todo(viktor):{sources for delaunay-triangulation and voronoi-diagrams}
 
 \pagebreak
 \bibliographystyle{plain}
