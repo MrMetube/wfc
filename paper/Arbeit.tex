@@ -74,7 +74,7 @@ To be done.
 
 
 \section{Hintergrund}
-    \at{@incomplete Einleitender Satz, was zu prozeduraler Generierung}
+    \at{@incomplete Einleitender Satz, ?was zu prozeduraler Generierung?}
     
     \subsection{Model Synthesis}
         Mit dem \textit{Model Synthesis} \cite{merrel} Algorithmus \ref{fig:ms_merrel} können, basiert auf einem 3D Beispielmodell, eine große Menge an ähnlichen 3D Modellen prozedural generiert werden (siehe Abbildung \ref{fig:ms_output}). Das synthesierte/generierte Model wird auf einem 3D Gitter iterativ generiert, indem jedem Knotenpunkt des Gitters ein Teil des Beispielmodells zugewiesen wird. Das Beispiel muss vorher in kleinere gleichgroße Bauteile zerlegt werden. Jedem Knotenpunkt wird zu Beginn die Menge aller Bauteile als seine Auswahlmöglichkeiten zugewiesen. Mit jeder Iteration wird bei einem Knotenpunkt ein Bauteil seiner Zustandsmenge ausgewählt. Danach werden alle Nachbarn geprüft, so dass sie nur noch passende Bauteile in ihrer Zustandsmenge behalten. Hierfür wird eine globale Suche verwendet, andere Methoden beschränkten sich zuvor nur auf lokale Suchen. Eine globale Suche ist besser, weil jedes Bauteil einen weitreichenden Einfluss auf das gesamte Gitter haben kann. 
@@ -192,7 +192,7 @@ To be done.
         
         Jeder Zelle des Graphen ist am Ende nur noch genau ein Zustand zugewiesen. Dieser kann aber nicht direkt durch sein Umfeld dargestellt werden, da das Umfeld eines Zustands zur Ermittlung der Überlappungen dient und deswegen aus mehr als einem Pixel, also einem Farbwert besteht. In dieser Arbeit wird der Pixel in der Mitte des Umfelds als der tatsächliche Farbwert einer Zelle zur Darstellung genutzt. \at{@visual}
         
-        % @todo(viktor): \ref{fig:extract_wrapping}
+        In Abbildung \ref{fig:extract_wrapping} ist der Ablauf dargestellt. \at{@incomplete}
         \input{data/extract_wrapping/figure.tex}
         
     \subsection{Heat \at{@naming}}
