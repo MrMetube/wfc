@@ -1,0 +1,32 @@
+\begin{figure}[H]
+    \centering
+    \begin{minipage}{\linewidth}
+        \rule{\linewidth}{0.4pt}
+        
+        \begin{enumerate}
+        \item Für jeden Pixel des Beispielbilds:
+        \begin{enumerate}
+            \item Überschreitet das Umfeld des Pixels den Rand des Bild?
+            \subitem Ist Wrapping erlaubt?
+            \subsubitem Dann: Nimm die Pixel vom gegenüberliegenden Rand
+            \subsubitem Sonst: Überspringe diesen Pixel
+            \item Lese das Umfeld aus
+            \item Gibt es bereits einen Zustand mit diesem Umfeld?
+            \subitem Dann: Erhöhe dessen Frequenz um eins
+            \subitem Sonst: Erstelle einen neuen Zustand mit diesem Umfeld
+        \end{enumerate}
+        
+        \item Für jedes Paar Zustände und jede Himmelsrichtung:
+        \begin{enumerate}
+            \item Prüfe ob die Zustände in dieser Richtung überlappen
+            \item Speichere diese Regel in der Lookuptabelle ab
+        \end{enumerate}
+        \end{enumerate}
+        
+        \rule{\linewidth}{0.4pt}
+    \end{minipage}
+    
+    \caption{Algorithmus zur Regelextraktion}
+    
+    \label{fig:wfc_extraction}
+\end{figure}

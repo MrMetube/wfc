@@ -56,7 +56,7 @@
 
 
 \begin{abstract}
-To be done.
+\@todo(viktor):{}
 \end{abstract}
 
 
@@ -64,6 +64,7 @@ To be done.
 
 
 \section{Einleitung}
+    \at{@incomplete Einleitender Satz, ?was zu prozeduraler Generierung?}
     \subsection{Motivation}
     \subsection{Problemstellung und Ziel}
     \subsection{Problemlösung}
@@ -73,8 +74,8 @@ To be done.
 
 
 
-\section{Hintergrund}
-    \at{@incomplete Einleitender Satz, ?was zu prozeduraler Generierung?}
+\section{Hintergrund \at{@naming} Beispielbasierte prozedurale generierung?}
+    \at{@incomplete Einleitender Satz}
     
     \subsection{Model Synthesis}
         Mit dem \textit{Model Synthesis} \cite{merrel} Algorithmus \ref{fig:ms_merrel} können, basiert auf einem 3D Beispielmodell, eine große Menge an ähnlichen 3D Modellen prozedural generiert werden (siehe Abbildung \ref{fig:ms_output}). Das synthesierte/generierte Model wird auf einem 3D Gitter iterativ generiert, indem jedem Knotenpunkt des Gitters ein Teil des Beispielmodells zugewiesen wird. Das Beispiel muss vorher in kleinere gleichgroße Bauteile zerlegt werden. Jedem Knotenpunkt wird zu Beginn die Menge aller Bauteile als seine Auswahlmöglichkeiten zugewiesen. Mit jeder Iteration wird bei einem Knotenpunkt ein Bauteil seiner Zustandsmenge ausgewählt. Danach werden alle Nachbarn geprüft, so dass sie nur noch passende Bauteile in ihrer Zustandsmenge behalten. Hierfür wird eine globale Suche verwendet, andere Methoden beschränkten sich zuvor nur auf lokale Suchen. Eine globale Suche ist besser, weil jedes Bauteil einen weitreichenden Einfluss auf das gesamte Gitter haben kann. 
@@ -83,43 +84,61 @@ To be done.
         \input{data/ms_output/figure.tex}
         
         Damit die Ausgabe eine sinnvolle Anordnung der Bauteile ergibt, werden nur Bauteile die nebeneinander in einer bestimmten Richtung im Beispiel sind, in der Ausgabe nebeneinander in dieser Richtung platziert. Dadurch ist garantiert, dass jede kleine Region der Ausgabe mindestens einer Region im Beispiel gleicht. Da an jedem Knotenpunkt meist mehr als ein Bauteil passen würde und die Auswahl per Zufall geschieht, ist es unwahrscheinlich, dass die Ausgabe genau dem Beispiel im ganzen gleicht. Bei der Auswahl des Bauteils für einen Knoten wird die Wahrscheinlichkeit jedes Bauteils auch mit seiner Häufigkeit im Beispiel gewichtet, wodurch über eine große Menge an Ausgaben die Häufigkeit einzelner Bauteile der tatsächlichen Häufigkeit im Beispiel gleicht. Für eine einzelne Ausgabe bedeutet dies, dass die globale Verteilung der Bauteile auch tendenziell der Verteilung im Beispiel gleicht. 
-        \at{@incomplete Vielleicht auch Resemblance und Consistency als konkrete Begriffe erklären}
+        \at{@incomplete Vielleicht Resemblance schon hier nennen}
         
-        Die selbe Methodik kann auch auf 2D Gittern angewendet werden; dies wird dann \textit{Texture Synthesis} genannt. Desweiteren kann der Algorithmus um andere Techniken der prozeduralen Generierung erweitert werden, so können z.B. andere beliebige Beschränkungen auf die Ausgabe angewendet werden. \at{@visual}
+        Die selbe Methodik kann auch auf 2D Gittern angewendet werden; dies wird dann auch \textit{Texture Synthesis} genannt. Desweiteren kann der Algorithmus um andere Techniken der prozeduralen Generierung erweitert werden, so können z.B. andere beliebige Beschränkungen auf die Ausgabe angewendet werden. \at{@visual}
         
         Die Ausgabe des Algorithmus kann auch durch Soft-Constraints beschränkt werden. Ebenso kann Symmetrie, Spiegelung und Drehung, in der Ausgabe erzwungen werden. Beide Ansätze wurden nicht weiter in dieser Arbeit betrachetet. Es wird empfohlen, dass der Algorithmus nicht das ganze Gitter auf einmal löst, damit Widersprüche nicht zu einem kompletten Neustart führen. Stattdessen sollen iterativ kleine Abschnitte für sich solange gelöst werden bis eine valide Ausgabe entsteht \ref{fig:ms_algorithm}. In dieser Arbeit wurde darauf verzichtet.
         
         \input{data/ms_algorithm/figure.tex}
         
     \subsection{Wave Function Collapse}
-        \textit{Wave Function Collapse} ist eine Weiterentwicklung des Model Sythesis Algorithmus \cite{gumin}. Die Kernidee der Generierung mittels einem Beispiel bleibt und wird um drei Aspekte erweitert:
+        \textit{Wave Function Collapse} ist eine Weiterentwicklung des Model Sythesis Algorithmus \cite{gumin}. Der Name ist eine Anspielung auf die Quantenphysik. So könnte man Quantenpartikel in Superposition mit den Zellen des Gitters vergleichen. Die Zellen haben auch mehrere mögliche finale Zustände bis sie observiert werden und in einen festen Zustand collapsen. Mathematisch besteht aber keine Beziehung. Auch werden andere Begriffe wie z.B. Knoten zu Zelle umbenannt und das Gitter als Wave bezeichnet. Die Kernidee der Generierung mittels einem Beispiel bleibt und wird um drei Aspekte erweitert:
         \begin{enumerate}
-        \item Anstatt nur Bauteile nebeneinander anzuordnen, können nun auch überlappende Teile des Beispiels aus einem Beispiel automatisch extrahiert werden. 
-        \item In jeder Iteration wird die Zelle mit der niedrigsten Entropie zuerst betrachtet. 
-        \item Und bei Bauteil-basierten Beispielen werden Symmetrien von Bauteilen für eine kompaktere Definition ausgenutzt.
+        \item Bauteile können automatisch aus einem Beispiel extrahiert werden.
+        \item Im Algorithmus werden die Zellen beginnend mit der niedrigsten Entropie abgearbeitet. 
+        \item Spiegelungen und Reflexionen von Bauteilen werden automatisch erzeugt und verwendet.
         \end{enumerate}
         Der Algorithmus ist in Abbildung \ref{fig:wfc_gumin} dargestellt. Abbildung \ref{fig:wfc_overview} zeigt ein paar Beispiele und mögliche Ausgaben.
         
         \input{data/wfc_gumin.tex}
         \input{data/wfc_overview/figure.tex}
         
-        Der Name Wave Function Collapse ist eine Anspielung auf die Quantenphysik. So könnte man Quantenpartikel in Superposition mit den Zellen des Gitters vergleichen. Die Zellen haben auch mehrere mögliche finale Zustände bis sie observiert werden und in einen festen Zustand collapsen. Mathematisch besteht aber keine Beziehung. Auch werden andere Begriffe wie z.B. Knoten zu Zelle umbenannt und das Gitter als Wave bezeichnet.
         
-        \at{@incomplete generalization to NxN Überlappung}
+        \at{@flow von oben nach unten lesen und wenn nötig anpassen}
         
-        Die Reihenfolge in der die Zellen observiert werden, hat einen Einfluss auf die Laufzeit. Bei Model Synthesis werden Zellen einfach nach ihrer Reihenfolge im Gitter abgearbeitet. Der Vorteil ist, dass keine Suche der nächsten Zelle nötig ist, aber es hat zum Nachteil, dass die Ausgabe sichtbare Artefakte enthällt. Man kann erkennen, ob zuerst die Reihen oder erst die Spalten abgearbeitet wurden. In Abbildung \ref{fig:directional_bias} wird der Unterschied zwischen den beiden Herangehungsweisen dargestellt. Wäre bekannt welche Zelle den meisten Fortschritt zur Lösung und die geringste Chance auf einen Widerspruch birgt, könnte stets diese Zelle zuerst betrachtet werden. Doch Merrel zeigt im Anhang seines Papers \cite{merrel}, dass die Entscheidung, ob eine Ausgabe vervollständigt werden kann, ein NP-vollständiges Problem ist. 
+        \subsubsection{Entropie}
+            Die Reihenfolge in der die Zellen observiert werden, hat einen Einfluss auf die Laufzeit. Bei Model Synthesis werden Zellen einfach nach ihrer Reihenfolge im Gitter abgearbeitet. Der Vorteil ist, dass keine Suche der nächsten Zelle nötig ist, aber es hat zum Nachteil, dass die Ausgabe sichtbare Artefakte enthällt. Man kann erkennen, ob zuerst die Reihen oder erst die Spalten abgearbeitet wurden. In Abbildung \ref{fig:directional_bias} wird der Unterschied zwischen den beiden Herangehungsweisen dargestellt. Wäre bekannt welche Zelle den meisten Fortschritt zur Lösung und die geringste Chance auf einen Widerspruch birgt, könnte stets diese Zelle zuerst betrachtet werden. Doch Merrel zeigt im Anhang seines Papers \cite{merrel}, dass die Entscheidung, ob eine Ausgabe vervollständigt werden kann, ein NP-vollständiges Problem ist. 
+            
+            \input{data/directional_bias/figure.tex}
+            
+            Einfacher ist es eine Heuristik zu definieren, die simpel zu berechnen ist und meistens einen besseren Ansatz bietet. Hierfür wird die Entropie als Maß eingeführt. Sie beschreibt das Maß an Ungewissheit über den finalen Zustand einer Zelle. Ist eine Zelle observiert, hat sie nur noch einen Zustand und die Entropie ist minimal, während eine Zelle mit vielen Möglichkeiten eine hohe Entropie hat. Die Entropie gibt auch Information darüber wie sehr eine Zelle durch ihre Umgebung beschränkt wird. Sie wird mit der Formel der Shannon-Entropie \cite{shannon} berechnet. 
+            
+            \input{data/entropy.tex}
         
-        \input{data/directional_bias/figure.tex}
         
-        Einfacher ist es eine Heuristik zu definieren, die simpel zu berechnen ist und meistens einen besseren Ansatz bietet. Hierfür wird die Entropie als Maß eingeführt. Sie beschreibt das Maß an Ungewissheit über den finalen Zustand einer Zelle. Ist eine Zelle observiert, hat sie nur noch einen Zustand und die Entropie ist minimal, während eine Zelle mit vielen Möglichkeiten eine hohe Entropie hat. Die Entropie gibt auch Information darüber wie sehr eine Zelle durch ihre Umgebung beschränkt wird. Sie wird mit der Formel der Shannon-Entropie \cite{shannon} berechnet. 
+        \subsubsection{Symmetrie}
+            \at{@naming Umfeld statt Region hier schon einführen}
+            Ziel des Model Synthesis Algorithmus ist es, eine große Anzahl lokal ähnlicher Ausgaben zu generieren \cite{merrel}. Ähnlichkeit wird erreicht, wenn jede kleine Region der Ausgabe zu Regionen des Beispiels passt \ref{fig:wfc_resemblance}. Die wahrgenommene Ähnlichkeit wird verbessert, wenn das Verhältnis der Häufigkeiten von Regionen der Verteilung im Beispiel gleicht. Im Wave Function Collapse wird dieses Kriterium erweitert. Die Regionen können nun auch Drehungen und Spiegelungen der Regionen im Beispiel sein \cite{gumin}.
+            
+            \input{data/wfc_resemblance/figure.tex}
+            
+            Desweiteren wird auch eine Annotation für manuell erstellten Bauteile definiert, mit der ein Nutzer einem Bauteil eine Symmetriegruppe zuweisen kann\cite{gumin}. Beim Einlesen generiert der Algorithmus basiert auf dieser Symmetriegruppe weitere Bauteil die im weiteren Prozess verwendet werden. Da sich diese Arbeit nicht mit Beispielen aus Bauteilen befässt sondern primär diese automatisch extrahiert, bleibt dieser Aspekt ungenutzt.
         
-        \input{data/entropy.tex}
         
-        Der Zerteilung eines Beispiels in Bauteile muss manuell passieren. Soll nun ein Bauteil auch in einer anderen Orientierung oder Spiegelung in der Ausgabe vorkommen müssen diese Variationen explizit angelegt werden. Will man nun ein Bauteil leicht verändern, so muss man auch alle Variationen manuel anpassen. Um diesen aufwendigen Prozess zu automatisieren definiert Gumin eine Gruppe von Symmetriearten mit denen eine Nutzerin ihre Bauteile annotieren kann. Der Algorithmus erkennt diese Annotationen und generiert vor Beginn automatisch die Variationen. Da sich diese Arbeit nicht mit Beispielen aus Bauteilen befässt, bleibt dieser Aspekt ungenutzt.
+        \subsubsection{Extraktion}
+            \at{@incomplete was ist frequenz, welche Himmelsrichtungen bei gumin}
+            
+            Zuvor musste der Nutzer das gewünschte Beispielmodell oder Beispielbild manuel in einzelne gleichgroße Bauteile zerlegen, aus denen der Algorithmus dann neue Modelle und Bilder generiert. Wave Function Collapse nutzt einen Algorithmus \ref{fig:wfc_extraction} zur Generierung dieser Bauteile \cite{gumin}. Die größe der Bauteile ist dabei freiwählbar, aber sie sollte so gewählt sein, das sie zum genutzen Beispiel passt, damit die im Beispiel existierenden Muster erhalten bleiben.  \at{@incomplete vorher Bauteil nun Umfeld...}. Wird das Umfeld zu klein gewählt, können nur Ausschnitte der gewünschten Muster erhalten werden, die Muster selbst gehen verloren. Während ein zu großes Umfeld auch die Anordnung der Muster im Beispiel erhällt, was unerwünscht ist und im extremen Fall dazu führt, dass nur noch exakte Kopien des Beispiels ohne Variation in der Ausgabe vorkommen. Das Umfeld einens Pixel ist in dieser Arbeit stets seine Moore-Nachbarschaft, also die direkt angrenzenden Pixel sowie die entlang der Diagonalen.
+                        
+            \input{data/wfc_extraction}
+            
+            In Abbildung \ref{fig:extract_wrapping} ist der Ablauf dargestellt. Aus dem Beispiel werden die Umfelder ausgelesen. In der Abbildung wird vertikales Wrapping \at{@translation} genutzt, ist das vom Nutzer nicht erwünscht so würden Umfelder die den Rand des Beispiels überschreiten einfach verworfen und nicht weiter verwendet. Die Zustände ergeben sich aus den einzigartigen Umfelder. Sind mehrere Umfelder gleich, so hat der entsprechende Zustand einen höhere Frequenz. Aus der Gesamtanzahl an Zuständen und deren Frequenzen lässt sich die Wahrscheinlichkeit jedes Zustands berechen. Im Algorithmus wird dies beachtet, damit auch die globale Verteilung von Umfeldern in der Ausgabe der Verteilung im Beispiel ähnelt.
+            
+            \input{data/extract_wrapping/figure.tex}
     
     
     \subsection{Gitter, Graphen, Triangulierung, Voronoi}
-    
         \at{@incomplete Definition von Gitter und Graph in dieser Arbeit}
         
         \url{https://en.wikipedia.org/wiki/Delaunay_triangulation}\\
@@ -130,17 +149,12 @@ To be done.
         
         \subsubsection{Gitter}
         \subsubsection{Graphen}
-        \subsubsection{Triangulierung, Quadrilierung}
+            
         \subsubsection{Delaunay Triangulation}
-            \begin{itemize}
-            \item Defintion der Triangulierung
-            \item \at{@visual}
-            \end{itemize}
+            \at{@incomplete Definition, Algorithmus und @visual}
+            
         \subsubsection{Voronoi Diagramm}
-            \begin{itemize}
-            \item Definition
-            \item nützliche Eigenschaften
-            \end{itemize}
+            \at{@incomplete Definition, nützliche Eigenschaften}
 
 
 
@@ -148,8 +162,9 @@ To be done.
 
 \section{Wave Function Collapse auf Graphen}
     In diesem Abschnitt wir dargestellt wie der Wave Function Collapse Algorithmus erweitert wird, so dass die Ausgabe nicht nur auf einem Gitter von Zellen geschehen kann, sondern auch auf Zellen mit freier Anordnung und Verteilung, einem Graphen, arbeiten kann. Es wird erklärt welche Aspekt des Algorithmus angepasst werden und welche beibehalten werden können. Desweiteren wird ein neues Konzept names \textit{Heat} eingeführt, welches dem Nutzer erlaubt die erzielte Ähnlichkeit zum Beispiel zu verringern um die Erfolgschance des Algorithmus zu verbessern.
+
     
-    \subsection{Beschränkung des Wave Function Collapse und Idee zur Erweiterung}
+    \subsection{Beschränkung des Algorithmus und Idee zur Erweiterung}
         \@todo(viktor):{titel hat einen umbruch}
         
         Die ursprüngliche Form des Wave Function Collapse nimmt ein 2D Pixelmuster oder Tilesets als Beispiel und produziert darauß wieder 2D Muster. 
@@ -171,41 +186,12 @@ To be done.
     
     
     \subsection{Regelextraktion}
-        Der Algorithmus weist jeder Zelle des Graphen einen Zustand zu, so dass zwei Bedingungen gelten. Erstens muss der Zustand einer Zelle in mindestens einer Richtung mit den Zuständen aller Nachbarzellen überlappen können. Zweistens soll die Richtung der Überlappung möglichst ähnlich der Richtung zum Nachbarn sein.
+        \at{@incomplete Diagonale Regeln, warum}
+        \at{@placement ?das mit Heat zusammenfassen?}
         
-        Ein Zustand besteht aus dessen Umfeld und Frequenz im Beispiel. Im Beispiel, das ein Quadratgitter ist, können Umfelder in acht Richtungen überlappen; im Norden, Süden, Westen, Osten und in den diagonalen Himmelsrichtungen. 
-        
-        Die Regeln welche Zustände überlappen und welche nicht, werden vor dem Start des Algorithmus aus dem Beispiel extrahiert. Dafür wird für jeden Pixel des Beispiels sein Umfeld notiert. Dies wird in dieser Arbeit als Wrapping bezeichnet, wobei Wrapping für die vertikalen Ränder und die horizontalen Ränder separat erlaubt oder verboten werden kann.
-        
-        Ist der Graph ein Quadratgitter können die diagonalen Richtungen bei der Betrachtung entfallen, ohne dass es einen Einfluss auf die Qualität der Ausgabe hat. Die reguläre Struktur führt dazu, dass wenn für eine Zelle A der Nachbar von A im Norden(An) passt und der Nachbar im Westen von An passt, dann muss auch der Nachbar von A im Nordwesten passen. \at{@wording @visual} \at{@incomplete Symmetrie und Transitivität der Regeln}
-        
+        Ist der Graph ein Quadratgitter können die diagonalen Richtungen bei der Extraktion und im Algorithmus entfallen, ohne dass es einen Einfluss auf die Qualität der Ausgabe hat. Die reguläre Struktur des Gitters führt dazu, dass wenn für eine Zelle A der Nachbar von A im Norden(An) passt und der Nachbar im Westen von An passt, dann muss auch der Nachbar von A im Nordwesten passen.
+                
         Jeder Zelle des Graphen ist am Ende nur noch genau ein Zustand zugewiesen. Dieser kann aber nicht direkt durch sein Umfeld dargestellt werden, da das Umfeld eines Zustands zur Ermittlung der Überlappungen dient und deswegen aus mehr als einem Pixel, also einem Farbwert besteht. In dieser Arbeit wird der Pixel in der Mitte des Umfelds als der tatsächliche Farbwert einer Zelle zur Darstellung genutzt. \at{@visual}
-        \\
-        
-        ////////////////////////////////////////////////
-        \\
-        
-        \at{@placement das ist teils allgemein zum algorithmus und nur teils wirklich was neues für graphen }
-        
-        
-        Ziel des Model Synthesis Algorithmus ist es, eine große Anzahl lokal ähnlicher Ausgaben zu generieren \cite{merrel}. Ähnlichkeit wird erreicht, wenn jede kleine Region der Ausgabe zu Regionen des Beispiels passt \ref{fig:wfc_resemblance}. Die wahrgenommene Ähnlichkeit wird verbessert, wenn das Verhältnis der Häufigkeiten von Regionen der Verteilung im Beispiel gleicht. Im Wave Function Collapse wird dieses Kriterium erweitert. Die Regionen können nun auch Drehungen und Spiegelungen der Regionen im Beispiel sein \cite{gumin}.
-        
-        \input{data/wfc_resemblance/figure.tex}
-        
-        Anstatt eine Ausgabe zu generieren und dann zu prüfen ob diese dem Beispiel ähnelt, kann das Beispiel erst in Bauteile zerlegen werden und dann aus diesen eine Ausgabe erstellt werden. \at{@incomplete}
-        
-        
-        
-        Die Region um eine Zelle ist, in dieser Arbeit, ihre Moore-Nachbarschaft. Diese Region um einen Pixel des Beispiels wird auch als sein Umfeld bezeichnet \at{@naming Nachbarschaft statt Umfeld}. Es können auch andere Formen und Größen gewählt werden, aber diese müssen zu den genutzen Beispielen passen, damit die in den Beispielen existierenden Muster optimal genutzt werden. Wird das Umfeld zu klein gewählt, können nur Ausschnitte der gewünschten Muster erhalten werden, die Muster selbst gehen verloren. Während ein zu großes Umfeld auch die Anordnung der Muster im Beispiel erhällt, was unerwünscht ist und im extremen Fall dazu führt, dass nur noch exakte Kopien des Beispiels ohne Variation in der Ausgabe vorkommen.
-        
-        In Abbildung \ref{fig:extract_wrapping} \at{@incomplete Frequenz vorher nennen?} ist der Ablauf dargestellt. Aus dem Beispiel werden die Umfelder ausgelesen. In der Abbildung wird vertikales Wrapping \at{@translation} genutzt, ist das vom Nutzer nicht erwünscht so würden Umfelder die den Rand des Beispiels überschreiten einfach verworfen und nicht weiter verwendet. Die Zustände ergeben sich aus den einzigartigen Umfelder. Sind mehrere Umfelder gleich, so hat der entsprechende Zustand einen höhere Frequenz. Aus der Gesamtanzahl an Zuständen und deren Frequenzen lässt sich die Wahrscheinlichkeit jedes Zustands berechen. Im Algorithmus wird dies beachtet, damit auch die globale Verteilung von Umfeldern in der Ausgabe der Verteilung im Beispiel ähnelt.
-        
-        Nun wird jeder Zustand mit jedem anderen und sich selbst auf Überlappung geprüft \at{@visual simpel halten}. \at{@incomplete Himmelsrichtungen und warum diagonale/besseres Sampling}. Da sich diese Eigenschaft nicht während des Ablaufs ändert und nur vom Beispiel anhängt, kann eine Lookuptabelle für jedes Zustandspaar und jede Himmelsrichtung vor Beginn erstellt werden.
-        
-        \input{data/extract_wrapping/figure.tex}
-        
-        ////////////////////////////////////////////////
-        \\
         
         
     \subsection{Heat \at{@naming}}
