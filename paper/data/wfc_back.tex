@@ -4,7 +4,8 @@
         \rule{\linewidth}{0.4pt}
         \@todo(viktor):{genauer ausformulieren}
         \begin{enumerate}
-            \item Führe den nächsten Schritt aus: \begin{enumerate}
+            \item \at{@incomplete schritt nummer startet bei 0}
+            \item Führe den nächsten \textbf{Schritt} aus: \begin{enumerate}
                 \item \textbf{Search}: Finde die Zellen mit der geringsten Entropie \begin{enumerate}
                     \item Sind alle Zellen collapsed $\rightarrow$ \textbf{Done}
                     \item Erstelle ein Liste der gefundenen Zellen
@@ -30,12 +31,12 @@
                     \item Ist die Superpostition des Nachbars nun leer $\rightarrow$ \textbf{Backtrack}
                 \end{enumerate}
                 
-                \item \textbf{Backtrack}: \begin{enumerate}
-                    \item Gehe zum gewünschten Schritt zurück
-                    \item Gehe eine Phase in dem Schritt zurück
-                    \item Füge alle Zustände aller Zellen, dessen Entfernungszeitpunkt nun in einem zukünftigen Schritt liegt, wieder in die Superposition der Zelle ein
-                \end{enumerate}
-                \item Sonst \textbf{Continue}: zum nächsten Schritt
+                \item Geh zum nächsten \textbf{Schritt} \at{@incomplete schritt nummer hoch}
+            \end{enumerate}
+            \item \textbf{Backtrack}: \begin{enumerate}
+                \item Gehe zum gewünschten Schritt zurück \at{@incomplete schritt nummer}
+                \item Gehe eine Phase in dem Schritt zurück
+                \item Füge alle Zustände aller Zellen, dessen Entfernungszeitpunkt nun in einem zukünftigen Schritt liegt, wieder in die Superposition der Zelle ein
             \end{enumerate}
             \item \textbf{Done}: Gib das Resultat aus
         \end{enumerate}
