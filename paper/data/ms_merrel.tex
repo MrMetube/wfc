@@ -10,8 +10,9 @@
         \item  $M' = M$ ohne die Knotenpunkte $B$ und deren bisherigen Bauteilen
         \item Arbeite alle Knotenpunkte von $B$ ab:
         \subitem Wähle einen Knotenpunkte aus und weise ihm ein konsistentes Bauteil zu
-        \subitem Ist $M'$ nicht mehr konsistent, dann brich ab
-        \subitem Füge diesen Knotenpunkt in $M'$ ein
+        \subitem Prüfe alle Knotenpunkte in $M'$ ob noch mindestens ein Bauteil passt
+        \subitem Existiert ein Knotenpunkt ohne mögliches Bauteil dann ist $M'$ nicht mehr konsistent
+        \subitem Dann: Brich ab. Sonst: Füge diesen Knotenpunkt in $M'$ ein
         \item Wenn $M'$ noch konsistent ist, dann $M = M'$
         \end{enumerate}
         
