@@ -2,8 +2,8 @@
     \includegraphics[width=\linewidth]{data/ms_algorithm/1.png}
     
     \caption{
-         Visualisierung des Ablaufs des Model Synthesis Algorithmus \cite{merrel}.
-         Die Ausgabe wird mit dem leeren Zustand initialisiert. Dann werden Ausschnitte(rot) geleert und jeder Zelle werden alle Zustände zugewiesen. Die Region wird gelöst und die nächste Region überschneidet sich mit der ersten.
+         Ablauf des Model Synthesis Algorithmus \cite{merrel}.
+         Das Modell wird mit leeren Bauteilen initialisiert. Dann werden Ausschnitte(rot) geleert und jedem Knotenpunkt werden alle Bauteile zugewiesen. Jedem Knotenpunkt wird ein Bauteil zugewiesen, so dass der Ausschnitt konsistent bleibt. Der nächste Ausschnitte überschneidet sich mit der ersten. Der Algorithmus ist fertig wenn alle Knotenpunkte verändert wurden.
     }
     \label{fig:ms_algorithm}
 \end{figure}

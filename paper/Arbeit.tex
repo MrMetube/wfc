@@ -78,19 +78,25 @@
     \at{@incomplete Einleitender Satz}
     
     \subsection{Model Synthesis}
-        Mit dem \textit{Model Synthesis} \cite{merrel} Algorithmus \ref{fig:ms_merrel} können, basiert auf einem 3D Beispielmodell, eine große Menge an ähnlichen 3D Modellen prozedural generiert werden (siehe Abbildung \ref{fig:ms_output}). Das synthesierte/generierte Model wird auf einem 3D Gitter iterativ generiert, indem jedem Knotenpunkt des Gitters ein Teil des Beispielmodells zugewiesen wird. Das Beispiel muss vorher in kleinere gleichgroße Bauteile zerlegt werden. Jedem Knotenpunkt wird zu Beginn die Menge aller Bauteile als seine Auswahlmöglichkeiten zugewiesen. Mit jeder Iteration wird bei einem Knotenpunkt ein Bauteil seiner Zustandsmenge ausgewählt. Danach werden alle Nachbarn geprüft, so dass sie nur noch passende Bauteile in ihrer Zustandsmenge behalten. Hierfür wird eine globale Suche verwendet, andere Methoden beschränkten sich zuvor nur auf lokale Suchen. Eine globale Suche ist besser, weil jedes Bauteil einen weitreichenden Einfluss auf das gesamte Gitter haben kann. 
+        Mit dem \textit{Model Synthesis} \cite{merrel} Algorithmus \ref{fig:ms_merrel} können, basiert auf einem 3D Beispielmodell, eine große Menge an ähnlichen 3D Modellen prozedural generiert werden (siehe Abbildung \ref{fig:ms_output}). Das synthesierte/generierte Modell wird auf einem 3D Gitter iterativ generiert, indem jedem Knotenpunkt des Gitters ein Teil des Beispielmodells zugewiesen wird. Das Beispiel muss vorher in kleinere gleichgroße Bauteile zerlegt werden. Jedem Knotenpunkt wird zu Beginn die Menge aller Bauteile als seine Auswahlmöglichkeiten zugewiesen. Mit jeder Iteration wird bei einem Knotenpunkt ein Bauteil seiner Zustandsmenge ausgewählt. Danach werden alle Nachbarn geprüft, so dass sie nur noch passende Bauteile in ihrer Zustandsmenge behalten. Hierfür wird eine globale Suche verwendet, andere Methoden beschränkten sich zuvor nur auf lokale Suchen. Eine globale Suche ist besser, weil jedes Bauteil einen weitreichenden Einfluss auf das gesamte Gitter haben kann. 
         
-        \input{data/ms_merrel.tex}
         \input{data/ms_output/figure.tex}
+        
+        \at{@flow folgende abschnitte zu MS auf diese Begriffen umschreiben}
+        \at{@placement müssen vor dem Algorithmus erklärt werden}
+          Das generierte Modell wird auf einem Gitter von Knotenpunkten erstellt.
+        \\Ein Modell ist konsistent, wenn jedes Bauteil so angeordnet ist, dass die Nachbarn eines Bauteils im Modell auch Nachbarn im Beispiel sind.
+        \\Ein simples konsistentes Modell ist z.B. ein leeres Modell.
+            
+        \input{data/ms_merrel.tex}
+        \input{data/ms_algorithm/figure.tex}
         
         Damit die Ausgabe eine sinnvolle Anordnung der Bauteile ergibt, werden nur Bauteile die nebeneinander in einer bestimmten Richtung im Beispiel sind, in der Ausgabe nebeneinander in dieser Richtung platziert. Dadurch ist garantiert, dass jede kleine Region der Ausgabe mindestens einer Region im Beispiel gleicht. Da an jedem Knotenpunkt meist mehr als ein Bauteil passen würde und die Auswahl per Zufall geschieht, ist es unwahrscheinlich, dass die Ausgabe genau dem Beispiel im ganzen gleicht. Bei der Auswahl des Bauteils für einen Knoten wird die Wahrscheinlichkeit jedes Bauteils auch mit seiner Häufigkeit im Beispiel gewichtet, wodurch über eine große Menge an Ausgaben die Häufigkeit einzelner Bauteile der tatsächlichen Häufigkeit im Beispiel gleicht. Für eine einzelne Ausgabe bedeutet dies, dass die globale Verteilung der Bauteile auch tendenziell der Verteilung im Beispiel gleicht. 
         \at{@incomplete Vielleicht Resemblance schon hier nennen}
         
-        Die selbe Methodik kann auch auf 2D Gittern angewendet werden; dies wird dann auch \textit{Texture Synthesis} genannt. Desweiteren kann der Algorithmus um andere Techniken der prozeduralen Generierung erweitert werden, so können z.B. andere beliebige Beschränkungen auf die Ausgabe angewendet werden. \at{@visual}
+        Die selbe Methodik kann auch auf 2D Gittern angewendet werden; dies wird dann auch \textit{Texture Synthesis} genannt. Die Ausgabe des Algorithmus kann auch durch Soft-Constraints beschränkt werden (siehe Abbildung \ref{fig:ms_constrained}). Ebenso kann Symmetrie, Spiegelung und Drehung, in der Ausgabe erzwungen werden. Beide Ansätze wurden nicht weiter in dieser Arbeit betrachetet. Es wird empfohlen, dass der Algorithmus nicht das ganze Gitter auf einmal löst, damit Widersprüche nicht zu einem kompletten Neustart führen. Stattdessen sollen iterativ kleine Abschnitte für sich solange gelöst werden bis eine valide Ausgabe entsteht (siehe Abbildung \ref{fig:ms_algorithm}). In dieser Arbeit wurde darauf verzichtet.
         
-        Die Ausgabe des Algorithmus kann auch durch Soft-Constraints beschränkt werden. Ebenso kann Symmetrie, Spiegelung und Drehung, in der Ausgabe erzwungen werden. Beide Ansätze wurden nicht weiter in dieser Arbeit betrachetet. Es wird empfohlen, dass der Algorithmus nicht das ganze Gitter auf einmal löst, damit Widersprüche nicht zu einem kompletten Neustart führen. Stattdessen sollen iterativ kleine Abschnitte für sich solange gelöst werden bis eine valide Ausgabe entsteht \ref{fig:ms_algorithm}. In dieser Arbeit wurde darauf verzichtet.
-        
-        \input{data/ms_algorithm/figure.tex}
+        \input{data/ms_constrained/figure.tex}
         
     \subsection{Wave Function Collapse}
         \textit{Wave Function Collapse} ist eine Weiterentwicklung des Model Sythesis Algorithmus \cite{gumin}. Der Name ist eine Anspielung auf die Quantenphysik. So könnte man Quantenpartikel in Superposition mit den Zellen des Gitters vergleichen. Die Zellen haben auch mehrere mögliche finale Zustände bis sie observiert werden und in einen festen Zustand collapsen. Mathematisch besteht aber keine Beziehung. Auch werden andere Begriffe wie z.B. Knoten zu Zelle umbenannt und das Gitter als Wave bezeichnet. Die Kernidee der Generierung mittels einem Beispiel bleibt und wird um drei Aspekte erweitert:
@@ -272,11 +278,6 @@
         
         \at{@placement}
         Der Algorithmus ist in Abbildung \ref{fig:wfc_back} dargestellt. Für jeden Schritt des Algorithmus wird auch die Liste der gefundenen Zellen in der Search-Phase gespeichert. Wenn in der Pick-Phase eine Zelle ausgewählt wird, wird diese aus der Liste entfernt, damit diese beim Backtracken nicht erneut gewählt wird. Ebenso werden in der Observe-Phase alle wählbaren Zustände gespeichert und mit jedem Lösungsversuch wird der gewählte Zustand entfernt. Nun wurde aber eine Schwachstelle in den Algorithmus eingeführt. Wenn zuvor in der Search-Phase keine Zellen in Superposition mehr gefunden wurden, bedeutete dies, dass alle Zellen tatsächlich collapsed waren. Nun kann es sein, dass alle Zellen, die gefunden wurden, zu einem Widerspruch führen würden und entfernt wurden. Somit würde keine Zelle mehr wählbar sein. Auch in der Observe-Phase war es zuvor unmöglich keinen Zustand mehr auswählen zu können, da eine Zelle mit leerer Zustandsmenge bereits zuvor als Widerspruch identifiziert wurden wäre. In diesen Fällen wurde ein Widerspruch erreicht und es muss zum Backtracking kommen. Schließlich wurden alle noch möglichen Entscheidungen bereits getroffen und ausgewertet und keine Lösung gefunden. Somit führt dieser Schritt zwar nicht direkt zu einem Widerspruch in einer Zelle, aber alle folgen Schritte werden irgendwann zu einem Widerspruch führen. Als Anmerkung: wird auf diese Weise bis zum ersten Schritt gebacktrackt und führen dann auch dort alle möglichen Entscheidungen zu einem Widerspruch, so kann die Kombination aus Beispiel und Graph keine Ausgabe ergeben.
-        
-    \subsection{Überlappung und Heat \at{@naming}}
-        \at{@incomplete was muss zur implementierung gesagt werden, was nicht schon an anderer stelle ein zuhause gefunden hat}
-
-
 
 
 
@@ -324,7 +325,7 @@
     \begin{itemize}
     \item Vergleich zum WFC, wie und was vergleichen?
     \item Lokale Ähnlichkeit im Vergleich zum Input
-    \item Linienmuster und Flächenmuster  in Beispielen
+    \item Linienmuster und Flächenmuster in Beispielen
     \end{itemize}
 
 

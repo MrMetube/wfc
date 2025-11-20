@@ -2,9 +2,17 @@
     \centering
     \begin{minipage}{\linewidth}
         \rule{\linewidth}{0.4pt}
-        
+         
         \begin{enumerate}
-        \item \@todo(viktor):{ the content}
+        \item $M_0$ ist ein simples konsitentes Modell. $M = M_0$
+        \subitem Wiederhole 2. bis 5. bis jeder Teil des Modells angepasst wurde
+        \item Wähle eine Menge $B$ an Knotenpunkten zur Bearbeitung
+        \item  $M' = M$ ohne die Knotenpunkte $B$ und deren bisherigen Bauteilen
+        \item Arbeite alle Knotenpunkte von $B$ ab:
+        \subitem Wähle einen Knotenpunkte aus und weise ihm ein konsistentes Bauteil zu
+        \subitem Ist $M'$ nicht mehr konsistent, dann brich ab
+        \subitem Füge diesen Knotenpunkt in $M'$ ein
+        \item Wenn $M'$ noch konsistent ist, dann $M = M'$
         \end{enumerate}
         
         \rule{\linewidth}{0.4pt}
