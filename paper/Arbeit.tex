@@ -100,46 +100,42 @@
         
     \subsection{Wave Function Collapse}
         \textit{Wave Function Collapse} ist eine Weiterentwicklung des Model Sythesis Algorithmus \cite{gumin}. Der Name ist eine Anspielung auf die Quantenphysik. So könnte man Quantenpartikel in Superposition mit den Zellen des Gitters vergleichen. Die Zellen haben auch mehrere mögliche finale Zustände bis sie observiert werden und in einen festen Zustand collapsen. Mathematisch besteht aber keine Beziehung. Auch werden andere Begriffe wie z.B. Knoten zu Zelle umbenannt und das Gitter als Wave bezeichnet. Die Kernidee der Generierung mittels einem Beispiel bleibt und wird um drei Aspekte erweitert:
+        
         \begin{enumerate}
         \item Bauteile können automatisch aus einem Beispiel extrahiert werden.
         \item Im Algorithmus werden die Zellen beginnend mit der niedrigsten Entropie abgearbeitet. 
         \item Spiegelungen und Reflexionen von Bauteilen werden automatisch erzeugt und verwendet.
         \end{enumerate}
-        Der Algorithmus ist in Abbildung \ref{fig:wfc_gumin} dargestellt. Abbildung \ref{fig:wfc_overview} zeigt ein paar Beispiele und mögliche Ausgaben.
+        
+        Der Algorithmus ist in Abbildung \ref{fig:wfc_gumin} dargestellt. Abbildung \ref{fig:wfc_overview} zeigt ein paar Beispiele und daraus generierte Bilder.
         
         \input{data/wfc_gumin.tex}
         \input{data/wfc_overview/figure.tex}
         
         
-        \at{@flow von oben nach unten lesen und wenn nötig anpassen}
-        
         \subsubsection{Entropie}
-            Die Reihenfolge in der die Zellen observiert werden, hat einen Einfluss auf die Laufzeit. Bei Model Synthesis werden Zellen einfach nach ihrer Reihenfolge im Gitter abgearbeitet. Der Vorteil ist, dass keine Suche der nächsten Zelle nötig ist, aber es hat zum Nachteil, dass die Ausgabe sichtbare Artefakte enthällt. Man kann erkennen, ob zuerst die Reihen oder erst die Spalten abgearbeitet wurden. In Abbildung \ref{fig:directional_bias} wird der Unterschied zwischen den beiden Herangehungsweisen dargestellt. Wäre bekannt welche Zelle den meisten Fortschritt zur Lösung und die geringste Chance auf einen Widerspruch birgt, könnte stets diese Zelle zuerst betrachtet werden. Doch Merrel zeigt im Anhang seines Papers \cite{merrel}, dass die Entscheidung, ob eine Ausgabe vervollständigt werden kann, ein NP-vollständiges Problem ist. 
+            Bei Model Synthesis werden Zellen einfach nach ihrer Reihenfolge im Gitter abgearbeitet. Der Vorteil ist, dass keine Suche der nächsten Zelle nötig ist, aber es hat zum Nachteil, dass die Ausgabe sichtbare Artefakte enthällt (siehe Abbildung \ref{fig:directional_bias}). Man kann erkennen, ob zuerst die Reihen oder erst die Spalten abgearbeitet wurden. Wäre bekannt welche Zelle den meisten Fortschritt zur Lösung und die geringste Chance auf einen Widerspruch birgt, könnte stets diese Zelle zuerst betrachtet werden. Doch Merrel zeigt im Anhang seines Papers \cite{merrel}, dass die Entscheidung, ob eine Ausgabe vervollständigt werden kann, ein NP-vollständiges Problem ist. 
             
             \input{data/directional_bias/figure.tex}
             
-            Einfacher ist es eine Heuristik zu definieren, die simpel zu berechnen ist und meistens einen besseren Ansatz bietet. Hierfür wird die Entropie als Maß eingeführt. Sie beschreibt das Maß an Ungewissheit über den finalen Zustand einer Zelle. Ist eine Zelle observiert, hat sie nur noch einen Zustand und die Entropie ist minimal, während eine Zelle mit vielen Möglichkeiten eine hohe Entropie hat. Die Entropie gibt auch Information darüber wie sehr eine Zelle durch ihre Umgebung beschränkt wird. Sie wird mit der Formel der Shannon-Entropie \cite{shannon} berechnet. 
-            
+            Einfacher ist es eine Heuristik zu definieren. Hierfür wird die Shannon-Entropie \cite{shannon} als Maß eingeführt. Sie beschreibt das Maß an Ungewissheit in einem System, hier die Ungewissheit über den finalen Zustand einer Zelle. Ist eine Zelle observiert, hat sie nur noch einen Zustand und die Entropie ist 0, während eine Zelle mit vielen Möglichkeiten eine hohe Entropie hat. Die Entropie gibt auch Information darüber wie sehr eine Zelle durch ihre Umgebung beschränkt wird, weil Zellen mit vielen Beschränkungen nur noch wenige mögliche Zustände haben.             
             \input{data/entropy.tex}
         
         
         \subsubsection{Symmetrie}
-            \at{@naming Umfeld statt Region hier schon einführen}
             Ziel des Model Synthesis Algorithmus ist es, eine große Anzahl lokal ähnlicher Ausgaben zu generieren \cite{merrel}. Ähnlichkeit wird erreicht, wenn jede kleine Region der Ausgabe zu Regionen des Beispiels passt \ref{fig:wfc_resemblance}. Die wahrgenommene Ähnlichkeit wird verbessert, wenn das Verhältnis der Häufigkeiten von Regionen der Verteilung im Beispiel gleicht. Im Wave Function Collapse wird dieses Kriterium erweitert. Die Regionen können nun auch Drehungen und Spiegelungen der Regionen im Beispiel sein \cite{gumin}.
             
             \input{data/wfc_resemblance/figure.tex}
             
-            Desweiteren wird auch eine Annotation für manuell erstellten Bauteile definiert, mit der ein Nutzer einem Bauteil eine Symmetriegruppe zuweisen kann\cite{gumin}. Beim Einlesen generiert der Algorithmus basiert auf dieser Symmetriegruppe weitere Bauteil die im weiteren Prozess verwendet werden. Da sich diese Arbeit nicht mit Beispielen aus Bauteilen befässt sondern primär diese automatisch extrahiert, bleibt dieser Aspekt ungenutzt.
+            Desweiteren wird auch eine Annotation für manuell erstellten Bauteile definiert, mit der ein Nutzer einem Bauteil eine Symmetriegruppe zuweisen kann \cite{gumin}. Eine Symmetriegruppe gibt an, wie man ein Bauteil drehen und spiegeln kann. Beim Einlesen generiert der Algorithmus basiert auf dieser Symmetriegruppe weitere, entsprechend gedreht oder gespiegelte, Bauteil die im weiteren Prozess verwendet werden. Da sich diese Arbeit nicht mit Beispielen aus Bauteilen befässt sondern primär diese automatisch extrahiert, bleibt dieser Aspekt ungenutzt.
         
         
         \subsubsection{Extraktion}
-            \at{@incomplete was ist frequenz, welche Himmelsrichtungen bei gumin}
+            Zuvor musste der Nutzer das gewünschte Beispielmodell oder Beispielbild manuell in einzelne gleichgroße Bauteile zerlegen, aus denen der Algorithmus dann neue Modelle und Bilder generiert. Wave Function Collapse nutzt einen Algorithmus \ref{fig:wfc_extraction} zur Generierung dieser Bauteile \cite{gumin}. Die größe der Bauteile ist dabei freiwählbar, aber sie sollte so gewählt sein, das sie zum genutzen Beispiel passt, damit die im Beispiel existierenden Muster erhalten bleiben.  Sind die Bauteile zu klein gewählt, gehen Strukturen des Beispiels verloren. Während zu große Bauteile auch unerwünschte Strukturen im Beispiel enthalten, was im extremen Fall dazu führt, dass nur noch exakte Kopien des Beispiels ohne Variation in der Ausgabe vorkommen. Für Bilder wird in dieser Arbeit stets die Moore-Nachbarschaft jedes Pixels, also die direkt angrenzenden Pixel sowie die entlang der Diagonalen, als Bauteil verwendet. Dies wird auch als das Umfeld des Pixels beschrieben.
             
-            Zuvor musste der Nutzer das gewünschte Beispielmodell oder Beispielbild manuel in einzelne gleichgroße Bauteile zerlegen, aus denen der Algorithmus dann neue Modelle und Bilder generiert. Wave Function Collapse nutzt einen Algorithmus \ref{fig:wfc_extraction} zur Generierung dieser Bauteile \cite{gumin}. Die größe der Bauteile ist dabei freiwählbar, aber sie sollte so gewählt sein, das sie zum genutzen Beispiel passt, damit die im Beispiel existierenden Muster erhalten bleiben.  \at{@incomplete vorher Bauteil nun Umfeld...}. Wird das Umfeld zu klein gewählt, können nur Ausschnitte der gewünschten Muster erhalten werden, die Muster selbst gehen verloren. Während ein zu großes Umfeld auch die Anordnung der Muster im Beispiel erhällt, was unerwünscht ist und im extremen Fall dazu führt, dass nur noch exakte Kopien des Beispiels ohne Variation in der Ausgabe vorkommen. Das Umfeld einens Pixel ist in dieser Arbeit stets seine Moore-Nachbarschaft, also die direkt angrenzenden Pixel sowie die entlang der Diagonalen.
-                        
             \input{data/wfc_extraction}
             
-            In Abbildung \ref{fig:extract_wrapping} ist der Ablauf dargestellt. Aus dem Beispiel werden die Umfelder ausgelesen. In der Abbildung wird vertikales Wrapping \at{@translation} genutzt, ist das vom Nutzer nicht erwünscht so würden Umfelder die den Rand des Beispiels überschreiten einfach verworfen und nicht weiter verwendet. Die Zustände ergeben sich aus den einzigartigen Umfelder. Sind mehrere Umfelder gleich, so hat der entsprechende Zustand einen höhere Frequenz. Aus der Gesamtanzahl an Zuständen und deren Frequenzen lässt sich die Wahrscheinlichkeit jedes Zustands berechen. Im Algorithmus wird dies beachtet, damit auch die globale Verteilung von Umfeldern in der Ausgabe der Verteilung im Beispiel ähnelt.
+            In Abbildung \ref{fig:extract_wrapping} ist der Ablauf dargestellt. Aus dem Beispiel werden die Umfelder ausgelesen. In der Abbildung wird vertikales Wrapping \at{@translation} genutzt, ist das vom Nutzer nicht erwünscht so würden Umfelder die den Rand des Beispiels überschreiten einfach verworfen und nicht weiter verwendet. Die Zustände ergeben sich aus den einzigartigen Umfelder. Die Frequenz eines Umfelds gibt an wie oft es im Beispiel vorkommt. Sind mehrere Umfelder gleich, so hat der entsprechende Zustand einen höhere Frequenz. Aus der Gesamtanzahl an Zuständen und deren Frequenzen lässt sich die Wahrscheinlichkeit jedes Zustands berechen. Im Algorithmus wird dies beachtet, damit auch die globale Verteilung von Umfeldern in der Ausgabe der Verteilung im Beispiel ähnelt. Danach wird geprüft welche der gefundenen Umfelder überlappen. Es werden die Himmelrichtungen N, S, W und O geprüft und für später in einer Lookuptabelle gespeichert.
             
             \input{data/extract_wrapping/figure.tex}
     
