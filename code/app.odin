@@ -152,6 +152,8 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         imgui.text("Cells")
         imgui.checkbox("Show Cells", &show_cells)
         imgui.checkbox("Show Average Colors", &show_average_colors)
+        imgui.checkbox("Show Points", &show_points)
+        imgui.checkbox("Show Triangulation", &show_triangulation)
         imgui.checkbox("Show Voronoi Cells", &show_voronoi_cells)
         imgui.checkbox("Show Heat", &show_heat)
         imgui.checkbox("Show Entropy", &show_entropy)

@@ -33,14 +33,16 @@ cell_size_on_screen: v2
 
 show_cells          := true
 show_average_colors := true
+show_points         := false
+show_triangulation  := false
 show_voronoi_cells  := false
 
 show_step_details   := false
 show_heat           := false
-show_entropy        := true
+show_entropy        := false
 
 // @todo(viktor): visual dimension vs. point count for generates
-dimension: v2i = {100, 100}
+dimension: v2i = {15, 15}
 
 cells_background_color := V4(cast(v3) 0.4, 1)
 
@@ -250,8 +252,30 @@ main :: proc () {
             for cell, index in collapse.cells {
                 color_wheel := color_wheel
                 color := v4_to_rl_color(color_wheel[(index) % len(color_wheel)])
+                color = v4_to_rl_color(Emerald)
                 rl.DrawCircleV(world_to_screen(cell.p), 1, color)
                 draw_cell_outline(cell, color)
+            }
+        }
+        
+        if show_points {
+            for cell, index in collapse.cells {
+                color_wheel := color_wheel
+                color := v4_to_rl_color(color_wheel[(index) % len(color_wheel)])
+                color = v4_to_rl_color(Salmon)
+                rl.DrawCircleV(world_to_screen(cell.p), 3, color)
+            }
+        }
+        
+        if show_triangulation {
+            for cell, index in collapse.cells {
+                color_wheel := color_wheel
+                color := v4_to_rl_color(color_wheel[(index) % len(color_wheel)])
+                color = v4_to_rl_color(Green)
+                rl.DrawCircleV(world_to_screen(cell.p), 3, color)
+                for neighbour in cell.neighbours {
+                    rl.DrawLineEx(world_to_screen(cell.p), world_to_screen(neighbour.cell.p), 2, color)
+                }
             }
         }
         
@@ -694,9 +718,15 @@ preset_2 :: proc (generates: ^[dynamic] Generate_Kind) {
     
     append(generates, Generate_Noise {
         center = .5,
-        radius = {0.15, 0.51},
+        radius = {0.16, 0.51},
+    })
+    
+    append(generates, Generate_Circle {
+        radius = 0.277,
+        spiral_size = 1,
     })
 }
+
 preset_3 :: proc (generates: ^[dynamic] Generate_Kind) {
     clear(generates)
     append(generates, Generate_Grid {
