@@ -6,7 +6,7 @@
         \begin{enumerate}
         \item Erstelle eine Menge an Punkten
         
-        \item Generiere die Delaunay-Triangulierung \cite{bowyer} \cite{watson} \at{@visual} \begin{enumerate}
+        \item Generiere die Delaunay-Triangulierung mit dem Bowyer-Watson Algorithmus\cite{bowyer,watson} \begin{enumerate}
             \item Erstelle das Super-Dreieck so dass jeder Punkt innerhalb liegt
             
             \item Füge jeden Punkt schrittweise in die Triangulierung ein: \begin{enumerate}
@@ -30,7 +30,8 @@
             \item Finde alle Dreiecke einen Punkt teilen
             \item Die Schwerpunkte der Dreiecke sind die Eckpunkte der Zelle
             \item Verbinde die Eckpunkte der Zelle zu Kanten
-            \item Begrenze die Voronoizellen auf den gewünschten Bereich \ref{fig:voronoi_clipping}
+            \item Begrenze die Voronoizellen auf den gewünschten Bereich 
+            \subitem (siehe Abbildung \ref{fig:voronoi_clipping})
         \end{enumerate}
         
     \end{enumerate}

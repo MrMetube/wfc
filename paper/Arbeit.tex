@@ -89,7 +89,8 @@
         Die selbe Methodik kann auch für Beispielbilder benutzt werden, dies wird dann auch \textit{Texture Synthesis} genannt. In diesem Fall arbeitet der Algorithmus mit 2D Gittern und Bauteilen. Die Ausgabe des Algorithmus kann auch durch Soft-Constraints beschränkt werden (siehe Abbildung \ref{fig:ms_constrained}). Ebenso kann Symmetrie, Spiegelung und Drehung, in der Ausgabe erzwungen werden. Beide Ansätze wurden nicht weiter in dieser Arbeit betrachetet. Es wird empfohlen, dass der Algorithmus nicht das ganze Gitter auf einmal löst, damit Widersprüche nicht zu einem kompletten Neustart führen. Stattdessen sollen iterativ kleine Abschnitte für sich solange gelöst werden bis eine valide Ausgabe entsteht (siehe Abbildung \ref{fig:ms_algorithm}). In dieser Arbeit wurde darauf verzichtet.
         
         \input{data/ms_constrained/figure.tex}
-        
+    
+    
     \subsection{Wave Function Collapse}
         \textit{Wave Function Collapse} ist eine Weiterentwicklung des Model Sythesis Algorithmus \cite{gumin}. Der Name ist eine Anspielung auf die Quantenphysik. So könnte man Quantenpartikel in Superposition mit den Zellen des Gitters vergleichen. Die Zellen haben auch mehrere mögliche finale Zustände bis sie observiert werden und in einen festen Zustand collapsen. Mathematisch besteht aber keine Beziehung. Auch werden andere Begriffe wie z.B. Knoten zu Zelle umbenannt und das Gitter als Wave bezeichnet. Die Kernidee der Generierung mittels einem Beispiel bleibt und wird um drei Aspekte erweitert:
         
@@ -206,51 +207,24 @@
 
 
 \section{Umsetzung}
-    \at{@incomplete Einleitender Satz}
+    \at{@incomplete Einleitender Satz, was zur App sagen}
     
-    \subsection{Generierung von Graphen \at{@naming}}
+    \subsection{Generierung von Graphen}
+        Die Graphen auf denen der Wave Function Collapse arbeiten soll, werden in dieser Arbeit mit dem folgenden Algorithmus generiert \ref{fig:graph_gen}. Der Algorithmus nimmt als Eingabe eine Menge an Punkten, welche die Knotenpunkte des Graphen werden. Aus den Punkten wird eine Delaunay-Triangulierung erstellt. Hierfür wird er Boywer-Watson Algorithmus \cite{bowyer, watson} verwendet. Danach wird das Voronoi-Diagramm zu der Triangulierung gefunden. Der duale Graph der Delaunay-Triangulierung ist das Voronoi-Diagramm \at{@visual}, d.h. jeder Knotenpunkt des Voronoi-Diagramms entspricht einer Fläche der Triangulierung und jede Fläche im Voronoi-Diagramm entspricht einem Knotenpunkt in der Triangulierung. Die Kanten der Dreiecke geben an, welche Zellen aneinander angrenzen, während die Voronoizellen die Form einer Zelle für die Darstellung geben. In Abbildung \ref{fig:graph_examples} sind einige Beispiele von generierten Graphen dargestellt. Es ist zuerkennen, dass regelmäßige Gitter nur eine spezielle Form von Graphen darstellen. 
         
-        Generier eine Menge an 2D Punkten
-        Erstell die Delaunay Triangulierung
-            Bowyer-Watson
-        Finde das Voronoi Diagramm
-            Clipping
-        Presto!
+        \at{@citation delaunay und voronoi, wenn nicht schon vorher passiert ist.}
+        \at{@visual für Boywer-Watson algorithmus}
         
+        \input{data/graph_gen.tex}
+        \input{data/graph_examples/figure.tex}
         
-        \at{@flow}
-        \at{@flow}
-        \at{@flow}
-        \at{@flow}
-        \at{@flow}
-        
-        Für den Algorithmus ist es egal, auf welche Weise der Graph erstellt wurde. Da der Fokus dieser Arbeit nicht in der Generierung von Graphen lag, habe ich mich auf einen Ablauf beschränkt. Es wird eine Menge an Punkten erstellt, darauf wird eine Delaunay-Triangulierung generiert, welche den Graphen darstellt. Gleichzeitig ist der duale Graph einer solchen Triangulierung ein Voronoi-Diagramm, welches zur Darstellung für den Nutzer verwendet wurde.
-        
-        \at{@placement nochmal überdenken}
-        Man kann ein regelmäßiges Quadratgitter als eine spezielle Form von Voronoigraph ansehen. Jedes Quadrat kann als eine Voronoizelle angesehen werden, welche genau alle Punkte die am nächsten zu seinem Mittelpunkt enthällt. Die Nachbarn können nun explizit über die Kanten der Voronoizelle gefunden werden. Zuvor waren diese auch implizit durch die Koordinate des Quadrats im Gitter gegeben. Für den Algorithmus ist diese Unterscheidung egal und er generiert die gleiche Art von Ausgaben ohne weitere Anpassungen. \at{@visual} 
-        
-        \at{@incomplete Mehr zu diesem Prozess }
-        \at{@incomplete Delaunay und Bowyer-Watson \cite{bowyer} \cite{watson}}
-        \at{@incomplete Voronoi}
-        \at{@incomplete welche Settings gibt einem die App dafür}\at{@visual Beispiele der Generierung}
-        \at{@visual Delaunay Triangulierung und Voronoi Diagramme, dualer Graph}
-        \at{@visual \ref{fig:graph_gen}}
-        
-        \input{data/graph_gen.tex} % @todo(viktor): reference this
-        
-        
-        Für die Triangulierung habe ich mich ohne tiefere Beweggründe für den Boywer-Watson Algorithmus \at{@citation} entschieden. Der Algorithmus generiert die Triangulierung iterativ in dem jeder Punkt nacheinander eingefügt wird und der Graph angepasst wird, so dass es wieder eine Delaunay-Triangulierung ist.
-        Zur Hilfe erstellen wir ein Superdreieck, welches alle Punkte enthällt. Nun fügen wir einen Punkt ein und prüfen all bisher gefundenen Dreiecke, ob ihr Umkreis diesen Punkt enhällt. Ist der Punkt innerhalb des Umkreises kann das Dreieck nicht zur finalen Triangulierung gehören. Für alle diese Dreieck sammeln wir nun die Kanten. Jede Kante die nur einmal vorkommt ist teil der Hülle dieser Dreiecke, alle anderen Kanten sind innerhalb dieser Hülle, da sich zwei Dreiecke diese teilen. Diese inneren Kanten werden entfernt und für jede Ecke entlang der Hülle wird eine neue Kante zum eingefügten Punkt erstellt.
-        Am Ende entfernt alle Kanten zur den Eckpunkten des Superdreiecks aus der Triangulierung und erhällt die Delaunay-Triagulierung der Point-Cloud.
-        
-        Aus der Triangulierung erstellen wir das Voronoidiagram indem wir die Eckpunkte als Mittelpunkte der Voronoizellen nehmen. Die Kanten sagen uns welche Zellen benachbart sind. Um die Kanten der Voronoizelle zu finden nehmen wir von alle Dreiecke in denen der Punkt liegt den Mittelpunkt des Umkreises. Die Umkreismittelpunkte sind die Ecken der Voronoizelle. Die Kanten finden wir indem wir die Punkte nach ihrem Winkel um den Mittelpunkt der Zelle sortieren und dann der Reihe nach verbinden.
-        
-        Es ist normal, dass ein solches Voronoidiagram an den Rändern der Point-Cloud auch Zellen ergeben kann die auf einer Seite offen sind, weil die Kanten zwischen den Ecken der Zelle, den Umkreismittelpunkten, keinen Schnittpunkt haben. Ich habe mich dazu entschieden, bei solchen Zellen weitere Eckpunkte einzufügen, so dass das alle Zellen durch einen freigewählten rechteckigem Bereich begrenzt sind. Dafür prüfe ich ob ein Eckpunkt außerhalb des Bereichs liegt und finde dann den Schnittpunkt von der Kante zu dem Eckpunkt mit dem Rechteck des Bereichs und ersetze den Eckpunkt mit diesem Schnittpunkt. Dieser Schritt passiert so lange bis alle Eckpunkte innerhalb oder auf dem Rand des Bereichs liegen.
+        \at{@incomplete was muss noch im text vorkommen? warum voronoi clipping}
+        Es ist normal, dass ein solches Voronoi-Diagram an den Rändern Zellen ergeben kann die auf einer Seite offen sind, weil die Kanten zwischen den Ecken der Zelle, den Umkreismittelpunkten, keinen Schnittpunkt haben. Ich habe mich dazu entschieden, bei solchen Zellen weitere Eckpunkte einzufügen, so dass das alle Zellen durch einen freigewählten rechteckigem Bereich begrenzt sind. Dafür prüfe ich ob ein Eckpunkt außerhalb des Bereichs liegt und finde dann den Schnittpunkt von der Kante zu dem Eckpunkt mit dem Rechteck des Bereichs und ersetze den Eckpunkt mit diesem Schnittpunkt. Dieser Schritt passiert so lange bis alle Eckpunkte innerhalb oder auf dem Rand des Bereichs liegen.
             Siehe Abbildung \ref{fig:voronoi_clipping}.
 
         \input{data/voronoi_clipping/figure.tex}
-
-
+    
+    
     \subsection{Phasen \at{@naming}}
         \at{@placement Phasen und Backtracking gehören zusammen sonst gibt es keinen Grund das hier so aufzudröseln}
         \at{@incomplete Schritt als global und festen Begriff im Algorithmus darstellen}

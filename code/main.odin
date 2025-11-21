@@ -44,7 +44,7 @@ show_entropy        := false
 // @todo(viktor): visual dimension vs. point count for generates
 dimension: v2i = {15, 15}
 
-cells_background_color := V4(cast(v3) 0.4, 1)
+cells_background_color := v4{0.95, 0.95, 0.95, 1}
 
 File :: struct {
     data:    [] u8,
@@ -248,34 +248,27 @@ main :: proc () {
             spall_end()
         }
         
-        if show_voronoi_cells {
-            for cell, index in collapse.cells {
-                color_wheel := color_wheel
-                color := v4_to_rl_color(color_wheel[(index) % len(color_wheel)])
-                color = v4_to_rl_color(Emerald)
-                rl.DrawCircleV(world_to_screen(cell.p), 1, color)
-                draw_cell_outline(cell, color)
-            }
-        }
-        
         if show_points {
-            for cell, index in collapse.cells {
-                color_wheel := color_wheel
-                color := v4_to_rl_color(color_wheel[(index) % len(color_wheel)])
-                color = v4_to_rl_color(Salmon)
-                rl.DrawCircleV(world_to_screen(cell.p), 3, color)
+            for cell in collapse.cells {
+                color := v4_to_rl_color(Red)
+                rl.DrawCircleV(world_to_screen(cell.p), 6, color)
             }
         }
         
         if show_triangulation {
-            for cell, index in collapse.cells {
-                color_wheel := color_wheel
-                color := v4_to_rl_color(color_wheel[(index) % len(color_wheel)])
-                color = v4_to_rl_color(Green)
-                rl.DrawCircleV(world_to_screen(cell.p), 3, color)
+            for cell in collapse.cells {
+                color := v4_to_rl_color(Orange)
                 for neighbour in cell.neighbours {
-                    rl.DrawLineEx(world_to_screen(cell.p), world_to_screen(neighbour.cell.p), 2, color)
+                    rl.DrawLineEx(world_to_screen(cell.p), world_to_screen(neighbour.cell.p), 6, color)
                 }
+            }
+        }
+        
+        if show_voronoi_cells {
+            for cell in collapse.cells {
+                color := v4_to_rl_color(Emerald)
+                rl.DrawCircleV(world_to_screen(cell.p), 4, color)
+                draw_cell_outline(cell, color, thickness = 6)
             }
         }
         
@@ -792,12 +785,12 @@ draw_cell :: proc (cell: Cell, color: v4) {
     
     rl.DrawTriangleFan(raw_data(buffer), auto_cast len(buffer), v4_to_rl_color(color))
 }
-draw_cell_outline :: proc (cell: Cell, color: rl.Color) {
+draw_cell_outline :: proc (cell: Cell, color: rl.Color, thickness: f32 = 2) {
     for i in 0..<len(cell.points) {
         j := (i + 1) % len(cell.points)
         a := world_to_screen(cell.points[i])
         b := world_to_screen(cell.points[j])
-        rl.DrawLineEx(a, b, 2, color)
+        rl.DrawLineEx(a, b, thickness, color)
     }
 }
 
