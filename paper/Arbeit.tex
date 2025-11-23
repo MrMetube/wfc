@@ -1,12 +1,11 @@
-% \documentclass{article}
 \documentclass[12pt, oneside]{scrreprt}
 
-\usepackage[T1]{fontenc}
-\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}    
+\usepackage[utf8]{inputenc} 
 \usepackage[ngerman]{babel} % 'ngerman' für neue deutsche Rechtschreibung
-\usepackage{lmodern} % vector fonts
-\usepackage{microtype} % bessere Satzbild
-% \usepackage{csquotes} % deutsche Anführungszeichen mit babel
+\usepackage{lmodern}        % vector fonts
+\usepackage{microtype}      % besseres Satzbild
+
 \usepackage{hyperref}                      % clickable links
 \usepackage{amsmath, amssymb}              % mathe formeln
 \usepackage{graphicx, caption, subcaption} % for figures and subfigures
@@ -26,19 +25,12 @@
 \DeclareRobustCommand{\@todo(viktor):}[1]{\textcolor{mred}{@todo:} \textcolor{mred}{#1}} 
 \DeclareRobustCommand{\at}[1]{\textcolor{mgreen}{#1}}
 
-% ////////////////////////////////////////////////
-% ////////////////////////////////////////////////
 
-\title{Wave Function Collapse auf Graphen}
-\author{
-       Viktor Berengar Askan Graf von Westarp
-    \\ \textit{FB5 Informatik und Sprachen}
-    \\ \textit{HS Anhalt}
-    \\ \texttt{viktor.grafvonwestarp@student.hs-anhalt.de}
-}
-\date{\today}
 
 % ////////////////////////////////////////////////
+
+
+
 \begin{document}
 
 % 
@@ -46,14 +38,45 @@
 % Vor Abgabe:
 % 
 
+\@todo(viktor):{Welche Documentclass?}
+
 \@todo(viktor):{Abbildungen Anordung vor Ende prüfen und verbessern}
 
 \@todo(viktor):{Titelblatt ordentlich machen}
 
 \@todo(viktor):{\at{@translation} Collapsed und Observed als Begriffe vereinheitlichen}
 
-\maketitle
-\pagebreak
+
+
+% ////////////////////////////////////////////////
+
+
+
+\begin{titlepage}
+  \centering
+  \vspace*{2.5cm}
+
+  {\LARGE\textbf{Hochschule Anhalt}\par}
+  \vspace{1cm}
+  {\Large Fachbereich 5: Informatik und Sprachen\par}
+  \vspace{2.5cm}
+
+  {\huge\textbf{Wave Function Collapse auf Graphen}\par}
+%   \vspace{1cm}
+%   {\Large Untertitel (falls vorhanden)\par}
+  \vfill
+
+  \begin{tabular}{ll}
+    \textbf{Autor:} & Viktor Graf von Westarp\\
+    \textbf{Matrikelnummer:} & 5058639\\
+    \textbf{Betreuer:} & Prof. Dr. Stefan Schlechtweg\\
+    \textbf{Zweitprüfer:} & Prof. Dr. Anika Groß\\
+    \textbf{Abgabedatum:} & 5.\,Dezember\,2025
+  \end{tabular}
+
+  \vspace{2cm}
+  {\large Köthen, \today\par}
+\end{titlepage}
 
 \tableofcontents
 \pagebreak
@@ -86,6 +109,14 @@
 
 \chapter{Hintergrund \at{@naming} Beispielbasierte prozedurale generierung?}
     \at{@incomplete Einleitender Satz}
+    
+    
+    \section{Gitter, Graphen}
+        \at{@placement Gitter und Knoten und so wird bereits bei Model Synthesis gebraucht}
+        \at{@incomplete Definition von Gitter und Graph in dieser Arbeit}
+        
+        \url{https://en.wikipedia.org/wiki/Lattice_graph}\\
+        
     
     \section{Model Synthesis}
         Mit dem \textit{Model Synthesis} \cite{merrel} Algorithmus \ref{fig:ms_merrel} können, basiert auf einem 3D Beispielmodell, eine große Menge an ähnlichen 3D Modellen prozedural generiert werden (siehe Abbildung \ref{fig:ms_output}). Das Beispielmodell muss zuvor in kleinere Bauteile zerlegt werden, aus denen der Algorithmus dann ein neues Modell generiert. Ein Bauteil kann ein komplexer Teil des Beispiels sein, kann aber auch einen leeren Teil des Beispiels enthalten. Die Bauteile werden wie Bauklötze zusammengebaut, wobei zwei Bauteile nur dann nebeneinander platziert werden dürfen, wenn diese auch im Beispielmodell nebeneinander vorkommen. Diese Eigenschaft wird auch Konsistenz genannt. Ein simples konsistentes Modell ist z.B. ein leeres Modell.
@@ -143,23 +174,13 @@
             \input{data/extract_wrapping/figure.tex}
     
     
-    \section{Gitter, Graphen, Triangulierung, Voronoi}
-        \at{@placement Gitter und Knoten und so wird bereits bei Model Synthesis gebraucht}
-        
-        \at{@incomplete Definition von Gitter und Graph in dieser Arbeit}
-        
+    \section{Delaunay Triangulierung, Voronoi Diagramm}
         \url{https://en.wikipedia.org/wiki/Delaunay_triangulation}\\
         \url{https://en.wikipedia.org/wiki/Voronoi_diagram}\\
-        \url{https://en.wikipedia.org/wiki/Lattice_graph}\\
         
-        \subsection{Gitter}
-        \subsection{Graphen}
+        Delaunay Triangulation \at{@incomplete Definition, Algorithmus und @visual @citation}
             
-        \subsection{Delaunay Triangulation}
-            \at{@incomplete Definition, Algorithmus und @visual}
-            
-        \subsection{Voronoi Diagramm}
-            \at{@incomplete Definition, nützliche Eigenschaften}
+        Voronoi Diagramm \at{@incomplete Definition, nützliche Eigenschaften @visual @citation}
 
 
 
@@ -231,7 +252,7 @@
         \input{data/graph_examples/figure.tex}
         
         \at{@incomplete was muss noch im text vorkommen? warum voronoi clipping}
-        Es ist normal, dass ein solches Voronoi-Diagram an den Rändern Zellen ergeben kann die auf einer Seite offen sind, weil die Kanten zwischen den Ecken der Zelle, den Umkreismittelpunkten, keinen Schnittpunkt haben. Ich habe mich dazu entschieden, bei solchen Zellen weitere Eckpunkte einzufügen, so dass das alle Zellen durch einen freigewählten rechteckigem Bereich begrenzt sind. Dafür prüfe ich ob ein Eckpunkt außerhalb des Bereichs liegt und finde dann den Schnittpunkt von der Kante zu dem Eckpunkt mit dem Rechteck des Bereichs und ersetze den Eckpunkt mit diesem Schnittpunkt. Dieser Schritt passiert so lange bis alle Eckpunkte innerhalb oder auf dem Rand des Bereichs liegen.
+        Es ist normal, dass ein solches Voronoi-Diagramm an den Rändern Zellen ergeben kann die auf einer Seite offen sind, weil die Kanten zwischen den Ecken der Zelle, den Umkreismittelpunkten, keinen Schnittpunkt haben. Ich habe mich dazu entschieden, bei solchen Zellen weitere Eckpunkte einzufügen, so dass das alle Zellen durch einen freigewählten rechteckigem Bereich begrenzt sind. Dafür prüfe ich ob ein Eckpunkt außerhalb des Bereichs liegt und finde dann den Schnittpunkt von der Kante zu dem Eckpunkt mit dem Rechteck des Bereichs und ersetze den Eckpunkt mit diesem Schnittpunkt. Dieser Schritt passiert so lange bis alle Eckpunkte innerhalb oder auf dem Rand des Bereichs liegen.
             Siehe Abbildung \ref{fig:voronoi_clipping}.
 
         \input{data/voronoi_clipping/figure.tex}
@@ -334,8 +355,6 @@
 
 % ////////////////////////////////////////////////
 % ////////////////////////////////////////////////
-
-\@todo(viktor):{quellen für delaunay-triangulation und voronoi-diagrams}
 
 \pagebreak
 \bibliographystyle{plain}
