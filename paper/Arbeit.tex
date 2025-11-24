@@ -87,7 +87,7 @@
 
 \chapter*{Zusammenfassung}
 \begin{quote}
-\@todo(viktor):{ Der Abstrakt }
+\@todo(viktor):{ Der \textbf{abstract} }
 ...
 \end{quote}
 
@@ -97,7 +97,8 @@
 
 
 \chapter{Einleitung}
-    \at{@incomplete Einleitender Satz, ?was zu prozeduraler Generierung?}
+    \at{@incomplete Einleitender Satz}
+    
     \section{Motivation}
     \section{Problemstellung und Ziel}
     \section{Problemlösung}
@@ -109,25 +110,17 @@
 
 \chapter{Hintergrund}
     \at{@incomplete Einleitender Satz}
-    \at{@incomplete ? Beispielbasierte prozedurale generierung}
     
     \section{Begriffserklärung}
         Ein \textit{Gitter} beschreibt eine regelmäßig aufgebaute Struktur aus einzelnen Punkten. Diese Knotenpunkte sind durch Kanten mit ihren direkten Nachbarn verbunden. Ein Bild wird digital z.B. auf einem Gitter von Pixeln gespeichert und dargestellt. Genauso bilden die Kästchen eines Sudoku ein Gitter. Wenn solch ein Gitter in einer Ebene liegt, wird es auch als \textit{2D Gitter} bezeichnet. Sind die Punkte regelmäßig im Raum angeordnet spricht man von einem \textit{3D Gitter}. Ein \textit{Graph} ist eine allgemeinere Struktur. Hier können die Knotenpunkte eine beliebige Anordnung haben und beliebig mit anderen Knoten durch Kanten verbunden sein. Ein Gitter ist eine spezielle Form eines Graphen. 
-        
+        \\
+        \\
         Eine \textit{Triangulierung} ist ein Graph, dessen Flächen alle Dreiecke sind. Eine besonders wichtige Variante ist die \textit{Delaunay-Triangulierung} \cite{delaunay}, bei der die Dreiecke so gewählt werden, dass der kleinste Winkel innerhalb jedes Dreiecks möglichst groß ist. Dadurch entstehen „gut geformte“ Dreiecke \at{@visual beispiel}. Eng verwandt damit ist das \textit{Voronoi-Diagramm} \cite{voronoi}. Es teilt die Ebene in Regionen auf, sodass jeder Punkt genau die Fläche erhält, die ihm am nächsten liegt \at{@visual}. Die Delaunay-Triangulierung und das Voronoi-Diagramm sind dual zueinander: Verbindet man die Mittelpunkte der Voronoi-Zellen, entsteht die Delaunay-Triangulierung, und aus einer Delaunay-Triangulierung lässt sich wiederum das zugehörige Voronoi-Diagramm ableiten. Diese Konzepte ermöglichen es, aus unregelmäßig verteilten Punkten eine sinnvolle räumliche Struktur abzuleiten und werden häufig eingesetzt, wenn eine regelmäßige Gitterstruktur nicht ausreicht \at{@visual}.
+        \\
+        \\
+        \at{@incomplete Prozedurale Generierung}
     
     
-    
-    \section{Delaunay Triangulierung, Voronoi Diagramm}
-        \url{https://en.wikipedia.org/wiki/Delaunay_triangulation}\\
-        \url{https://en.wikipedia.org/wiki/Voronoi_diagram}\\
-        
-        Delaunay Triangulation \at{@incomplete Definition, Algorithmus und @visual @citation}
-            
-        Voronoi Diagramm \at{@incomplete Definition, nützliche Eigenschaften @visual @citation}
-
-
-
     \section{Model Synthesis}
         Mit dem \textit{Model Synthesis} \cite{merrel} Algorithmus \ref{fig:ms_merrel} können, basiert auf einem 3D Beispielmodell, eine große Menge an ähnlichen 3D Modellen prozedural generiert werden (siehe Abbildung \ref{fig:ms_output}). Das Beispielmodell muss zuvor in kleinere Bauteile zerlegt werden, aus denen der Algorithmus dann ein neues Modell generiert. Ein Bauteil kann ein komplexer Teil des Beispiels sein, kann aber auch einen leeren Teil des Beispiels enthalten. Die Bauteile werden wie Bauklötze zusammengebaut, wobei zwei Bauteile nur dann nebeneinander platziert werden dürfen, wenn diese auch im Beispielmodell nebeneinander vorkommen. Diese Eigenschaft wird auch Konsistenz genannt. Ein simples konsistentes Modell ist z.B. ein leeres Modell.
         
