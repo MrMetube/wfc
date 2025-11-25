@@ -199,17 +199,10 @@
     
     
     \section{Von Gittern zu Graphen}
-        \at{@incomplete diese section nocheinmal umformulieren}
+        Ursprünglich arbeit Wave Function Collapse nur auf Gittern \cite{merrel} \cite{gumin}. Der Schritt zum Graphen als Fundament für die Ausgabe des Algorithmus ist naheliegend, da Gitter eine spezielle Art von Graphen darstellen. Im Umfang dieser Arbeit werden aber auch nicht alle Arten von Graphen betrachtet. Da jede Kanten eines Gitters zuvor eine lokale Benachbarung dargestellt haben und die Regelextraktion nur lokal arbeitet, beschränkt sich diese Arbeit nur auf Graphen in denen Kanten auch primär einen Knotenpunkt mit den Knotenpunkten in einem lokalen Umfeld verbindet. Der Algorithmus kann auch auf anderen Arten von Graphen angewendet werden, doch können daraus neue oder unerwartete Effekte hervortreten, die wiederum anderen Lösungswege benötigen.
         
-        Ursprünglich arbeit Wave Function Collapse nur auf Gittern \cite{merrel} \cite{gumin}. Der Schritt zum Graphen als Fundament für die Ausgabe des Algorithmus ist sinnvoll \at{@wording}, da Gitter eine spezielle Art von Graphen darstellen. In dem Umfang dieser Arbeit werden aber auch nicht alle Arten von Graphen betrachtet, meistens ist die freie Anordnung und Verbindung von Knoten nicht notwendig. Da jede Kanten eines Gitters zuvor eine lokale Benachbarung dargestellt haben und die Regelextrahierung nur lokal arbeitet, beschränkt sich diese Arbeit nur auf Graphen in denen Kanten auch primär einen Knotenpunkt mit den Knotenpunkten in einem lokalen Umfeld verbindet. Der Algorithmus kann auch auf anderen Arten von Graphen angewendet werden, doch können daraus neue oder unerwartete Effekte hervortreten, die wiederum anderen Lösungswege benötigen.
-        
-        Ein Gitter bringt mit sich Information über Benachbarung und Position jeder Zelle die nun auf einem Graphen explizit angegeben werden müssen. Je nach Anordnung kann nun nicht nur die Richtung zur Nachbarzelle sondern auch deren Abstand und die Anzahl an Nachbarzellen variieren. Bevor der Algorithmus eine Ausgabe generieren kann, müssen diese Information vom Nutzer angegeben werden. \at{@wording explizit vs. implizit}
-        
-        \at{@placement @flow Lösungsraum undefiniert}
-        Jede Kante des Graphen stellt eine Beschränkung des Lösungsraums dar. Bei einem Gitter ist jede Zelle, mit Ausnahme der Zellen am Rand, gleichermaßen beschränkt, jedoch kann die Anordnung des Graphen dazu führen dass einzelne Zelle weniger und andere stärker eingeschränkt werden. Eine Zelle mit zehn Nachbarn muss in einen Zustand collapsen, welcher zu den Zuständen der zehn Nachbaren passt. Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthalten, während dass Gitter uniforme Beschränkung auf Zellen ergibt. Zur Erinnerung: es muss nur eine Zelle eine Widerspruch verursachen damit der Algorithmus fehlschlägt. Also sind solche Regionen starker Beschränkung besonderns entscheident für die Chance eine valide Ausgabe zu generieren, weil hier der Lösungsraum am kleinsten ist.
-        
-        \at{@incomplete Entropie erwähnen und für Regionen mit einer Grafik von der App darstellen}
-    
+        Ein Gitter enthällt implizit Information über Benachbarung und Position jeder Zelle. Diese Informationen werden bei Graphen explizit angegeben. Dazu kommt, dass je nach Anordnung nun nicht nur die Richtung zur Nachbarzelle, sondern auch deren Abstand und die Anzahl an Nachbarzellen variieren kann. Dieser Aspekt ist von Vorteil für die Gestaltung der Ausgabe, da nun beliebige Strukturen und Formen genutzt werden können. Doch der Nachteil ist, dass das Beispiel und die daraus extrahierten Regeln vom Algorithmus nicht mehr eins zu eins angewendet werden können.
+            
     
         
     \section{Heat}
@@ -299,6 +292,9 @@
     % Diskussion
     \item Lokale Ähnlichkeit im Vergleich zum Input
     \item Linienmuster und Flächenmuster in Beispielen
+    \item \at{@incomplete Lösungsraum undefiniert} Jede Kante des Graphen stellt eine Beschränkung des Lösungsraums dar. Bei einem Gitter ist jede Zelle, mit Ausnahme der Zellen am Rand, gleichermaßen beschränkt, jedoch kann die Anordnung des Graphen dazu führen dass einzelne Zelle weniger und andere stärker eingeschränkt werden. Eine Zelle mit zehn Nachbarn muss in einen Zustand collapsen, welcher zu den Zuständen der zehn Nachbaren passt. Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthalten, während dass Gitter uniforme Beschränkung auf Zellen ergibt. Zur Erinnerung: es muss nur eine Zelle eine Widerspruch verursachen damit der Algorithmus fehlschlägt. Also sind solche Regionen starker Beschränkung besonderns entscheident für die Chance eine valide Ausgabe zu generieren, weil hier der Lösungsraum am kleinsten ist.
+        
+        \at{@incomplete Entropie erwähnen und für Regionen mit einer Grafik von der App darstellen}
     \end{itemize}
     
     \section{Der Effekt von Heat auf die Ausgabe}
