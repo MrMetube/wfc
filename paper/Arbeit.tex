@@ -1,10 +1,9 @@
-\documentclass[12pt, oneside]{scrreprt}
+\documentclass[12pt,a4paper,oneside]{scrreprt}
 
-\usepackage[T1]{fontenc}    
+\usepackage[T1]{fontenc}    % bessere Akzente auf äöü
 \usepackage[utf8]{inputenc} 
 \usepackage[ngerman]{babel} % Deutsche Begriffe
-\usepackage{lmodern}        % KI sagt: vector fonts
-\usepackage{microtype}      % KI sagt: besseres Satzbild
+\usepackage{lmodern}        % bessere Schriftart
 
 \usepackage{hyperref}                      % clickable links
 \usepackage{amsmath, amssymb}              % mathe formeln
@@ -22,8 +21,12 @@
 \usepackage{xcolor}
 \definecolor{mred}{HTML}{fe163d}
 \definecolor{mgreen}{HTML}{009052}
-\DeclareRobustCommand{\@todo(viktor):}[1]{\textcolor{mred}{@todo:} \textcolor{mred}{#1}} 
-\DeclareRobustCommand{\at}[1]{\textcolor{mgreen}{#1}}
+\DeclareRobustCommand{\@todo(viktor):}[1]{
+    \textcolor{mred}{@todo:} \textcolor{mred}{#1}
+} 
+\DeclareRobustCommand{\at}[1]{
+    \textcolor{mgreen}{#1}
+}
 
 
 
@@ -51,29 +54,29 @@
 % ////////////////////////////////////////////////
 
 \begin{titlepage}
-  \centering
-  \vspace*{2.5cm}
-
-  {\LARGE\textbf{Hochschule Anhalt}\par}
-  \vspace{1cm}
-  {\Large Fachbereich 5: Informatik und Sprachen\par}
-  \vspace{2.5cm}
-
-  {\huge\textbf{Wave Function Collapse auf Graphen}\par}
-%   \vspace{1cm}
-%   {\Large Untertitel (falls vorhanden)\par}
-  \vfill
-
-  \begin{tabular}{ll}
-    \textbf{Autor:} & Viktor Graf von Westarp\\
-    \textbf{Matrikelnummer:} & 5058639\\
-    \textbf{Betreuer:} & Prof. Dr. Stefan Schlechtweg\\
-    \textbf{Zweitprüfer:} & Prof. Dr. Anika Groß\\
-    \textbf{Abgabedatum:} & 5.\,Dezember\,2025
-  \end{tabular}
-
-  \vspace{2cm}
-  {\large Köthen, \today\par}
+    \centering
+    \vspace*{2.5cm}
+    
+    {\LARGE\textbf{Hochschule Anhalt}\par}
+    \vspace{1cm}
+    {\Large Fachbereich 5: Informatik und Sprachen\par}
+    \vspace{2.5cm}
+    
+    {\huge\textbf{Wave Function Collapse auf Graphen}\par}
+    %   \vspace{1cm}
+    %   {\Large Untertitel (falls vorhanden)\par}
+    \vfill
+    
+    \begin{tabular}{ll}
+        \textbf{Autor:} & Viktor Graf von Westarp\\
+        \textbf{Matrikelnummer:} & 5058639\\
+        \textbf{Betreuer:} & Prof. Dr. Stefan Schlechtweg\\
+        \textbf{Zweitprüfer:} & Prof. Dr. Anika Groß\\
+        \textbf{Abgabedatum:} & 5.\,Dezember\,2025
+    \end{tabular}
+    
+    \vspace{2cm}
+    {\large Köthen, \today\par}
 \end{titlepage}
 
 % ////////////////////////////////////////////////
@@ -88,7 +91,6 @@
 \chapter*{Zusammenfassung}
 \begin{quote}
 \@todo(viktor):{ Der \textbf{abstract} }
-...
 \end{quote}
 
 
@@ -301,8 +303,8 @@
     
     \section{Der Effekt von Heat auf die Ausgabe}
         \at{@incomplete introduction}
-        \\
-        \\
+        % \\
+        % \\
         Abbildung \ref{fig:hex_heat} zeigt den Einfluss von Heat auf die Qualität der Ausgabe bei gleichem Beispiel und Graph. Das Beispiel kann auf dem Quadratgitter ohne weitere Probleme genutzt werden, während der Graph mit den Sechsecken bei geringer Heat uninteressante Ausgaben generiert. \at{@incomplete (a) erwähnen}
         
         \input{data/hex_heat/figure.tex}
