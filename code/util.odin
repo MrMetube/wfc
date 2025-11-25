@@ -90,6 +90,8 @@ absolute_difference :: proc (a, b: $T) -> (result: T) {
     return result
 }
 
+swap :: proc (a, b: ^$T) { a^, b^ = b^, a^ }
+
 @(disabled=ODIN_DISABLE_ASSERT)
 assert :: proc(condition: $B, message := #caller_expression(condition), loc := #caller_location, prefix:= "Assertion failed") where intrinsics.type_is_boolean(B) {
     if !condition {

@@ -137,7 +137,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
                 case Generate_Noise:
                     imgui.slider_float2("center", &kind.center, 0, 1)
                     imgui.slider_float2("radius", &kind.radius, 0, 1)
-                    imgui.checkbox("blue noise", &kind.is_blue)    
+                    imgui.slider_float("minimum distance", &kind.min_distance, 0, 1)    
                 }
                 
             }

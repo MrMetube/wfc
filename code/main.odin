@@ -98,7 +98,7 @@ Generate_Kind :: union {
 
 Generate_Grid   :: struct { center, radius: v2, angle: f32, is_hex: bool }
 Generate_Circle :: struct { radius: f32, spiral_size: f32, }
-Generate_Noise  :: struct { center, radius: v2, is_blue: bool  }
+Generate_Noise  :: struct { center, radius: v2, min_distance: f32,  }
 
 ////////////////////////////////////////////////
 
@@ -583,7 +583,7 @@ generate_points :: proc(points: ^[dynamic] v2d, count: i32, kind: Generate_Kind)
         rotated_radius := rotate(radius, angle)
         min := center - rotated_radius
         
-        count = round(i32, cast(f64) count * (radius.x * radius.y))
+        count = round(i32, cast(f64) count * square_root(radius.x * radius.y))
         side := round(i32, square_root(cast(f32) count))
         
         #reverse for p, index in points {
@@ -628,7 +628,7 @@ generate_points :: proc(points: ^[dynamic] v2d, count: i32, kind: Generate_Kind)
       case Generate_Circle:
         min_radius := 0.01
         max_radius := cast(f64) kind.radius
-        count = round(i32, cast(f64) count * (square(max_radius)*Pi))
+        count = round(i32, cast(f64) count * square_root(square(max_radius)*Pi))
         side := round(i32, square_root(cast(f32) count))
         
         center := 0.5
@@ -665,9 +665,9 @@ generate_points :: proc(points: ^[dynamic] v2d, count: i32, kind: Generate_Kind)
       case Generate_Noise:
         radius := vec_cast(f64, kind.radius)
         center := vec_cast(f64, kind.center)
-        count = round(i32, cast(f64) count * (radius.x * radius.y))
+        count = round(i32, cast(f64) count * square_root(radius.x * radius.y))
         
-        min_dist_squared := 1.0 / (Pi * f64(count))
+        min_dist_squared := cast(f64) square(kind.min_distance)
         for _ in 0..<count {
             new_point: v2d
             
@@ -677,7 +677,7 @@ generate_points :: proc(points: ^[dynamic] v2d, count: i32, kind: Generate_Kind)
                 new_point = center + random_bilateral(&entropy, v2d) * radius
                 valid = true
                 
-                if kind.is_blue {
+                if kind.min_distance > 0 {
                     check: for point in points {
                         if length_squared(point - new_point) < min_dist_squared {
                             valid = false
