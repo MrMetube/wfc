@@ -6,6 +6,7 @@
 \usepackage{lmodern}        % bessere Schriftart
 
 \usepackage{hyperref}                      % clickable links
+\hypersetup{colorlinks=true, linkcolor=black, citecolor=black, filecolor=black, urlcolor=blue}
 \usepackage{amsmath, amssymb}              % mathe formeln
 \usepackage{graphicx, caption, subcaption} % for figures and subfigures
 \usepackage{float}                         % enforce figure placement
@@ -47,7 +48,7 @@
 
 \@todo(viktor):{Abgabe Zeit am Freitag? selbstständigkeitserklärung separat oder am ende der arbeit?}
 
-\@todo(viktor):{Abbildungen Anordung vor Ende prüfen und verbessern}
+\@todo(viktor):{Abbildungen Anordung prüfen und verbessern}
 
 % 
 % @important
@@ -236,7 +237,9 @@
 
 
 \chapter{Umsetzung}
-    \at{@incomplete was zur App?}
+    Für die Implementierung habe wurde eine kleine Anwendung erstellt. Abbildung \ref{fig:app} zeigt einen Screenshot der Anwendung in dem die UI und eine generierte Ausgabe zusehen sind. Der Nutzer kann Beispielbilder auswählen, einen Graphen generieren und dann mittels Wave Function Collapse eine Ausgabe generieren. Es wurde leider nicht sehr viel Zeit in ein intuitives Layout und Design gesteckt. Der Code kann \href{https://github.com/MrMetube/wfc}{\underline{hier}}(Stand \today) gefunden werden.
+    
+    \input{data/app/figure.tex}
     
     \section{Generierung von Graphen}
         Die Graphen auf denen der Wave Function Collapse arbeiten soll, werden in dieser Arbeit mit dem folgenden Algorithmus generiert \ref{fig:graph_gen}. Der Algorithmus nimmt als Eingabe eine Menge an Punkten, welche die Knotenpunkte des Graphen werden. Aus den Punkten wird eine Delaunay-Triangulierung erstellt. Hierfür wird er Boywer-Watson Algorithmus \cite{bowyer, watson} verwendet. Danach wird das Voronoi-Diagramm zu der Triangulierung gefunden. Der duale Graph der Delaunay-Triangulierung ist das Voronoi-Diagramm, d.h. jeder Knotenpunkt des Voronoi-Diagramms entspricht einer Fläche der Triangulierung und jede Fläche im Voronoi-Diagramm entspricht einem Knotenpunkt in der Triangulierung. Die Kanten der Dreiecke geben an, welche Zellen aneinander angrenzen, während die Voronoi-Zellen die Form einer Zelle für die Darstellung geben. In Abbildung \ref{fig:graph_examples} sind einige Beispiele von generierten Graphen dargestellt. Es ist zuerkennen, dass regelmäßige Gitter nur eine spezielle Form von Graphen darstellen. 
