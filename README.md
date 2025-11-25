@@ -12,5 +12,5 @@ Es ist nicht garantiert das alle Teile des Build-Script(primär was Debugging an
 ## Run
 Die App lädt alle Beispiele(nur PNG) aus dem angegebenen Ordner.
 ```
-..\build\wfc.exe <path/to/images/directory>
+.\build\wfc.exe <path/to/images/directory>
 ```
