@@ -9,7 +9,7 @@ import "core:strings"
 import "core:time"
 import win "core:sys/windows"
 
-optimizations := false ? `-o:speed` : `-o:none`
+optimizations := !false ? `-o:speed` : `-o:none`
 Pedantic      :: !false
 
 debug    :: `-debug`
@@ -35,7 +35,7 @@ code_dir    :: `..\code`
 raddbg      :: `raddbg.exe`
 raddbg_path :: `C:\tools\raddbg\`+ raddbg
 
-debug_exe :: `debug.exe`
+debug_exe :: `wfc.exe`
 debug_exe_path :: `.\`+debug_exe
 
 ////////////////////////////////////////////////

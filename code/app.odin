@@ -20,7 +20,15 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         
     imgui.end()
     
-    imgui.begin("Controls")
+    imgui.begin("Generate")
+        imgui.get_content_region_avail(&region)
+        
+        imgui.push_item_width(region.x*0.5)
+        if imgui.slider_int("Heat", &base_heat, 1, 8) {
+            restart(this_frame, true)
+        }
+        imgui.pop_item_width()
+        
         if imgui.button("Restart") do restart(this_frame)
         imgui.same_line()
         
@@ -61,20 +69,21 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         } else {
             viewing_step = current.step
         }
-        
-        imgui.text("Grid")
+    imgui.end()
+    
+    imgui.begin("Grid")
         imgui.slider_int2("Size", &desired_dimension, 3, 500, flags = .Logarithmic)
         
-        if imgui.button("Generate Grid") {
+        if imgui.button("Generate Graph") {
             this_frame.tasks += { .setup_grid }
             dimension = desired_dimension
         }
+        
         imgui.text("Presets")
         imgui.same_line(); if imgui.button("P0") do preset_0(generates)
         imgui.same_line(); if imgui.button("P1") do preset_1(generates)
         imgui.same_line(); if imgui.button("P2") do preset_2(generates)
         imgui.same_line(); if imgui.button("P3") do preset_3(generates)
-        
         {
             for _, index in generates {
                 is_active := index == active_generate_index
@@ -144,7 +153,7 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         }
     imgui.end()
     
-    imgui.begin("Visualization")
+    imgui.begin("Visual Options")
         imgui.color_edit4("Background", &cells_background_color, flags = .NoInputs | .NoTooltip | .Float | .DisplayHsv)
         
         imgui.checkbox("Show step details", &show_step_details)
@@ -210,21 +219,5 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
                 imgui.pop_id()
             }
         }
-    imgui.end()
-    
-    imgui.begin("Heat")
-        imgui.get_content_region_avail(&region)
-        
-        imgui.push_item_width(region.x*0.5)
-        if imgui.slider_int("Base", &base_heat, 1, 8) {
-            restart(this_frame, true)
-        }
-        if imgui.slider_float("Cooling Chance", &cooling_chance, 0, 1, flags = .Logarithmic) {
-            restart(this_frame, true)
-        }
-        if imgui.slider_float("Heating Chance", &heating_chance, 0, 1, flags = .Logarithmic) {
-            restart(this_frame, true)
-        }
-        imgui.pop_item_width()
     imgui.end()
 }

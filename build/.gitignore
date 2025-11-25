@@ -1,3 +1,4 @@
 *
 !.gitignore
 !*.odin
+!wfc.exe
