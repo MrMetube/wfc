@@ -45,6 +45,8 @@
 
 \@todo(viktor):{Welche Documentclass?}
 
+\@todo(viktor):{Abgabe Zeit am Freitag?}
+
 \@todo(viktor):{Abbildungen Anordung vor Ende prüfen und verbessern}
 
 \@todo(viktor):{\at{@translation} Collapsed und Observed als Begriffe vereinheitlichen}
@@ -71,7 +73,7 @@
         \textbf{Autor:} & Viktor Graf von Westarp\\
         \textbf{Matrikelnummer:} & 5058639\\
         \textbf{Betreuer:} & Prof. Dr. Stefan Schlechtweg\\
-        \textbf{Zweitprüfer:} & Prof. Dr. Anika Groß\\
+        \textbf{Zweitprüferin:} & Prof. Dr. Anika Groß\\
         \textbf{Abgabedatum:} & 5.\,Dezember\,2025
     \end{tabular}
     
@@ -109,7 +111,7 @@
 
 
 \chapter{Hintergrund}
-    \at{@incomplete Einleitender Satz}
+    In diesem Abschnitt werden zuerst einige grundlegende Begriffe erklärt. Danach wird auf die Algorithmen, auf denen diese Arbeit basiert, eingegangen. Dies sind \textit{Model Synthesis} von Merrel \cite{merrel} und dessen Weiterentwicklung \textit{Wave Function Collapse} von Gumin \cite{gumin}.
     
     \section{Begriffserklärung}
         Ein \textit{Gitter} beschreibt eine regelmäßig aufgebaute Struktur aus einzelnen Punkten. Diese Knotenpunkte sind durch Kanten mit ihren direkten Nachbarn verbunden. Ein Bild wird digital z.B. auf einem Gitter von Pixeln gespeichert und dargestellt. Genauso bilden die Kästchen eines Sudoku ein Gitter. Wenn solch ein Gitter in einer Ebene liegt, wird es auch als \textit{2D Gitter} bezeichnet. Sind die Punkte regelmäßig im Raum angeordnet spricht man von einem \textit{3D Gitter}. Ein \textit{Graph} ist eine allgemeinere Struktur. Hier können die Knotenpunkte eine beliebige Anordnung haben und beliebig mit anderen Knoten durch Kanten verbunden sein. Ein Gitter ist eine spezielle Form eines Graphen. 
@@ -119,7 +121,7 @@
         
         \input{data/delaunay_voronoi/figure.tex}
         
-        \at{@incomplete Prozedurale Generierung}
+        \textit{Prozedurale Generierung} \at{@incomplete}
     
     
     \section{Model Synthesis}
@@ -173,7 +175,7 @@
             
             \input{data/wfc_extraction}
             
-            In Abbildung \ref{fig:extract_wrapping} ist der Ablauf dargestellt. Aus dem Beispiel werden die Umfelder ausgelesen. In der Abbildung wird vertikales Wrapping \at{@translation} genutzt, ist das vom Nutzer nicht erwünscht so würden Umfelder die den Rand des Beispiels überschreiten einfach verworfen und nicht weiter verwendet. Die Zustände ergeben sich aus den einzigartigen Umfelder. Die Frequenz eines Umfelds gibt an wie oft es im Beispiel vorkommt. Sind mehrere Umfelder gleich, so hat der entsprechende Zustand einen höhere Frequenz. Aus der Gesamtanzahl an Zuständen und deren Frequenzen lässt sich die Wahrscheinlichkeit jedes Zustands berechen. Im Algorithmus wird dies beachtet, damit auch die globale Verteilung von Umfeldern in der Ausgabe der Verteilung im Beispiel ähnelt. Danach wird geprüft welche der gefundenen Umfelder überlappen. Es werden die Himmelrichtungen N, S, W und O geprüft und für später in einer Lookuptabelle gespeichert.
+            In Abbildung \ref{fig:extract_wrapping} ist der Ablauf dargestellt. Aus dem Beispiel werden die Umfelder ausgelesen. In der Abbildung wird vertikales Wrapping \at{@translation zurückspringen, overflow, } genutzt, ist das vom Nutzer nicht erwünscht so würden Umfelder die den Rand des Beispiels überschreiten einfach verworfen und nicht weiter verwendet. Die Zustände ergeben sich aus den einzigartigen Umfelder. Die Frequenz eines Umfelds gibt an wie oft es im Beispiel vorkommt. Sind mehrere Umfelder gleich, so hat der entsprechende Zustand einen höhere Frequenz. Aus der Gesamtanzahl an Zuständen und deren Frequenzen lässt sich die Wahrscheinlichkeit jedes Zustands berechen. Im Algorithmus wird dies beachtet, damit auch die globale Verteilung von Umfeldern in der Ausgabe der Verteilung im Beispiel ähnelt. Danach wird geprüft welche der gefundenen Umfelder überlappen. Es werden die Himmelrichtungen N, S, W und O geprüft und für später in einer Lookuptabelle gespeichert.
             
             \input{data/extract_wrapping/figure.tex}
 
@@ -183,7 +185,7 @@
 
 
 \chapter{Wave Function Collapse auf Graphen}
-    In diesem Abschnitt wir dargestellt wie der Wave Function Collapse Algorithmus erweitert wird, so dass die Ausgabe nicht nur auf einem Gitter von Zellen geschehen kann, sondern auch auf Zellen mit freier Anordnung und Verteilung, einem Graphen, arbeiten kann. Es wird erklärt welche Aspekt des Algorithmus angepasst werden und welche beibehalten werden können. Desweiteren wird ein neues Konzept names \textit{Heat} eingeführt, welches dem Nutzer erlaubt die erzielte Ähnlichkeit zum Beispiel zu verringern um die Erfolgschance des Algorithmus zu verbessern.
+    In diesem Abschnitt wir dargestellt, wie der Wave Function Collapse Algorithmus erweitert wird, so dass die Ausgabe nicht nur auf einem Gitter von Zellen geschehen kann, sondern auch auf Zellen mit freier Anordnung und Verteilung, einem Graphen, arbeiten kann. Es wird erklärt welche Aspekt des Algorithmus angepasst werden und welche beibehalten werden können. Desweiteren wird ein neues Konzept names \textit{Heat} eingeführt, welches dem Nutzer erlaubt die erzielte Ähnlichkeit zum Beispiel zu verringern um die Erfolgschance des Algorithmus zu verbessern.
     
     
     \section{Beschränkung des Algorithmus und Idee zur Erweiterung}
