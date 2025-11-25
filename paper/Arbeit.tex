@@ -197,7 +197,9 @@
     
     
     \section{Von Gittern zu Graphen}
-        Ursprünglich arbeit Wave Function Collapse nur auf Gittern \cite{merrel} \cite{gumin}. Der Schritt zum Graphen als Fundament für die Ausgabe des Algorithmus ist sinnvoll \at{@wording}, da Gitter eine spezielle Art von Graphen darstellen. In dem Umfang dieser Arbeit werden aber auch nicht alle Arten von Graphen betrachtet, meistens ist die freie Anordnung und Verbindung von Knoten nicht notwendig. Da jede Kanten eines Gitters zuvor eine lokale Benachbarung dargestellt haben und die Regelextrahierung nur lokal arbeitet, beschränkt sich diese Arbeit nur auf Graphen in denen Kanten auch primär einen Knotenpunkt mit den Knotenpunkten in einem lokalen Umfeld verbindet. \at{@visual Gitter und Graph des Gitters} Der Algorithmus kann auch auf anderen Arten von Graphen angewendet werden, doch können daraus neue oder unerwartete Effekte hervortreten, die wiederum anderen Lösungswege benötigen.
+        \at{@incomplete diese section nocheinmal umformulieren}
+        
+        Ursprünglich arbeit Wave Function Collapse nur auf Gittern \cite{merrel} \cite{gumin}. Der Schritt zum Graphen als Fundament für die Ausgabe des Algorithmus ist sinnvoll \at{@wording}, da Gitter eine spezielle Art von Graphen darstellen. In dem Umfang dieser Arbeit werden aber auch nicht alle Arten von Graphen betrachtet, meistens ist die freie Anordnung und Verbindung von Knoten nicht notwendig. Da jede Kanten eines Gitters zuvor eine lokale Benachbarung dargestellt haben und die Regelextrahierung nur lokal arbeitet, beschränkt sich diese Arbeit nur auf Graphen in denen Kanten auch primär einen Knotenpunkt mit den Knotenpunkten in einem lokalen Umfeld verbindet. Der Algorithmus kann auch auf anderen Arten von Graphen angewendet werden, doch können daraus neue oder unerwartete Effekte hervortreten, die wiederum anderen Lösungswege benötigen.
         
         Ein Gitter bringt mit sich Information über Benachbarung und Position jeder Zelle die nun auf einem Graphen explizit angegeben werden müssen. Je nach Anordnung kann nun nicht nur die Richtung zur Nachbarzelle sondern auch deren Abstand und die Anzahl an Nachbarzellen variieren. Bevor der Algorithmus eine Ausgabe generieren kann, müssen diese Information vom Nutzer angegeben werden. \at{@wording explizit vs. implizit}
         
@@ -240,14 +242,14 @@
     \at{@incomplete Einleitender Satz, was zur App sagen}
     
     \section{Generierung von Graphen}
-        Die Graphen auf denen der Wave Function Collapse arbeiten soll, werden in dieser Arbeit mit dem folgenden Algorithmus generiert \ref{fig:graph_gen}. Der Algorithmus nimmt als Eingabe eine Menge an Punkten, welche die Knotenpunkte des Graphen werden. Aus den Punkten wird eine Delaunay-Triangulierung erstellt. Hierfür wird er Boywer-Watson Algorithmus \cite{bowyer, watson} verwendet. Danach wird das Voronoi-Diagramm zu der Triangulierung gefunden. Der duale Graph der Delaunay-Triangulierung ist das Voronoi-Diagramm \at{@visual}, d.h. jeder Knotenpunkt des Voronoi-Diagramms entspricht einer Fläche der Triangulierung und jede Fläche im Voronoi-Diagramm entspricht einem Knotenpunkt in der Triangulierung. Die Kanten der Dreiecke geben an, welche Zellen aneinander angrenzen, während die Voronoi-Zellen die Form einer Zelle für die Darstellung geben. In Abbildung \ref{fig:graph_examples} sind einige Beispiele von generierten Graphen dargestellt. Es ist zuerkennen, dass regelmäßige Gitter nur eine spezielle Form von Graphen darstellen. 
+        Die Graphen auf denen der Wave Function Collapse arbeiten soll, werden in dieser Arbeit mit dem folgenden Algorithmus generiert \ref{fig:graph_gen}. Der Algorithmus nimmt als Eingabe eine Menge an Punkten, welche die Knotenpunkte des Graphen werden. Aus den Punkten wird eine Delaunay-Triangulierung erstellt. Hierfür wird er Boywer-Watson Algorithmus \cite{bowyer, watson} verwendet. Danach wird das Voronoi-Diagramm zu der Triangulierung gefunden. Der duale Graph der Delaunay-Triangulierung ist das Voronoi-Diagramm, d.h. jeder Knotenpunkt des Voronoi-Diagramms entspricht einer Fläche der Triangulierung und jede Fläche im Voronoi-Diagramm entspricht einem Knotenpunkt in der Triangulierung. Die Kanten der Dreiecke geben an, welche Zellen aneinander angrenzen, während die Voronoi-Zellen die Form einer Zelle für die Darstellung geben. In Abbildung \ref{fig:graph_examples} sind einige Beispiele von generierten Graphen dargestellt. Es ist zuerkennen, dass regelmäßige Gitter nur eine spezielle Form von Graphen darstellen. 
         
         \at{@visual für Boywer-Watson algorithmus}
         
         \input{data/graph_gen.tex}
         \input{data/graph_examples/figure.tex}
         
-        \at{@incomplete was muss noch im text vorkommen? warum voronoi clipping}
+        \at{@incomplete was muss noch im text vorkommen? warum machen wir voronoi clipping, was zur darstellung der Zellen in der App sagen}
         Es ist normal, dass ein solches Voronoi-Diagramm an den Rändern Zellen ergeben kann die auf einer Seite offen sind, weil die Kanten zwischen den Ecken der Zelle, den Umkreismittelpunkten, keinen Schnittpunkt haben. Ich habe mich dazu entschieden, bei solchen Zellen weitere Eckpunkte einzufügen, so dass das alle Zellen durch einen freigewählten rechteckigem Bereich begrenzt sind. Dafür prüfe ich ob ein Eckpunkt außerhalb des Bereichs liegt und finde dann den Schnittpunkt von der Kante zu dem Eckpunkt mit dem Rechteck des Bereichs und ersetze den Eckpunkt mit diesem Schnittpunkt. Dieser Schritt passiert so lange bis alle Eckpunkte innerhalb oder auf dem Rand des Bereichs liegen.
             Siehe Abbildung \ref{fig:voronoi_clipping}.
 
@@ -282,28 +284,26 @@
         \at{@placement}
         Der Algorithmus ist in Abbildung \ref{fig:wfc_back} dargestellt. Für jeden Schritt des Algorithmus wird auch die Liste der gefundenen Zellen in der Search-Phase gespeichert. Wenn in der Pick-Phase eine Zelle ausgewählt wird, wird diese aus der Liste entfernt, damit diese beim Backtracken nicht erneut gewählt wird. Ebenso werden in der Observe-Phase alle wählbaren Zustände gespeichert und mit jedem Lösungsversuch wird der gewählte Zustand entfernt. Nun wurde aber eine Schwachstelle in den Algorithmus eingeführt. Wenn zuvor in der Search-Phase keine Zellen in Superposition mehr gefunden wurden, bedeutete dies, dass alle Zellen tatsächlich collapsed waren. Nun kann es sein, dass alle Zellen, die gefunden wurden, zu einem Widerspruch führen würden und entfernt wurden. Somit würde keine Zelle mehr wählbar sein. Auch in der Observe-Phase war es zuvor unmöglich keinen Zustand mehr auswählen zu können, da eine Zelle mit leerer Zustandsmenge bereits zuvor als Widerspruch identifiziert wurden wäre. In diesen Fällen wurde ein Widerspruch erreicht und es muss zum Backtracking kommen. Schließlich wurden alle noch möglichen Entscheidungen bereits getroffen und ausgewertet und keine Lösung gefunden. Somit führt dieser Schritt zwar nicht direkt zu einem Widerspruch in einer Zelle, aber alle folgen Schritte werden irgendwann zu einem Widerspruch führen. Als Anmerkung: wird auf diese Weise bis zum ersten Schritt gebacktrackt und führen dann auch dort alle möglichen Entscheidungen zu einem Widerspruch, so kann die Kombination aus Beispiel und Graph keine Ausgabe ergeben.
 
-        \at{@incomplete Datenstruktur der Regeln so dass es simpel mit mehr oder weniger Heat ist erklären}
+        \at{@incomplete Datenstruktur der Regeln, warum es simpel mit mehr oder weniger Heat erklären}
 
 
 \chapter{Ergebnisse und Diskussion}
     \at{@incomplete Einleitender Satz}
     
-    \begin{itemize} % Ergebnisse
-    \item Base Case - Gitter
+    \begin{itemize} 
+    % Ergebnisse
+    \item Base Case - Gitter - Vergleich zum WFC
     \item Bilder mit unterschiedlichen Graphen: Einfache, Komposition(vier in eins, außen und innen)
-    \end{itemize}
-    
-    \begin{itemize} % Diskussion
-    \item Vergleich zum WFC, wie und was vergleichen?
+    % Diskussion
     \item Lokale Ähnlichkeit im Vergleich zum Input
     \item Linienmuster und Flächenmuster in Beispielen
     \end{itemize}
     
     \section{Der Effekt von Heat auf die Ausgabe}
-        \at{@incomplete introduction}
-        % \\
-        % \\
-        Abbildung \ref{fig:hex_heat} zeigt den Einfluss von Heat auf die Qualität der Ausgabe bei gleichem Beispiel und Graph. Das Beispiel kann auf dem Quadratgitter ohne weitere Probleme genutzt werden, während der Graph mit den Sechsecken bei geringer Heat uninteressante Ausgaben generiert. \at{@incomplete (a) erwähnen}
+        Im folgenden Abschnitt werden die positiven wie auch negativen Effekt von Heat mittels Beispielen erklärt.
+        \\
+        \\
+        Abbildung \ref{fig:hex_heat} zeigt den Einfluss von Heat auf die Qualität der Ausgabe bei gleichem Beispiel und Graph. Das Beispiel kann auf dem Quadratgitter ohne weitere Probleme genutzt werden, siehe (a), während der Graph mit den Sechsecken bei geringer Heat uninteressante Ausgaben generiert, siehe (b).
         
         \input{data/hex_heat/figure.tex}
         
@@ -330,7 +330,7 @@
 
 
 
-\chapter{Fazit - Ausblick und zukünftige Forschung \at{@naming}}
+\chapter{Ausblick und zukünftige Forschung}
     \at{@incomplete Einleitender Satz}
     
     \begin{itemize}
@@ -353,10 +353,10 @@
 
 
 % ////////////////////////////////////////////////
-% ////////////////////////////////////////////////
 
 \bibliographystyle{plain}
 \bibliography{Literatur}
 
+% ////////////////////////////////////////////////
 
 \end{document}
