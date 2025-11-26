@@ -53,6 +53,7 @@
 % 
 % @important
 % Abgabe:
+% 
 % Wann Sie die fertige Arbeit abgeben, entscheiden Sie selbst, jedoch müssen Sie den endgültigen Abgabetermin einhalten. Die Abschlussarbeit muss folgende Erklärung zur selbständigen Abfassung der Bachelorarbeit enthalten:
 % „Durch meine Unterschrift erkläre ich, dass ich die vorliegende Arbeit mit dem Titel: <Titel der Arbeit einfügen> selbständig verfasst und in gleicher oder ähnlicher Fassung noch nicht in einem anderen Studiengang als Prüfungsleistung vorgelegt habe. Ich habe alle von mir genutzten Hilfsmittel und Quellen, einschließlich generativer Modelle/KI angegeben und die den verwendeten Quellen und Hilfsmitteln wörtlich oder sinngemäß entnommenen Stellen in Form von Zitaten kenntlich gemacht. Darüber hinaus habe ich keine Hilfsmittel verwendet.“
 % Zur Abgabe der Abschlussarbeit senden Sie ein PDF der Arbeit und der unterschriebenen Selbstständigkeitserklärung in einer E Mail an Ihren Betreuer, den Zweitgutachter, das Prüfungsamt (pruefungsamt-koethen@hs-anhalt.de) und Professor Schneider.
@@ -286,9 +287,17 @@
     \item quadrat, hex und circle/spiral und deren kombinationen haben gute erfolgsquoten, während pure noise sehr schlecht ist, außer heat wird recht hoch gesetzt, warum? weil immer nur ein schlechter knoten reicht um lösungen sehr unwahrscheinlich zu machen und für noise keine uniforme verteilung der punkte besteht, im gegensatz haben die anderen eine uniforme verteilung wodurch es weniger wahrscheinlich ist , dass eine einzelne zelle schlecht ist. Hierfür wäre lokale heat oder heuristiken für dessen anpassung besser aber sind außerhalb des umfangs dieser arbeit
     \item Lokale Ähnlichkeit im Vergleich zum Input \at{@placement ist das nicht schon bei heat gesagt, denn da muss das hier hin}
     \item Linienmuster und Flächenmuster in Beispielen(Flächenmuster dominieren wenn heat zu gering ist, linienmuster lassen sich nur bedingt in beliebigen graphen darstellen)
-    \item Was Aliasing angeht: Der Graph muss nicht mit Voronoizellen dargestellt werden, die Kanten der Zellen könnten in weiteren schritten je nach Zustand der Nachbarn angepasst werden und weiter verarbeitet werden. die unterliegenden Struktur des Graphen ist unabhängig von dessen Darstellung. In dieser Arbeit nicht weiter untersucht, nur ein trivialen fall dargestellt \at{@visual mit kleinerer Cell size}
+    \item 
     \item \at{@incomplete Lösungsraum undefiniert} Jede Kante des Graphen stellt eine Beschränkung des Lösungsraums dar. Bei einem Gitter ist jede Zelle, mit Ausnahme der Zellen am Rand, gleichermaßen beschränkt, jedoch kann die Anordnung des Graphen dazu führen dass einzelne Zelle weniger und andere stärker eingeschränkt werden. Eine Zelle mit zehn Nachbarn muss in einen Zustand kollabiert, welcher zu den Zuständen der zehn Nachbaren passt. Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthalten, während dass Gitter uniforme Beschränkung auf Zellen ergibt. Zur Erinnerung: es muss nur eine Zelle eine Widerspruch verursachen damit der Algorithmus fehlschlägt. Also sind solche Regionen starker Beschränkung besonderns entscheident für die Chance eine valide Ausgabe zu generieren, weil hier der Lösungsraum am kleinsten ist. \at{@incomplete Entropie erwähnen und @visual für Regionen mit der App darstellen, vergleich halb gelöstester Graph mit Weave und mit einem eher lokalen Beispiel. Unterschiedlicher effekt auf die Entropie der entfernten Zellen und auch für unterschiedliche teile des Graphen}
     \end{itemize}
+    
+    
+    
+    \at{@placement Artefakte. sollte das in sein future work?}
+    Auch bei Graphen kann die Ausgabe visuelle Artefakte des Graphens enthalten. In Abbildung \ref{fig:cell_size} sind die Voronoi-Zellen erkennbar. Nun muss der Graph aber nicht so dargestellt werden. Die Knoten des Graphen wurden konsistent dem Beispiel entsprechend gefüllt. Von hier können andere Methoden oder Postprocessing angewendet werden um die Ausgabe zugestallten. In der Abbildung wird beispielhaft die Größe der Zellen verkleinert, wodurch die harten Kanten der Sechecke etwas weniger betont erscheinen, aber nun auch der Hintergrund zu sehen ist. Hier könnte man auf andere Weise die Lücken füllen, so dass die secheckige Form der Zellen kachiert wird. \at{@incomplete die Ausgabe muss natürlich nicht direkt visuell verwendet werden sondern kann auch als grundlage für eine gänzlich andere Darstellung sein, wobei das Beispiel nur Nachbarschaften aber nicht direkt Farben oder Dinge darstellt sondern andere Konzepte}
+    \input{data/cell_size/figure.tex}
+    
+    
     
     \section{Der Effekt von Heat auf die Ausgabe}
         Im folgenden Abschnitt werden die positiven wie auch negativen Effekt von Heat mittels Beispielen erklärt.
