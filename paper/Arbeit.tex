@@ -6,7 +6,6 @@
 \usepackage{lmodern}        % bessere Schriftart
 
 \usepackage{hyperref}                      % clickable links
-\hypersetup{colorlinks=true, linkcolor=black, citecolor=black, filecolor=black, urlcolor=teal}
 \usepackage{amsmath, amssymb}              % mathe formeln
 \usepackage{graphicx, caption, subcaption} % for figures and subfigures
 \usepackage{float}                         % enforce figure placement
@@ -22,6 +21,7 @@
 \usepackage{xcolor}
 \definecolor{mred}{HTML}{fe163d}
 \definecolor{mgreen}{HTML}{009052}
+\definecolor{mblue}{HTML}{586076}
 \DeclareRobustCommand{\@todo(viktor):}[1]{
     \textcolor{mred}{@todo:} \textcolor{mred}{#1}
 } 
@@ -240,7 +240,7 @@
 
 
 \chapter{Umsetzung}
-    Für die Implementierung habe wurde eine kleine Anwendung erstellt. Abbildung \ref{fig:app} zeigt einen Screenshot der Anwendung in dem die UI und eine generierte Ausgabe zusehen sind. Der Nutzer kann Beispielbilder auswählen, einen Graphen generieren und dann mittels Wave Function Collapse eine Ausgabe generieren. Es wurde leider nicht sehr viel Zeit in ein intuitives Layout und Design gesteckt. Der Code kann \href{https://github.com/MrMetube/wfc}{\underline{hier}}(Stand \today) gefunden werden.
+    Für die Implementierung habe wurde eine kleine Anwendung erstellt. Abbildung \ref{fig:app} zeigt einen Screenshot der Anwendung in dem die UI und eine generierte Ausgabe zusehen sind. Der Nutzer kann Beispielbilder auswählen, einen Graphen generieren und dann mittels Wave Function Collapse eine Ausgabe generieren. Es wurde leider nicht sehr viel Zeit in ein intuitives Layout und Design gesteckt. Der Code kann \href{https://github.com/MrMetube/wfc}{\textcolor{mblue}{\textbf{hier}}}(Stand: \today) gefunden werden.
     
     \input{data/app/figure.tex}
     
@@ -289,6 +289,9 @@
     \item Linienmuster und Flächenmuster in Beispielen(Flächenmuster dominieren wenn heat zu gering ist, linienmuster lassen sich nur bedingt in beliebigen graphen darstellen)
     \item 
     \item \at{@incomplete Lösungsraum undefiniert} Jede Kante des Graphen stellt eine Beschränkung des Lösungsraums dar. Bei einem Gitter ist jede Zelle, mit Ausnahme der Zellen am Rand, gleichermaßen beschränkt, jedoch kann die Anordnung des Graphen dazu führen dass einzelne Zelle weniger und andere stärker eingeschränkt werden. Eine Zelle mit zehn Nachbarn muss in einen Zustand kollabiert, welcher zu den Zuständen der zehn Nachbaren passt. Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthalten, während dass Gitter uniforme Beschränkung auf Zellen ergibt. Zur Erinnerung: es muss nur eine Zelle eine Widerspruch verursachen damit der Algorithmus fehlschlägt. Also sind solche Regionen starker Beschränkung besonderns entscheident für die Chance eine valide Ausgabe zu generieren, weil hier der Lösungsraum am kleinsten ist. \at{@incomplete Entropie erwähnen und @visual für Regionen mit der App darstellen, vergleich halb gelöstester Graph mit Weave und mit einem eher lokalen Beispiel. Unterschiedlicher effekt auf die Entropie der entfernten Zellen und auch für unterschiedliche teile des Graphen}
+            
+            \at{@visual weave beispiel mit vergleich der entropie nach einem Schritt mit höherere heat: effekt ist, dass die entropie entfernter zellen höher ist und nur direkte nachbar beeinfluss werden}
+            \at{@visual Danach ein zweiter vergleich mit unterschiedlichen graphen. gitter, kombination von gittern und vielleicht noise?}
     \end{itemize}
     
     
