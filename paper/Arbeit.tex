@@ -6,7 +6,7 @@
 \usepackage{lmodern}        % bessere Schriftart
 
 \usepackage{hyperref}                      % clickable links
-\hypersetup{colorlinks=true, linkcolor=black, citecolor=black, filecolor=black, urlcolor=blue}
+\hypersetup{colorlinks=true, linkcolor=black, citecolor=black, filecolor=black, urlcolor=teal}
 \usepackage{amsmath, amssymb}              % mathe formeln
 \usepackage{graphicx, caption, subcaption} % for figures and subfigures
 \usepackage{float}                         % enforce figure placement
@@ -190,7 +190,7 @@
 
 
 \chapter{Wave Function Collapse auf Graphen}
-    In diesem Abschnitt wir dargestellt, wie der Wave Function Collapse Algorithmus erweitert wird, so dass die Ausgabe nicht nur auf einem Gitter, sondern auch auf Zellen mit freier Anordnung und Verteilung, einem Graphen, geschehen kann. Es wird erklärt welche Aspekt des Algorithmus angepasst werden. Desweiteren wird ein neues Konzept names \textit{Heat} eingeführt, welches dem Nutzer erlaubt die erzielte Ähnlichkeit zum Beispiel zu verringern um die Erfolgschance des Algorithmus zu verbessern.
+    In diesem Abschnitt wir dargestellt, wie der Wave Function Collapse Algorithmus erweitert wird, so dass die Ausgabe nicht nur auf einem Gitter, sondern auch auf Zellen mit freier Anordnung und Verteilung, einem Graphen, geschehen kann. Es wird erklärt welche Aspekt des Algorithmus angepasst werden. Desweiteren wird ein neues Konzept names \textit{Heat} eingeführt, welches dem Nutzer erlaubt die erzielte Ähnlichkeit zum Beispiel zu verringern um die Erfolgschance des Algorithmus zu verbessern \at{@wording das ist der indirekte effekt aber das ist ja nicht was der nutzer will. das nochmal umformulieren}.
     
     
     \section{Beschränkung des Algorithmus und Idee zur Erweiterung}
@@ -277,17 +277,17 @@
 
 
 \chapter{Ergebnisse und Diskussion}
-
     \at{@incomplete alles ausformulieren}
+
     \begin{itemize} 
     % Ergebnisse
-    \item Base Case - Gitter - Vergleich zum WFC
-    \item Bilder mit unterschiedlichen Graphen: Einfache, Komposition(vier in eins, außen und innen)
+    \item Base Case - Gitter - Vergleich zum WFC - Bilder mit unterschiedlichen Graphen: Einfache, Komposition(vier in eins, außen und innen). vielleicht auch eine Seite mit vielen beispielen und jeweils ein graph und eine gute ausgabe in einer tabelle?
     % Diskussion
     \item quadrat, hex und circle/spiral und deren kombinationen haben gute erfolgsquoten, während pure noise sehr schlecht ist, außer heat wird recht hoch gesetzt, warum? weil immer nur ein schlechter knoten reicht um lösungen sehr unwahrscheinlich zu machen und für noise keine uniforme verteilung der punkte besteht, im gegensatz haben die anderen eine uniforme verteilung wodurch es weniger wahrscheinlich ist , dass eine einzelne zelle schlecht ist. Hierfür wäre lokale heat oder heuristiken für dessen anpassung besser aber sind außerhalb des umfangs dieser arbeit
-    \item Lokale Ähnlichkeit im Vergleich zum Input
-    \item Linienmuster und Flächenmuster in Beispielen
-    \item \at{@incomplete Lösungsraum undefiniert} Jede Kante des Graphen stellt eine Beschränkung des Lösungsraums dar. Bei einem Gitter ist jede Zelle, mit Ausnahme der Zellen am Rand, gleichermaßen beschränkt, jedoch kann die Anordnung des Graphen dazu führen dass einzelne Zelle weniger und andere stärker eingeschränkt werden. Eine Zelle mit zehn Nachbarn muss in einen Zustand kollabiert, welcher zu den Zuständen der zehn Nachbaren passt. Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthalten, während dass Gitter uniforme Beschränkung auf Zellen ergibt. Zur Erinnerung: es muss nur eine Zelle eine Widerspruch verursachen damit der Algorithmus fehlschlägt. Also sind solche Regionen starker Beschränkung besonderns entscheident für die Chance eine valide Ausgabe zu generieren, weil hier der Lösungsraum am kleinsten ist. \at{@incomplete Entropie erwähnen und @visual für Regionen mit der App darstellen}
+    \item Lokale Ähnlichkeit im Vergleich zum Input \at{@placement ist das nicht schon bei heat gesagt, denn da muss das hier hin}
+    \item Linienmuster und Flächenmuster in Beispielen(Flächenmuster dominieren wenn heat zu gering ist, linienmuster lassen sich nur bedingt in beliebigen graphen darstellen)
+    \item Was Aliasing angeht: Der Graph muss nicht mit Voronoizellen dargestellt werden, die Kanten der Zellen könnten in weiteren schritten je nach Zustand der Nachbarn angepasst werden und weiter verarbeitet werden. die unterliegenden Struktur des Graphen ist unabhängig von dessen Darstellung. In dieser Arbeit nicht weiter untersucht, nur ein trivialen fall dargestellt \at{@visual mit kleinerer Cell size}
+    \item \at{@incomplete Lösungsraum undefiniert} Jede Kante des Graphen stellt eine Beschränkung des Lösungsraums dar. Bei einem Gitter ist jede Zelle, mit Ausnahme der Zellen am Rand, gleichermaßen beschränkt, jedoch kann die Anordnung des Graphen dazu führen dass einzelne Zelle weniger und andere stärker eingeschränkt werden. Eine Zelle mit zehn Nachbarn muss in einen Zustand kollabiert, welcher zu den Zuständen der zehn Nachbaren passt. Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthalten, während dass Gitter uniforme Beschränkung auf Zellen ergibt. Zur Erinnerung: es muss nur eine Zelle eine Widerspruch verursachen damit der Algorithmus fehlschlägt. Also sind solche Regionen starker Beschränkung besonderns entscheident für die Chance eine valide Ausgabe zu generieren, weil hier der Lösungsraum am kleinsten ist. \at{@incomplete Entropie erwähnen und @visual für Regionen mit der App darstellen, vergleich halb gelöstester Graph mit Weave und mit einem eher lokalen Beispiel. Unterschiedlicher effekt auf die Entropie der entfernten Zellen und auch für unterschiedliche teile des Graphen}
     \end{itemize}
     
     \section{Der Effekt von Heat auf die Ausgabe}
