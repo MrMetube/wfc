@@ -1,25 +1,17 @@
-\begin{figure}[H]
-    \centering
-    \begin{minipage}{\linewidth}
-        \rule{\linewidth}{0.4pt}
-         
-        \begin{enumerate}
-        \item $M_0$ ist ein simples konsitentes Modell. $M = M_0$
-        \subitem Wiederhole 2. bis 5. bis jeder Teil des Modells angepasst wurde
-        \item Wähle eine Menge $B$ an Knotenpunkten zur Bearbeitung
-        \item  $M' = M$ ohne die Knotenpunkte $B$ und deren bisherigen Bauteilen
-        \item Arbeite alle Knotenpunkte von $B$ ab:
-        \subitem Wähle einen Knotenpunkte aus und weise ihm ein konsistentes Bauteil zu
-        \subitem Prüfe alle Knotenpunkte in $M'$ ob noch mindestens ein Bauteil passt
-        \subitem Existiert ein Knotenpunkt ohne mögliches Bauteil dann ist $M'$ nicht mehr konsistent
-        \subitem Dann: Brich ab. Sonst: Füge diesen Knotenpunkt in $M'$ ein
-        \item Wenn $M'$ noch konsistent ist, dann $M = M'$
-        \end{enumerate}
-        
-        \rule{\linewidth}{0.4pt}
-    \end{minipage}
-    
+\begin{algorithm}
     \caption{Model Synthesis Algorithmus nach Merrel \cite{merrel}}
+    \label{alg:ms_merrel}
     
-    \label{fig:ms_merrel}
-\end{figure}
+    \begin{enumerate}
+    \item $M_0$ ist ein simples konsitentes Modell. $M = M_0$
+    \subitem Wiederhole 2. bis 5. bis jeder Teil des Modells angepasst wurde
+    \item Wähle eine Menge $B$ an Knotenpunkten zur Bearbeitung
+    \item  $M' = M$ ohne die Knotenpunkte $B$ und deren bisherigen Bauteilen
+    \item Arbeite alle Knotenpunkte von $B$ ab:
+    \subitem Wähle einen Knotenpunkte aus und weise ihm ein konsistentes Bauteil zu
+    \subitem Prüfe alle Knotenpunkte in $M'$ ob noch mindestens ein Bauteil passt
+    \subitem Existiert ein Knotenpunkt ohne mögliches Bauteil dann ist $M'$ nicht mehr konsistent
+    \subitem Dann: Brich ab. Sonst: Füge diesen Knotenpunkt in $M'$ ein
+    \item Wenn $M'$ noch konsistent ist, dann $M = M'$
+    \end{enumerate}
+\end{algorithm}

@@ -8,10 +8,13 @@
 \usepackage{hyperref}                      % clickable links
 \usepackage{amsmath, amssymb}              % mathe formeln
 \usepackage{graphicx, caption, subcaption} % for figures and subfigures
+\captionsetup[figure]{font=small,skip=5pt,format=plain}
 \usepackage{float}                         % enforce figure placement
 \usepackage{setspace} % doublespacing...
 \usepackage{geometry}
 \geometry{left=3.5cm, right=2.5cm, top=2.5cm, bottom=2.5cm}
+
+\usepackage{algorithm}
 
 % ////////////////////////////////////////////////
 
@@ -48,8 +51,6 @@
 \@todo(viktor):{pdf in git laden}
 
 \@todo(viktor):{Abbildungen Anordung prüfen und verbessern}
-
-\@todo(viktor):{equations und algorithmen von figures trennen}
 
 \@todo(viktor):{figcapstyle verbessern, kleinere schriftart}
 
@@ -161,11 +162,11 @@
         
         \input{data/delaunay_voronoi/figure.tex}
         
-        \textit{Prozedurale Generierung} \at{@incomplete}
+        \textit{Prozedurale Generierung} \at{@incomplete}p
     
     
     \section{Model Synthesis}
-        Mit dem \textit{Model Synthesis} \cite{merrel} Algorithmus \ref{fig:ms_merrel} können, basiert auf einem 3D Beispielmodell, eine große Menge an ähnlichen 3D Modellen prozedural generiert werden (siehe Abbildung \ref{fig:ms_output}). Das Beispielmodell muss zuvor in kleinere Bauteile zerlegt werden, aus denen der Algorithmus dann ein neues Modell generiert. Ein Bauteil kann ein komplexer Teil des Beispiels sein, kann aber auch einen leeren Teil des Beispiels enthalten. Die Bauteile werden wie Bauklötze zusammengebaut, wobei zwei Bauteile nur dann nebeneinander platziert werden dürfen, wenn diese auch im Beispielmodell nebeneinander vorkommen. Diese Eigenschaft wird auch Konsistenz genannt. Ein simples konsistentes Modell ist z.B. ein leeres Modell.
+        Mit dem \textit{Model Synthesis} \cite{merrel} Algorithmus \ref{alg:ms_merrel} können, basiert auf einem 3D Beispielmodell, eine große Menge an ähnlichen 3D Modellen prozedural generiert werden (siehe Abbildung \ref{fig:ms_output}). Das Beispielmodell muss zuvor in kleinere Bauteile zerlegt werden, aus denen der Algorithmus dann ein neues Modell generiert. Ein Bauteil kann ein komplexer Teil des Beispiels sein, kann aber auch einen leeren Teil des Beispiels enthalten. Die Bauteile werden wie Bauklötze zusammengebaut, wobei zwei Bauteile nur dann nebeneinander platziert werden dürfen, wenn diese auch im Beispielmodell nebeneinander vorkommen. Diese Eigenschaft wird auch Konsistenz genannt. Ein simples konsistentes Modell ist z.B. ein leeres Modell.
         
         Der Algorithmus arbeitet auf einem 3D Gitter. Jedem Knotenpunkt des Gitters wird im fertigen Modell ein Bauteil zugewiesen, doch vorher könnten an jedem Knotenpunkt mehrere Bauteile ein konsistentes Modell bilden. Der Algorithmus wählt iterativ ein Bauteil und prüft, dass dadurch kein anderer Knotenpunkt nun keine möglichen Bauteile mehr hat. Wäre dies der Fall, so könnte das Modell nicht mehr vervollständigt werden. Hierfür wird eine globale Suche verwendet, andere Methoden beschränkten sich zuvor nur auf lokale Suchen. Eine globale Suche hat zum Vorteil, dass auch ein weitreichenden Einfluss eines Bauteils auf das gesamte Gitter korrekt behandelt wird. Die Auswahl der Bauteile geschieht per Zufall, dabei werden Bauteile die oft im Beispiel vorkommen wahrscheinlicher ausgewählt als seltene Bauteile. Für eine generiertes Modell bedeutet dies, dass die globale Verteilung der Bauteile auch tendenziell der Verteilung im Beispiel gleicht.
         
@@ -179,15 +180,13 @@
     
     
     \section{Wave Function Collapse}
-        \textit{Wave Function Collapse} ist eine Weiterentwicklung des Model Sythesis Algorithmus \cite{gumin}. Der Name ist eine Anspielung auf die Quantenphysik. So könnte man Quantenpartikel in Superposition mit den Zellen des Gitters vergleichen. Die Zellen haben auch mehrere mögliche finale Zustände bis sie observiert werden und in einen festen Zustand kollabiert. Mathematisch besteht aber keine Beziehung. Auch werden andere Begriffe wie z.B. Knoten zu Zelle umbenannt und das Gitter als Wave bezeichnet. Die Kernidee der Generierung mittels einem Beispiel bleibt und wird um drei Aspekte erweitert:
+        \textit{Wave Function Collapse} \cite{gumin} ist eine Weiterentwicklung des Model Sythesis Algorithmus \ref{alg:wfc_gumin}. Abbildung \ref{fig:wfc_overview} zeigt einige Beispiele und daraus generierte Bilder. Der Name ist eine Anspielung auf die Quantenphysik. So könnte man Quantenpartikel in Superposition mit den Zellen des Gitters vergleichen. Die Zellen haben auch mehrere mögliche finale Zustände bis sie observiert werden und in einen festen Zustand kollabiert. Mathematisch besteht aber keine Beziehung. Auch werden andere Begriffe wie z.B. Knoten zu Zelle umbenannt und das Gitter als Wave bezeichnet. Die Kernidee der Generierung mittels einem Beispiel bleibt und wird um drei Aspekte erweitert:
         
         \begin{enumerate}
         \item Bauteile können automatisch aus einem Beispiel extrahiert werden.
         \item Im Algorithmus werden die Zellen beginnend mit der niedrigsten Entropie abgearbeitet. 
         \item Spiegelungen und Reflexionen von Bauteilen werden automatisch erzeugt und verwendet.
         \end{enumerate}
-        
-        Der Algorithmus ist in Abbildung \ref{fig:wfc_gumin} dargestellt. Abbildung \ref{fig:wfc_overview} zeigt einige Beispiele und daraus generierte Bilder.
         
         \input{data/wfc_gumin.tex}
         \input{data/wfc_overview/figure.tex}
@@ -198,7 +197,10 @@
             
             \input{data/directional_bias/figure.tex}
             
-            Merrel zeigt im Anhang seines Papers \cite{merrel}, dass die Entscheidung, ob eine Ausgabe vervollständigt werden kann, ein NP-vollständiges Problem ist. Einfacher ist es eine Heuristik zu definieren. Hierfür wird die Shannon-Entropie \cite{shannon} als Maß eingeführt. Sie beschreibt das Maß an Ungewissheit in einem System, hier die Ungewissheit über den finalen Zustand einer Zelle. Ist eine Zelle observiert, hat sie nur noch einen Zustand und die Entropie ist 0, während eine Zelle mit vielen Möglichkeiten eine hohe Entropie hat. Die Entropie gibt auch Information darüber wie sehr eine Zelle durch ihre Umgebung beschränkt wird, weil Zellen mit vielen Beschränkungen nur noch wenige mögliche Zustände haben.             
+            Merrel zeigt im Anhang seines Papers \cite{merrel}, dass die Entscheidung, ob eine Ausgabe vervollständigt werden kann, ein NP-vollständiges Problem ist. Einfacher ist es eine Heuristik zu definieren. Hierfür wird die Shannon-Entropie \cite{shannon} als Maß eingeführt. Sie beschreibt das Maß an Ungewissheit in einem System, hier die Ungewissheit über den finalen Zustand einer Zelle. Sie wird mit der Formel \ref{eq:entropy} berechnet, wobei $\mathcal{X}$ die Menge der möglichen Zustände einer Zelle ist und $p(x)$ die Wahrscheinlichkeit das $x$ gewählt wird ist.
+            
+            Ist eine Zelle observiert, hat sie nur noch einen Zustand und die Entropie ist 0, während eine Zelle mit vielen Möglichkeiten eine hohe Entropie hat. Die Entropie gibt auch Information darüber wie sehr eine Zelle durch ihre Umgebung beschränkt wird, weil Zellen mit vielen Beschränkungen nur noch wenige mögliche Zustände haben.  
+                       
             \input{data/entropy.tex}
         
         
@@ -211,7 +213,7 @@
         
         
         \subsection{Extraktion}
-            Zuvor musste der Nutzer das gewünschte Beispielmodell oder Beispielbild manuell in einzelne gleichgroße Bauteile zerlegen, aus denen der Algorithmus dann neue Modelle und Bilder generiert. Wave Function Collapse nutzt einen Algorithmus \ref{fig:wfc_extraction} zur Generierung dieser Bauteile \cite{gumin}. Die größe der Bauteile ist dabei freiwählbar, aber sie sollte so gewählt sein, das sie zum genutzen Beispiel passt, damit die im Beispiel existierenden Muster erhalten bleiben.  Sind die Bauteile zu klein gewählt, gehen Strukturen des Beispiels verloren. Während zu große Bauteile auch unerwünschte Strukturen im Beispiel enthalten, was im extremen Fall dazu führt, dass nur noch exakte Kopien des Beispiels ohne Variation in der Ausgabe vorkommen. Für Bilder wird in dieser Arbeit stets die Moore-Nachbarschaft jedes Pixels, also die direkt angrenzenden Pixel sowie die entlang der Diagonalen, als Bauteil verwendet. Dies wird auch als das Umfeld des Pixels beschrieben.
+            Zuvor musste der Nutzer das gewünschte Beispielmodell oder Beispielbild manuell in einzelne gleichgroße Bauteile zerlegen, aus denen der Algorithmus dann neue Modelle und Bilder generiert. Wave Function Collapse nutzt einen Algorithmus \ref{alg:wfc_extraction} zur Generierung dieser Bauteile \cite{gumin}. Die größe der Bauteile ist dabei freiwählbar, aber sie sollte so gewählt sein, das sie zum genutzen Beispiel passt, damit die im Beispiel existierenden Muster erhalten bleiben.  Sind die Bauteile zu klein gewählt, gehen Strukturen des Beispiels verloren. Während zu große Bauteile auch unerwünschte Strukturen im Beispiel enthalten, was im extremen Fall dazu führt, dass nur noch exakte Kopien des Beispiels ohne Variation in der Ausgabe vorkommen. Für Bilder wird in dieser Arbeit stets die Moore-Nachbarschaft jedes Pixels, also die direkt angrenzenden Pixel sowie die entlang der Diagonalen, als Bauteil verwendet. Dies wird auch als das Umfeld des Pixels beschrieben.
             
             \input{data/wfc_extraction}
             
@@ -250,7 +252,7 @@
         
         Es ist nicht möglich Regeln für eine beliebige Richtung aus dem Beispiel zu extrahieren, da jeder Pixel nur 8 angrenzende Pixel hat. Sieht man das Beispiel als eine Funktion an, so ist diese nicht an allen Punkten definiert. Man könnte durch Interpolation einen Mittelwert zwischen Pixeln berechnen, wenn das Bild eine kontinuierliche Funktion approximiert. Handelt es sich aber tatsächlich um eine diskrete Funktion, könnte eine Interpolation Werte ergeben die nicht Teil des Wertebereichs waren, in anderen Worten würde man Farbwerte erhalten die vorher nicht im Bild waren. Da die Ausgabe dem Beispiel ähnlich seien muss, entfällt diese Option.
         
-        Es bleibt also nur die Möglichkeit, dass der tatsächlichen Richtung eine der messbaren Himmelsrichtungen zugewiesen wird. Hierfür wird die Kosinus-Ähnlichkeit \cite{cosine} \ref{fig:cosine} berechnet. Ist der Wert hoch, so zeigen die Vektoren in eine ähnliche Richtung, während entgegengesetze Vektoren eine geringe Ähnlichkeit haben. Es wird die Himmelsrichtung mit der höchsten Ähnlichkeit gewählt. 
+        Es bleibt also nur die Möglichkeit, dass der tatsächlichen Richtung eine der messbaren Himmelsrichtungen zugewiesen wird. Hierfür wird die Kosinus-Ähnlichkeit berechnet (siehe Formel \ref{eq:cosine}). Ist der Wert hoch, so zeigen die Vektoren in eine ähnliche Richtung, während entgegengesetze Vektoren eine geringe Ähnlichkeit haben. Es wird die Himmelsrichtung mit der höchsten Ähnlichkeit gewählt. 
         
         \input{data/cosine.tex}
         
@@ -279,11 +281,13 @@
     \input{data/app/figure.tex}
     
     \section{Generierung von Graphen}
-        Die Graphen auf denen der Wave Function Collapse arbeiten soll, werden in dieser Arbeit mit dem folgenden Algorithmus \ref{fig:graph_gen} generiert. Der Algorithmus nimmt als Eingabe eine Menge an Punkten, welche die Knotenpunkte des Graphen werden. Aus den Punkten wird eine Delaunay-Triangulierung erstellt. Hierfür wird er Boywer-Watson Algorithmus \cite{bowyer, watson} verwendet. Danach wird das Voronoi-Diagramm zu der Triangulierung gefunden. Der duale Graph der Delaunay-Triangulierung ist das Voronoi-Diagramm, d.h. jeder Knotenpunkt des Voronoi-Diagramms entspricht einer Fläche der Triangulierung und jede Fläche im Voronoi-Diagramm entspricht einem Knotenpunkt in der Triangulierung. Die Kanten der Dreiecke geben an, welche Zellen aneinander angrenzen, während die Voronoi-Zellen die Form einer Zelle für die Darstellung geben. In Abbildung \ref{fig:graph_examples} sind einige Beispiele von generierten Graphen dargestellt. Es ist zuerkennen, dass regelmäßige Gitter nur eine spezielle Form von Graphen darstellen. \at{@incomplete daher regelmäßig und unregelmäßig in einem graphen zusammen möglich}
+        Die Graphen auf denen der Wave Function Collapse arbeiten soll, werden in dieser Arbeit mit dem folgenden Algorithmus \ref{alg:graph_gen} generiert. Der Algorithmus nimmt als Eingabe eine Menge an Punkten, welche die Knotenpunkte des Graphen werden. Aus den Punkten wird eine Delaunay-Triangulierung erstellt. Hierfür wird der Boywer-Watson \cite{bowyer, watson} Algorithmus \ref{alg:bowyer_watson} verwendet. Danach wird das Voronoi-Diagramm zu der Triangulierung gefunden. Der duale Graph der Delaunay-Triangulierung ist das Voronoi-Diagramm, d.h. jeder Knotenpunkt des Voronoi-Diagramms entspricht einer Fläche der Triangulierung und jede Fläche im Voronoi-Diagramm entspricht einem Knotenpunkt in der Triangulierung. Die Kanten der Dreiecke geben an, welche Zellen aneinander angrenzen, während die Voronoi-Zellen die Form einer Zelle für die Darstellung geben. In Abbildung \ref{fig:graph_examples} sind einige Beispiele von generierten Graphen dargestellt. Es ist zuerkennen, dass regelmäßige Gitter nur eine spezielle Form von Graphen darstellen. \at{@incomplete daher regelmäßig und unregelmäßig in einem graphen zusammen möglich}
         
         \at{@visual für Boywer-Watson Algorithmus}
         
         \input{data/graph_gen.tex}
+        \input{data/bowyer_watson.tex}
+        
         \input{data/graph_examples/figure.tex}
         
         Es ist normal, dass ein solches Voronoi-Diagramm an den Rändern Zellen ergeben kann die auf einer Seite offen sind, weil die Kanten zwischen den Ecken der Zelle, den Umkreismittelpunkten, keinen Schnittpunkt haben. Für die Darstellung werden solche Zellen so angepasst, dass ihre Fläche innerhalb eines gewünschten Bereichs liegt(siehe Algorithmus \ref{fig:voronoi_clipping}). Unendlichgroße Flächen lassen sich schlecht rendern. Es wird geprüft, ob ein Eckpunkt der Voronoi-Zelle außerhalb des gewählten Bereichs liegt. Für solche Eckpunkte wird der Schnittpunkt von der Kante mit dem Bereich gefunden. Der Schnittpunkt ersetzt den Eckpunkt. Dies geschieht so lange bis alle Eckpunkte einer Zelle innerhalb oder auf dem Rand des Bereichs liegen.
@@ -294,7 +298,7 @@
         \at{@flow überleitung, nun haben wir einen graphen auf dem WFC passieren kann }
         
     \section{Phasen und Backtracking}
-        Der Algorithmus \ref{fig:wfc_back} generiert die Ausgabe schrittweise. Ein \textit{Schritt} besteht aus vier Phasen: Search, Pick, Observe und Propagate. Schritte geschehen nacheinander und könne nur eine Zelle oder bis hin zu alle Zellen anpassen. Der Algorithmus führt Schritt aus, bis jede Zelle collapst ist oder ein Widerspruch gefunden wurde.
+        Der Algorithmus \ref{alg:wfc_back} generiert die Ausgabe schrittweise. Ein \textit{Schritt} besteht aus vier Phasen: Search, Pick, Observe und Propagate. Schritte geschehen nacheinander und könne nur eine Zelle oder bis hin zu alle Zellen anpassen. Der Algorithmus führt Schritt aus, bis jede Zelle collapst ist oder ein Widerspruch gefunden wurde.
         
         \input{data/wfc_back.tex} 
         

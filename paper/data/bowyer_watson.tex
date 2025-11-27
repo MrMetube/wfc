@@ -1,11 +1,9 @@
 \begin{algorithm}
-    \caption{Generierung eines Graphen}
-    \label{alg:graph_gen}
+    \caption{Bowyer-Watson Algorithmus \cite{bowyer, watson}}
+    \label{alg:bowyer_watson}
         
     \begin{enumerate}
-    \item Erstelle eine Menge an Punkten
-    
-    \item Generiere die Delaunay-Triangulierung mit dem Bowyer-Watson Algorithmus\cite{bowyer,watson} \begin{enumerate}
+        \item Geben sei eine Menge an Punkte
         \item Erstelle das Super-Dreieck so dass jeder Punkt innerhalb liegt
         
         \item Füge jeden Punkt schrittweise in die Triangulierung ein: \begin{enumerate}
@@ -23,14 +21,6 @@
         \item Die Ecken und Kanten aller Dreiecke bilden den Graphen
         \subitem Jede Ecke wird der Mittelpunkt einer Voronoi-Zelle
         \subitem Die Kanten zeigen welche Zellen benachbart sind
-    \end{enumerate}
-    
-    \item Erstelle die Voronoi-Zellen aus der Triangulierung \begin{enumerate}
-        \item Finde alle Dreiecke einen Punkt teilen
-        \item Die Schwerpunkte der Dreiecke sind die Eckpunkte der Zelle
-        \item Verbinde die Eckpunkte der Zelle zu Kanten
-        \item Begrenze die Voronoi-Zellen auf den gewünschten Bereich 
-        \end{enumerate}
     \end{enumerate}
         
 \end{algorithm}
