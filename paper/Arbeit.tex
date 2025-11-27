@@ -336,13 +336,13 @@
     
     
     \at{@placement Artefakte. sollte das in sein future work?}
-    Auch bei Graphen kann die Ausgabe visuelle Artefakte des Graphens enthalten. In Abbildung \ref{fig:cell_size} sind die Voronoi-Zellen erkennbar. Nun muss der Graph aber nicht so dargestellt werden. Die Knoten des Graphen wurden konsistent dem Beispiel entsprechend gefüllt. Von hier können andere Methoden oder Postprocessing angewendet werden um die Ausgabe zugestallten. In der Abbildung wird beispielhaft die Größe der Zellen verkleinert, wodurch die harten Kanten der Sechecke etwas weniger betont erscheinen, aber nun auch der Hintergrund zu sehen ist. Hier könnte man auf andere Weise die Lücken füllen, so dass die secheckige Form der Zellen kachiert wird. \at{@incomplete die Ausgabe muss natürlich nicht direkt visuell verwendet werden sondern kann auch als grundlage für eine gänzlich andere Darstellung sein, wobei das Beispiel nur Nachbarschaften aber nicht direkt Farben oder Dinge darstellt sondern andere Konzepte}
+    Auch bei Graphen kann die Ausgabe visuelle Artefakte des Graphens enthalten. In Abbildung \ref{fig:cell_size} sind die Voronoi-Zellen erkennbar. Nun muss der Graph aber nicht so dargestellt werden. Die Knoten des Graphen wurden konsistent dem Beispiel entsprechend gefüllt. Von hier können andere Methoden oder Postprocessing angewendet werden um die Ausgabe zugestallten. In der Abbildung wird beispielhaft die Größe der Zellen verkleinert, wodurch die harten Kanten der Sechecke etwas weniger betont erscheinen, aber nun auch der Hintergrund zu sehen ist. Hier könnte man auf andere Weise die Lücken füllen, so dass die secheckige Form der Zellen kachiert wird. \at{@incomplete die Ausgabe muss natürlich nicht direkt visuell verwendet werden sondern kann auch als grundlage für eine gänzlich andere Darstellung sein, wobei das Beispiel nur Nachbarschaften aber nicht direkt Farben oder Dinge darstellt sondern andere Konzepte @incomplete Oskar Stalberg und Townscaper hier erwähnen}
     \input{data/cell_size/figure.tex}
     
     
     
     \section{Der Effekt von Heat auf die Ausgabe}
-        Im folgenden Abschnitt werden die positiven wie auch negativen Effekt von Heat mittels Beispielen erklärt.
+        Im folgenden Abschnitt werden die positiven wie auch negativen Effekt von Heat mittels Beispielen erklärt. \at{@flow reihenfolge überdenken}
         \\
         \\
         Abbildung \ref{fig:hex_heat} zeigt den Einfluss von Heat auf die Qualität der Ausgabe bei gleichem Beispiel und Graph. Das Beispiel kann auf dem Quadratgitter ohne weitere Probleme genutzt werden, siehe (b), während der Graph mit den Sechsecken bei geringer Heat uninteressante Ausgaben generiert, siehe (c).
@@ -367,7 +367,12 @@
         
         \input{data/more_heat/figure.tex}
 
-
+        
+        
+        \ref{fig:heat_plot} \at{@placement bei heat irgendwo} Die Entropie fällt stetig, da in jedem Schritt mindestens eine Zelle kollabiert wird. Es kann sein, dass dadurch andere Zellen auch kollabieren, was bedeutet dass die Entropie schnell fällt. Bei hoher Heat(ab ca 6) nähern sich die Daten der Asymptote. Diese wird dann erreicht, wenn in jedem Schritt nur eine Zelle kollabiert wird und alle Zellen unabhängig von einander sind. Bei geringer Heat haben die ersten Schritte einen großen Einfluss auf die Gesamtentropie des Graphen. Jede Entscheidung schränkt viele andere Zellen ein. Heat verringert den Einfluss einer Zelle, bis hin, dass eine Zelle nur noch ihre direkten Nachbarn beeinflusst. \at{@incomplete strukturieren und ausformulieren}
+        
+        \input{data/heat_plot/figure.tex}
+        
 
 
 
