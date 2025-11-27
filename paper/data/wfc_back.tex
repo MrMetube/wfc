@@ -3,42 +3,46 @@
     \begin{minipage}{\linewidth}
         \rule{\linewidth}{0.4pt}
         
-        \begin{enumerate}
-            \item Führe den nächsten \textbf{Schritt} aus: \begin{enumerate}
-                \item \textbf{Search}: Finde die Zellen mit der geringsten Entropie \begin{enumerate}
-                    \item Sind alle Zellen kollabiert? $\rightarrow$ \textbf{Done}
-                    \item Erstelle ein Liste der gefundenen Zellen
-                \end{enumerate}
-                
-                \item \textbf{Pick}: Wähle eine Zelle aus \begin{enumerate}
-                    \item Ist die Liste der Zellen leer? $\rightarrow$ \textbf{Backtrack}
-                    \item Entferne die gewählte Zelle aus der Liste
-                    \item Notiere alle möglichen Zustände der Zelle in einer Liste
-                \end{enumerate}
-                
-                \item \textbf{Observe}: Wähle einen Zustand aus \begin{enumerate}
-                    \item Entferne den gewählten Zustand aus der Liste
-                    \item Kollabier die Zelle in den Zustand
-                    \item Ist die Liste der Zustände leer? $\rightarrow$ \textbf{Backtrack}
-                \end{enumerate}
-                
-                \item \textbf{Propagate}: Prüfe alle Nachbarn von geänderten Zellen \begin{enumerate}
-                    \item Erstelle eine Liste zu prüfender Zellen
-                    \item Füge die ausgewählte Zelle ein
-                    \item Prüfe alle Nachbarzellen ob ihre Zustände noch passen
-                    \item Füge die Nachbarn in die Liste ein, wenn sie sich verändert haben
-                    \item Hat die Nachbarzelle keine möglichen Zustände mehr? $\rightarrow$ \textbf{Backtrack}
-                \end{enumerate}
-                
-                \item Geh zum nächsten \textbf{Schritt}
+        \textbf{Schritt}: \begin{enumerate}
+            \item \textbf{Search}: Finde die Zellen mit der geringsten Entropie \begin{enumerate}
+                \item Sind alle Zellen kollabiert? $\rightarrow$ \textbf{Done}
+                \item Erstelle ein Liste der gefundenen Zellen
             \end{enumerate}
-            \item \textbf{Backtrack}: \begin{enumerate}
-                \item Gehe zum gewünschten Schritt zurück
-                \item Gehe eine Phase in dem Schritt zurück
-                \item Füge alle Zustände aller Zellen, dessen Entfernungsschritt nun nach dem aktuellen Schritt liegt, wieder in die Zelle ein
+            
+            \item \textbf{Pick}: Wähle eine Zelle aus \begin{enumerate}
+                \item Ist die Liste der Zellen leer? $\rightarrow$ \textbf{Backtrack}
+                \item Entferne die gewählte Zelle aus der Liste
+                \item Notiere alle möglichen Zustände der Zelle in einer Liste
             \end{enumerate}
-            \item \textbf{Done}: Gib das Resultat aus
+            
+            \item \textbf{Observe}: Wähle einen Zustand aus \begin{enumerate}
+                \item Entferne den gewählten Zustand aus der Liste
+                \item Kollabier die Zelle in den Zustand
+                \item Ist die Liste der Zustände leer? $\rightarrow$ \textbf{Backtrack}
+            \end{enumerate}
+            
+            \item \textbf{Propagate}: Prüfe alle Nachbarn von geänderten Zellen \begin{enumerate}
+                \item Erstelle eine Liste zu prüfender Zellen
+                \item Füge die ausgewählte Zelle ein
+                \item Prüfe alle Nachbarzellen ob ihre Zustände noch passen
+                \item Füge die Nachbarn in die Liste ein, wenn sie sich verändert haben
+                \item Hat die Nachbarzelle keine möglichen Zustände mehr? $\rightarrow$ \textbf{Backtrack}
+            \end{enumerate}
+            
+            \item Geh zurück $\rightarrow$ \textbf{Schritt}
         \end{enumerate}
+        
+        \vspace{1em}
+        \textbf{Backtrack}: \begin{enumerate}
+            \item Gehe zum gewünschten Schritt zurück
+            \item Gehe eine Phase in dem Schritt zurück
+            \item Füge entfernte Zustände wieder in die Zellen ein
+            \item Geh zu $\rightarrow$ \textbf{Schritt}
+        \end{enumerate}
+        
+        \vspace{1em}
+        \textbf{Done}: Gib das Resultat aus
+            
             
         \rule{\linewidth}{0.4pt}
     \end{minipage}

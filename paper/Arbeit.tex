@@ -9,6 +9,9 @@
 \usepackage{amsmath, amssymb}              % mathe formeln
 \usepackage{graphicx, caption, subcaption} % for figures and subfigures
 \usepackage{float}                         % enforce figure placement
+\usepackage{setspace} % doublespacing...
+\usepackage{geometry}
+\geometry{left=3.5cm, right=2.5cm, top=2.5cm, bottom=2.5cm}
 
 % ////////////////////////////////////////////////
 
@@ -44,47 +47,67 @@
 
 \@todo(viktor):{pdf in git laden}
 
-\@todo(viktor):{Welche Documentclass?}
-
-\@todo(viktor):{Abgabe Zeit am Freitag? selbstständigkeitserklärung separat oder am ende der arbeit?}
-
 \@todo(viktor):{Abbildungen Anordung prüfen und verbessern}
 
 % 
 % @important
 % Abgabe:
 % 
-% Wann Sie die fertige Arbeit abgeben, entscheiden Sie selbst, jedoch müssen Sie den endgültigen Abgabetermin einhalten. Die Abschlussarbeit muss folgende Erklärung zur selbständigen Abfassung der Bachelorarbeit enthalten:
-% „Durch meine Unterschrift erkläre ich, dass ich die vorliegende Arbeit mit dem Titel: <Titel der Arbeit einfügen> selbständig verfasst und in gleicher oder ähnlicher Fassung noch nicht in einem anderen Studiengang als Prüfungsleistung vorgelegt habe. Ich habe alle von mir genutzten Hilfsmittel und Quellen, einschließlich generativer Modelle/KI angegeben und die den verwendeten Quellen und Hilfsmitteln wörtlich oder sinngemäß entnommenen Stellen in Form von Zitaten kenntlich gemacht. Darüber hinaus habe ich keine Hilfsmittel verwendet.“
-% Zur Abgabe der Abschlussarbeit senden Sie ein PDF der Arbeit und der unterschriebenen Selbstständigkeitserklärung in einer E Mail an Ihren Betreuer, den Zweitgutachter, das Prüfungsamt (pruefungsamt-koethen@hs-anhalt.de) und Professor Schneider.
-% Sie können die Arbeit natürlich auch als gedrucktes Exemplar abgeben. Dann müssen Sie zwei gebundene (keine Ringbindung oder Schnellhefter) Exemplare abgeben. Bei beiden Exemplaren muss die Selbstständigkeitserklärung unterzeichnet sein.
+% senden Sie ein PDF der Arbeit und der unterschriebenen Selbstständigkeitserklärung in einer E Mail an Ihren Betreuer, den Zweitgutachter, das Prüfungsamt (pruefungsamt-koethen@hs-anhalt.de) und Professor Schneider.
 
 % ////////////////////////////////////////////////
 
 \begin{titlepage}
-    \centering
-    \vspace*{2.5cm}
     
-    {\LARGE\textbf{Hochschule Anhalt}\par}
-    \vspace{1cm}
-    {\Large Fachbereich 5: Informatik und Sprachen\par}
-    \vspace{2.5cm}
+    \input{data/hsa_logo/figure.tex}
     
-    {\huge\textbf{Wave Function Collapse auf Graphen}\par}
-    %   \vspace{1cm}
-    %   {\Large Untertitel (falls vorhanden)\par}
-    \vfill
+    \begin{verbatim}
+        
+        
+    \end{verbatim}
     
-    \begin{tabular}{ll}
-        \textbf{Autor:} & Viktor Graf von Westarp\\
-        \textbf{Matrikelnummer:} & 5058639\\
-        \textbf{Betreuer:} & Prof. Dr. Stefan Schlechtweg\\
-        \textbf{Zweitprüferin:} & Prof. Dr. Anika Groß\\
-        \textbf{Abgabedatum:} & 5.\,Dezember\,2025
-    \end{tabular}
+    \begin{center}
+        \Large{Hochschule Anhalt}\\
+        \Large{Fachbereich Informatik und Sprachen}\\
+    \end{center}
     
-    \vspace{2cm}
-    {\large Köthen, \today\par}
+    \begin{verbatim}
+        
+        
+    \end{verbatim}
+        
+    \begin{center}
+        \doublespacing
+        \textbf{\LARGE{Bachelorarbeit}}\\
+        \begin{verbatim}
+            
+        \end{verbatim}
+        \textbf{\LARGE{Wave Function Collapse auf Graphen}}\\
+        \singlespacing
+        \begin{verbatim}
+            
+        \end{verbatim}
+    \end{center}
+    \begin{verbatim}
+        
+        
+        
+    \end{verbatim}
+    \begin{flushleft}
+        \begin{tabular}{llll}
+            \textbf{Studiengang:} & & Angewandet Informatik: Digitale Medien und Spieleentwicklung & \\
+            & & \\
+            \textbf{Autor:} & & Name: Viktor Graf von Westarp & \\
+            & & Matrikelnummer: 5058639 & \\
+            & & E-Mail: viktor.grafvonwestarp@student.hs-anhalt.de & \\
+            & & \\
+            \textbf{Abgabedatum:} & & 5.\,Dezember\,2025 &\\
+            & & \\
+            \textbf{1. Gutachter:} & & Prof.\,Dr.\,Stefan Schlechtweg &\\
+            \textbf{2. Gutachterin:} & & Prof.\,Dr.\,Anika Groß &\\
+        \end{tabular}
+    \end{flushleft}
+
 \end{titlepage}
 
 % ////////////////////////////////////////////////
@@ -123,7 +146,7 @@
         Ein \textit{Gitter} beschreibt eine regelmäßig aufgebaute Struktur aus einzelnen Punkten. Diese Knotenpunkte sind durch Kanten mit ihren direkten Nachbarn verbunden. Ein Bild wird digital z.B. auf einem Gitter von Pixeln gespeichert und dargestellt. Genauso bilden die Kästchen eines Sudoku ein Gitter. Wenn solch ein Gitter in einer Ebene liegt, wird es auch als \textit{2D Gitter} bezeichnet. Sind die Punkte regelmäßig im Raum angeordnet spricht man von einem \textit{3D Gitter}. Ein \textit{Graph} ist eine allgemeinere Struktur. Hier können die Knotenpunkte eine beliebige Anordnung haben und beliebig mit anderen Knoten durch Kanten verbunden sein. Ein Gitter ist eine spezielle Form eines Graphen. 
         \\
         \\
-        Eine \textit{Triangulierung} ist ein Graph, dessen Flächen alle Dreiecke sind. Eine besonders wichtige Variante ist die \textit{Delaunay-Triangulierung} \cite{delaunay}, bei der die Dreiecke so gewählt werden, dass der kleinste Winkel innerhalb jedes Dreiecks möglichst groß ist. Dadurch entstehen „gut geformte“ Dreiecke. Eng verwandt damit ist das \textit{Voronoi-Diagramm} \cite{voronoi}. Es teilt die Ebene in Regionen auf, sodass jeder Punkt genau die Fläche erhält, die ihm am nächsten liegt. Die Delaunay-Triangulierung und das Voronoi-Diagramm sind dual zueinander: Verbindet man die Mittelpunkte der Voronoi-Zellen, entsteht die Delaunay-Triangulierung, und aus einer Delaunay-Triangulierung lässt sich wiederum das zugehörige Voronoi-Diagramm ableiten. In Abbildung \ref{fig:delaunay_voronoi} ist die Delaunay-Triangulierung und das Voronoi-Diagram für ein paar Punkte dargestellt.
+        Eine \textit{Triangulierung} ist ein Graph, dessen Flächen alle Dreiecke sind. Eine besonders wichtige Variante ist die \textit{Delaunay-Triangulierung} \cite{delaunay}, bei der die Dreiecke so gewählt werden, dass der kleinste Winkel innerhalb jedes Dreiecks möglichst groß ist. Dadurch entstehen „gut geformte“ Dreiecke. Eng verwandt damit ist das \textit{Voronoi-Diagramm} \cite{voronoi}. Es teilt die Ebene in Regionen auf, sodass jeder Punkt genau die Fläche erhält, die ihm am nächsten liegt. Die Delaunay-Triangulierung und das Voronoi-Diagramm sind dual zueinander: Verbindet man die Mittelpunkte der Voronoi-Zellen, entsteht die Delaunay-Triangulierung, und aus einer Delaunay-Triangulierung lässt sich wiederum das zugehörige Voronoi-Diagramm ableiten. In Abbildung \ref{fig:delaunay_voronoi} ist die Delaunay-Triangulierung und das Voronoi-Diagram für einige Punkte dargestellt.
         
         \input{data/delaunay_voronoi/figure.tex}
         
@@ -153,23 +176,23 @@
         \item Spiegelungen und Reflexionen von Bauteilen werden automatisch erzeugt und verwendet.
         \end{enumerate}
         
-        Der Algorithmus ist in Abbildung \ref{fig:wfc_gumin} dargestellt. Abbildung \ref{fig:wfc_overview} zeigt ein paar Beispiele und daraus generierte Bilder.
+        Der Algorithmus ist in Abbildung \ref{fig:wfc_gumin} dargestellt. Abbildung \ref{fig:wfc_overview} zeigt einige Beispiele und daraus generierte Bilder.
         
         \input{data/wfc_gumin.tex}
         \input{data/wfc_overview/figure.tex}
         
         
         \subsection{Entropie}
-            Bei Model Synthesis werden Zellen einfach nach ihrer Reihenfolge im Gitter abgearbeitet. Der Vorteil ist, dass keine Suche der nächsten Zelle nötig ist, aber es hat zum Nachteil, dass die Ausgabe sichtbare Artefakte enthällt (siehe Abbildung \ref{fig:directional_bias}). Man kann erkennen, ob zuerst die Reihen oder erst die Spalten abgearbeitet wurden. Wäre bekannt welche Zelle den meisten Fortschritt zur Lösung und die geringste Chance auf einen Widerspruch birgt, könnte stets diese Zelle zuerst betrachtet werden. Doch Merrel zeigt im Anhang seines Papers \cite{merrel}, dass die Entscheidung, ob eine Ausgabe vervollständigt werden kann, ein NP-vollständiges Problem ist. 
+            Bei Model Synthesis werden Zellen einfach nach ihrer Reihenfolge im Gitter abgearbeitet. Der Vorteil ist, dass keine Suche der nächsten Zelle nötig ist, aber es hat zum Nachteil, dass die Ausgabe sichtbare Artefakte enthällt (siehe Abbildung \ref{fig:directional_bias}). Man kann erkennen, ob zuerst die Reihen oder erst die Spalten abgearbeitet wurden. Wäre bekannt welche Zelle den meisten Fortschritt zur Lösung und die geringste Chance auf einen Widerspruch birgt, könnte stets diese Zelle zuerst betrachtet werden. 
             
             \input{data/directional_bias/figure.tex}
             
-            Einfacher ist es eine Heuristik zu definieren. Hierfür wird die Shannon-Entropie \cite{shannon} als Maß eingeführt. Sie beschreibt das Maß an Ungewissheit in einem System, hier die Ungewissheit über den finalen Zustand einer Zelle. Ist eine Zelle observiert, hat sie nur noch einen Zustand und die Entropie ist 0, während eine Zelle mit vielen Möglichkeiten eine hohe Entropie hat. Die Entropie gibt auch Information darüber wie sehr eine Zelle durch ihre Umgebung beschränkt wird, weil Zellen mit vielen Beschränkungen nur noch wenige mögliche Zustände haben.             
+            Merrel zeigt im Anhang seines Papers \cite{merrel}, dass die Entscheidung, ob eine Ausgabe vervollständigt werden kann, ein NP-vollständiges Problem ist. Einfacher ist es eine Heuristik zu definieren. Hierfür wird die Shannon-Entropie \cite{shannon} als Maß eingeführt. Sie beschreibt das Maß an Ungewissheit in einem System, hier die Ungewissheit über den finalen Zustand einer Zelle. Ist eine Zelle observiert, hat sie nur noch einen Zustand und die Entropie ist 0, während eine Zelle mit vielen Möglichkeiten eine hohe Entropie hat. Die Entropie gibt auch Information darüber wie sehr eine Zelle durch ihre Umgebung beschränkt wird, weil Zellen mit vielen Beschränkungen nur noch wenige mögliche Zustände haben.             
             \input{data/entropy.tex}
         
         
         \subsection{Symmetrie}
-            Ziel des Model Synthesis Algorithmus ist es, eine große Anzahl lokal ähnlicher Ausgaben zu generieren \cite{merrel}. Ähnlichkeit wird erreicht, wenn jede kleine Region der Ausgabe zu Regionen des Beispiels passt \ref{fig:wfc_resemblance}. Die wahrgenommene Ähnlichkeit wird verbessert, wenn das Verhältnis der Häufigkeiten von Regionen der Verteilung im Beispiel gleicht. Im Wave Function Collapse wird dieses Kriterium erweitert. Die Regionen können nun auch Drehungen und Spiegelungen der Regionen im Beispiel sein \cite{gumin}.
+            Ziel des Model Synthesis Algorithmus ist es, eine große Anzahl lokal ähnlicher Ausgaben zu generieren \cite{merrel}. Ähnlichkeit wird erreicht, wenn jede kleine Region der Ausgabe zu Regionen des Beispiels passt (siehe Abbildung \ref{fig:wfc_resemblance}). Die wahrgenommene Ähnlichkeit wird verbessert, wenn das Verhältnis der Häufigkeiten von Regionen der Verteilung im Beispiel gleicht. Im Wave Function Collapse wird dieses Kriterium erweitert. Die Regionen können nun auch Drehungen und Spiegelungen der Regionen im Beispiel sein \cite{gumin}.
             
             \input{data/wfc_resemblance/figure.tex}
             
@@ -205,7 +228,7 @@
     
     
     \section{Von Gittern zu Graphen}
-        Ursprünglich arbeit Wave Function Collapse nur auf Gittern \cite{merrel} \cite{gumin}. Der Schritt zum Graphen als Fundament für die Ausgabe des Algorithmus ist naheliegend, da Gitter eine spezielle Art von Graphen darstellen. Im Umfang dieser Arbeit werden aber auch nicht alle Arten von Graphen betrachtet. Da jede Kanten eines Gitters zuvor eine lokale Benachbarung dargestellt haben und die Regelextraktion nur lokal arbeitet, beschränkt sich diese Arbeit nur auf Graphen in denen Kanten auch primär einen Knotenpunkt mit den Knotenpunkten in einem lokalen Umfeld verbindet. Der Algorithmus kann auch auf anderen Arten von Graphen angewendet werden, doch können daraus neue oder unerwartete Effekte hervortreten, die wiederum anderen Lösungswege benötigen.
+        Ursprünglich arbeit Wave Function Collapse nur auf Gittern \cite{merrel, gumin}. Der Schritt zum Graphen als Fundament für die Ausgabe des Algorithmus ist naheliegend, da Gitter eine spezielle Art von Graphen darstellen. Im Umfang dieser Arbeit werden aber auch nicht alle Arten von Graphen betrachtet. Da jede Kanten eines Gitters zuvor eine lokale Benachbarung dargestellt haben und die Regelextraktion nur lokal arbeitet, beschränkt sich diese Arbeit nur auf Graphen in denen Kanten auch primär einen Knotenpunkt mit den Knotenpunkten in einem lokalen Umfeld verbindet. Der Algorithmus kann auch auf anderen Arten von Graphen angewendet werden, doch können daraus neue oder unerwartete Effekte hervortreten, die wiederum anderen Lösungswege benötigen.
         
         Ein Gitter enthällt implizit Information über Benachbarung und Position jeder Zelle. Diese Informationen werden bei Graphen explizit angegeben. Dazu kommt, dass je nach Anordnung nun nicht nur die Richtung zur Nachbarzelle, sondern auch deren Abstand und die Anzahl an Nachbarzellen variieren kann. Dieser Aspekt ist von Vorteil für die Gestaltung der Ausgabe, da nun beliebige Strukturen und Formen genutzt werden können. Doch der Nachteil ist, dass das Beispiel und die daraus extrahierten Regeln vom Algorithmus nicht mehr eins zu eins angewendet werden können.
             
@@ -229,7 +252,7 @@
     
     
     
-    \section{Überblick}
+    \section{Zusammenfassung}
         Ziel dieser Arbeit ist, die Generierung des Wave Function Collapse Algorithmus auf Graphen geschehen zu lassen. Hierfür wurden drei Anpassungen dargestellt:
         \begin{enumerate}
             \item Ein Gitter gibt implizit an, wo Zellen liegen und welche Zellen benachbart sind. Diese Informationen müssen im Graphen explizit gespeichert werden. 
@@ -240,20 +263,19 @@
 
 
 \chapter{Umsetzung}
-    Für die Implementierung habe wurde eine kleine Anwendung erstellt. Abbildung \ref{fig:app} zeigt einen Screenshot der Anwendung in dem die UI und eine generierte Ausgabe zusehen sind. Der Nutzer kann Beispielbilder auswählen, einen Graphen generieren und dann mittels Wave Function Collapse eine Ausgabe generieren. Es wurde leider nicht sehr viel Zeit in ein intuitives Layout und Design gesteckt. Der Code kann \href{https://github.com/MrMetube/wfc}{\textcolor{mblue}{\textbf{hier}}}(Stand: \today) gefunden werden.
+    Abbildung \ref{fig:app} zeigt einen Screenshot der, für diese Arbeit entwickelten, Anwendung, in dem die UI und eine generierte Ausgabe zusehen sind. Der Nutzer kann Beispielbilder auswählen, einen Graphen generieren und dann mittels Wave Function Collapse eine Ausgabe generieren. Der Code kann \href{https://github.com/MrMetube/wfc}{\textcolor{mblue}{\textbf{hier}}}(Stand: \today) gefunden werden.
     
     \input{data/app/figure.tex}
     
     \section{Generierung von Graphen}
-        Die Graphen auf denen der Wave Function Collapse arbeiten soll, werden in dieser Arbeit mit dem folgenden Algorithmus generiert \ref{fig:graph_gen}. Der Algorithmus nimmt als Eingabe eine Menge an Punkten, welche die Knotenpunkte des Graphen werden. Aus den Punkten wird eine Delaunay-Triangulierung erstellt. Hierfür wird er Boywer-Watson Algorithmus \cite{bowyer, watson} verwendet. Danach wird das Voronoi-Diagramm zu der Triangulierung gefunden. Der duale Graph der Delaunay-Triangulierung ist das Voronoi-Diagramm, d.h. jeder Knotenpunkt des Voronoi-Diagramms entspricht einer Fläche der Triangulierung und jede Fläche im Voronoi-Diagramm entspricht einem Knotenpunkt in der Triangulierung. Die Kanten der Dreiecke geben an, welche Zellen aneinander angrenzen, während die Voronoi-Zellen die Form einer Zelle für die Darstellung geben. In Abbildung \ref{fig:graph_examples} sind einige Beispiele von generierten Graphen dargestellt. Es ist zuerkennen, dass regelmäßige Gitter nur eine spezielle Form von Graphen darstellen. 
+        Die Graphen auf denen der Wave Function Collapse arbeiten soll, werden in dieser Arbeit mit dem folgenden Algorithmus \ref{fig:graph_gen} generiert. Der Algorithmus nimmt als Eingabe eine Menge an Punkten, welche die Knotenpunkte des Graphen werden. Aus den Punkten wird eine Delaunay-Triangulierung erstellt. Hierfür wird er Boywer-Watson Algorithmus \cite{bowyer, watson} verwendet. Danach wird das Voronoi-Diagramm zu der Triangulierung gefunden. Der duale Graph der Delaunay-Triangulierung ist das Voronoi-Diagramm, d.h. jeder Knotenpunkt des Voronoi-Diagramms entspricht einer Fläche der Triangulierung und jede Fläche im Voronoi-Diagramm entspricht einem Knotenpunkt in der Triangulierung. Die Kanten der Dreiecke geben an, welche Zellen aneinander angrenzen, während die Voronoi-Zellen die Form einer Zelle für die Darstellung geben. In Abbildung \ref{fig:graph_examples} sind einige Beispiele von generierten Graphen dargestellt. Es ist zuerkennen, dass regelmäßige Gitter nur eine spezielle Form von Graphen darstellen. 
         
         \at{@visual für Boywer-Watson Algorithmus}
         
         \input{data/graph_gen.tex}
         \input{data/graph_examples/figure.tex}
         
-        Es ist normal, dass ein solches Voronoi-Diagramm an den Rändern Zellen ergeben kann die auf einer Seite offen sind, weil die Kanten zwischen den Ecken der Zelle, den Umkreismittelpunkten, keinen Schnittpunkt haben. Für die Darstellung werden solche Zellen so angepasst, dass ihre Fläche innerhalb eines gewünschten Bereichs liegt. Unendlichgroße Flächen lassen sich schlecht rendern. Dafür wird geprüft, ob ein Eckpunkt der Voronoi-Zelle außerhalb des gewählten Bereichs liegt. Für solche Eckpunkte wird der Schnittpunkt von der Kante mit dem Bereich gefunden. Der Schnittpunkt ersetzt den Eckpunkt. Dies geschieht so lange bis alle Eckpunkte einer Zelle innerhalb oder auf dem Rand des Bereichs liegen.
-            Der Algorithmus ist in Abbildung \ref{fig:voronoi_clipping} dargestellt.
+        Es ist normal, dass ein solches Voronoi-Diagramm an den Rändern Zellen ergeben kann die auf einer Seite offen sind, weil die Kanten zwischen den Ecken der Zelle, den Umkreismittelpunkten, keinen Schnittpunkt haben. Für die Darstellung werden solche Zellen so angepasst, dass ihre Fläche innerhalb eines gewünschten Bereichs liegt(siehe Algorithmus \ref{fig:voronoi_clipping}). Unendlichgroße Flächen lassen sich schlecht rendern. Es wird geprüft, ob ein Eckpunkt der Voronoi-Zelle außerhalb des gewählten Bereichs liegt. Für solche Eckpunkte wird der Schnittpunkt von der Kante mit dem Bereich gefunden. Der Schnittpunkt ersetzt den Eckpunkt. Dies geschieht so lange bis alle Eckpunkte einer Zelle innerhalb oder auf dem Rand des Bereichs liegen.
 
         \input{data/voronoi_clipping/figure.tex}
     
@@ -274,7 +296,7 @@
         
         Um Backtracking umzusetzen müssen mehr Informationen behalten werden als nur der Zustand des Gitters im aktuellen Schritt. Will man nun einen oder mehrere Schritte zurückgehen, muss man wissen, welche Entscheidung man zuvor bereits getroffen hat, um dessen Effekt rückgängig zu machen. Dabei genügt es nicht nur die collapste Zelle und den Zustand wieder zu entfernen, weil jede Zelle von mehreren Nachbarn beeinflusst wird. Die Menge der möglichen Zustände einer Zelle ist die Schnittmenge der möglichen Nachbarzuständen der Nachbarzellen. Somit kann es sein, dass ein Zustand A aus der Menge wegen mehreren Nachbarn fehlt. Nimmt man nun durch Backtracking eine dieser Beschränkungen wieder zurück, so ist es nicht offensichtlich, ob Zustand A nun wieder möglich ist, ohne alles neu zu berechnen und zu propagieren bis sich keine Zelle mehr ändert. Stattdessen kann man aber auch speichern, in welchem Schritt ein Zustand entfernt wurde. Ein Zustand wird beim Backtracken dann wieder möglich, wenn der Schritt in dem er entfernt wurde nach dem nun aktuellen Schritt liegt. Es genügt nur diesen einen Schritt pro Zustand zu speichern, da der Algorithmus selbst jeden Zustand bis auf einen pro Zelle entfernen muss, aber einen Zustand niemals in einem späteren Schritt wieder hinzufügt. In der Umsetzung wird für jede Zelle eine Liste aller Zustände gespeichert. Jeder Zustand ist entweder möglich und wurde noch nicht als entfernt markiert oder ist unmöglich und speichert den Schritt an dem er unmöglich wurde. Es wäre auch möglich einfach eine Kopie aller Zellen in jedem Schritt zu machen. Dann müssten beim Backtracken nur die alten Zellen wieder geladen werden. Der Unterschied zur anderen Methode ist dabei, dass für jeden Schritt die Zellen (oder deren Änderungen) immer wieder kopiert werden, während die benutzte Methode für jede Zelle ihre Änderungen für jeden Schritt speichert. Da ein Zustand aber nur einmal entfernt wird, muss ebend nur jeweils ein Schritt und nicht eine lange Liste aller Schritte pro Zustand gespeichert werden.
         
-        Desweiteren sollen bereits gemachte Entscheidungen, die zu einem Widerspruch führen, nicht noch einmal wiederholt werden. Die Entscheidungspunkte in der Pick- und Observe-Phase können gleich behandelt werden. Es wird jeweils eine Liste an Auswahlmöglichkeiten für später gespeichert. Die ausgewählte Zelle oder den ausgewählten Zustand werden aus der Liste entfernt. Wird gebacktrackt, so kann einfach die nächste Möglichkeit aus der Liste auswählt und entfernt werden. Der Algorithmus läuft ab dann normal weiter. Nun wurde aber eine neue Schwachstelle in den Algorithmus eingeführt. Wenn zuvor in der Search-Phase keine Zellen mehr gefunden wurden, bedeutete dies, dass alle Zellen tatsächlich kollabiert waren. Nun kann es aber sein, dass alle gefundenen Zellen ausprobiert wurde und zu einem Widerspruch geführt haben. Somit würde keine Zelle mehr wählbar sein. Auch in der Observe-Phase war es zuvor unmöglich keinen Zustand mehr auswählen zu können, da eine Zelle ohne mögliche Zustände bereits zuvor als Widerspruch identifiziert wurden wäre. In beiden Fällen wird dies wie ein Widerspruch behandelt und es muss zum Backtracking kommen. Schließlich wurden alle von diesem Schritt folgenden Entscheidungen bereits getroffen und ausgewertet und keine Lösung gefunden. Somit führt dieser Schritt zwar nicht direkt zu einem Widerspruch in einer Zelle, aber alle folgen Schritte werden irgendwann zu einem Widerspruch führen.
+        Desweiteren sollen bereits getroffenen Entscheidungen, die zu einem Widerspruch führen, nicht noch einmal wiederholt werden. Die Entscheidungspunkte in der Pick- und Observe-Phase können gleich behandelt werden. Es wird jeweils eine Liste an Auswahlmöglichkeiten für später gespeichert. Die ausgewählte Zelle oder den ausgewählten Zustand werden aus der Liste entfernt. Wird gebacktrackt, so kann einfach die nächste Möglichkeit aus der Liste auswählt und entfernt werden. Der Algorithmus läuft ab dann normal weiter. Nun wurde aber eine neue Schwachstelle in den Algorithmus eingeführt. Wenn zuvor in der Search-Phase keine Zellen mehr gefunden wurden, bedeutete dies, dass alle Zellen tatsächlich kollabiert waren. Nun kann es aber sein, dass alle gefundenen Zellen ausprobiert wurde und zu einem Widerspruch geführt haben. Somit würde keine Zelle mehr wählbar sein. Auch in der Observe-Phase war es zuvor unmöglich keinen Zustand mehr auswählen zu können, da eine Zelle ohne mögliche Zustände bereits zuvor als Widerspruch identifiziert wurden wäre. In beiden Fällen wird dies wie ein Widerspruch behandelt und es muss zum Backtracking kommen. Schließlich wurden alle von diesem Schritt folgenden Entscheidungen bereits getroffen und ausgewertet und keine Lösung gefunden. Somit führt dieser Schritt zwar nicht direkt zu einem Widerspruch in einer Zelle, aber alle folgen Schritte werden irgendwann zu einem Widerspruch führen.
 
 
 \chapter{Ergebnisse und Diskussion}
@@ -293,6 +315,7 @@
             \at{@visual weave beispiel mit vergleich der entropie nach einem Schritt mit höherere heat: effekt ist, dass die entropie entfernter zellen höher ist und nur direkte nachbar beeinfluss werden}
             \at{@visual Danach ein zweiter vergleich mit unterschiedlichen graphen. gitter, kombination von gittern und vielleicht noise?}
     \end{itemize}
+    
     
     
     
@@ -333,7 +356,7 @@
 
 
 
-\chapter{Ausblick und zukünftige Forschung}
+\chapter{Zusammenfassung und Ausblick}
     \at{@incomplete alles ausformulieren}
     
     \begin{itemize}
@@ -345,6 +368,8 @@
     \item Eigenschaften des Musters(Linien und Flächen) in Bezug auf Heat untersuchen
     \item Eigenschaften des Gitters analysieren, Engpässe, unförmige Zellen, Abstände, Form der Zelle beachten
     \end{itemize}
+    
+    \section{zukünftige Forschung}
     
     \section{Heat}
         \begin{itemize}
@@ -364,5 +389,44 @@
 \bibliography{Literatur}
 
 % ////////////////////////////////////////////////
+
+
+\chapter*{Verwendetet Hilfsmittel}
+    \begin{table}[h]
+        \centering
+        \renewcommand{\arraystretch}{1.25}
+        \begin{tabular}{|p{.33\linewidth}|p{.64\linewidth}|} 
+            \hline \textbf{Hilfsmittel/Programm} & \textbf{Verwendung innerhalb der Arbeit}       \\
+            \hline Visual Studio Code           & Code- und Texteditor                            \\
+            \hline Odin-Programmiersprache      & Entwicklung der Anwendung                       \\
+            \hline raddebugger                  & Debugging der Anwendung                         \\
+            \hline Git                          & Versionsverwaltung                              \\
+            \hline Github                       & Backup und Synchronisierung der Arbeit          \\
+            \hline Google Scholar               & Recherche wissenschaftlicher Literatur          \\
+            \hline duck.ai, ChatGPT             & Brainstorming und Nachschlagen von Latex Syntax \\
+            \hline \end{tabular}
+    \end{table}
+
+
+
+
+
+
+\chapter*{Selbstständigkeitserklärung}
+
+Durch meine Unterschrift erkläre ich, dass ich die vorliegende Arbeit mit dem Titel: \textit{Wave Function Collapse auf Graphen} selbständig verfasst und in gleicher oder ähnlicher Fassung noch nicht in einem anderen Studiengang als Prüfungsleistung vorgelegt habe. Ich habe alle von mir genutzten Hilfsmittel und Quellen, einschließlich generativer Modelle/KI angegeben und die den verwendeten Quellen und Hilfsmitteln wörtlich oder sinngemäß entnommenen Stellen in Form von Zitaten kenntlich gemacht. Darüber hinaus habe ich keine Hilfsmittel verwendet.
+
+\vspace{3cm}
+
+\noindent
+\begin{minipage}[c]{5cm}
+    \centering \hrulefill \\
+    Ort, Datum
+\end{minipage}
+\hfill
+\begin{minipage}[c]{7cm}
+    \centering \hrulefill \\
+    Unterschrift
+\end{minipage}
 
 \end{document}
