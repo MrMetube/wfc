@@ -8,7 +8,7 @@
 \usepackage{hyperref}                      % clickable links
 \usepackage{amsmath, amssymb}              % mathe formeln
 \usepackage{graphicx, caption, subcaption} % for figures and subfigures
-\captionsetup[figure]{font=small,skip=5pt,format=plain}
+\captionsetup[figure]{font=small,format=plain}
 \usepackage{float}                         % enforce figure placement
 \usepackage{setspace} % doublespacing...
 \usepackage{geometry}
@@ -58,8 +58,6 @@
 
 \@todo(viktor):{Abbildungen Anordung prüfen und verbessern}
 
-\@todo(viktor):{figcapstyle verbessern, kleinere schriftart}
-
 \@todo(viktor):{in diesem Kapitel statt Abschnitt}
 
 \@todo(viktor):{große Abbildungen als ganze seite, keine hängenden absätze}
@@ -75,7 +73,6 @@
 % senden Sie ein PDF der Arbeit und der unterschriebenen Selbstständigkeitserklärung in einer E Mail an Ihren Betreuer, den Zweitgutachter, das Prüfungsamt (pruefungsamt-koethen@hs-anhalt.de) und Professor Schneider.
 
 % ////////////////////////////////////////////////
-
 \begin{titlepage}
     
     \input{data/hsa_logo/figure.tex}
@@ -129,12 +126,12 @@
 
 \end{titlepage}
 
-% ////////////////////////////////////////////////
 
+
+% ////////////////////////////////////////////////
 \tableofcontents
 
 % ////////////////////////////////////////////////
-
 
 
 
@@ -164,12 +161,11 @@
         Ein \textit{Gitter} beschreibt eine regelmäßig aufgebaute Struktur aus einzelnen Punkten. Diese Knotenpunkte sind durch Kanten mit ihren direkten Nachbarn verbunden. Ein Bild wird digital z.B. auf einem Gitter von Pixeln gespeichert und dargestellt. Genauso bilden die Kästchen eines Sudoku ein Gitter. Wenn solch ein Gitter in einer Ebene liegt, wird es auch als \textit{2D Gitter} bezeichnet. Sind die Punkte regelmäßig im Raum angeordnet spricht man von einem \textit{3D Gitter}. Ein \textit{Graph} ist eine allgemeinere Struktur. Hier können die Knotenpunkte eine beliebige Anordnung haben und beliebig mit anderen Knoten durch Kanten verbunden sein. Ein Gitter ist eine spezielle Form eines Graphen. \at{@incomplete vollständige Defintion von Graph}
         \\
         \\
-        Eine \textit{Triangulierung} ist ein Graph, dessen Flächen\at{@incomplete ein graph hat nicht direkt flächen} alle Dreiecke sind. Eine besonders wichtige Variante ist die \textit{Delaunay-Triangulierung} \cite{delaunay}, bei der die Dreiecke so gewählt werden, dass der kleinste Winkel innerhalb jedes Dreiecks möglichst groß ist. Dadurch entstehen „gut geformte“ Dreiecke. Eng verwandt damit ist das \textit{Voronoi-Diagramm} \cite{voronoi}. Es teilt die Ebene in Regionen auf, sodass jeder Punkt genau die Fläche erhält, die ihm am nächsten liegt. Die Delaunay-Triangulierung und das Voronoi-Diagramm sind dual zueinander: Verbindet man die Mittelpunkte der Voronoi-Zellen, entsteht die Delaunay-Triangulierung, und aus einer Delaunay-Triangulierung lässt sich wiederum das zugehörige Voronoi-Diagramm ableiten. In Abbildung \ref{fig:delaunay_voronoi} ist die Delaunay-Triangulierung und das Voronoi-Diagram für einige Punkte dargestellt.
+        Eine \textit{Triangulierung} ist ein Graph, dessen Knoten und Kanten Dreiecke bilden. Eine besonders wichtige Variante ist die \textit{Delaunay-Triangulierung} \cite{delaunay}, bei der die Dreiecke so gewählt werden, dass der kleinste Winkel innerhalb jedes Dreiecks möglichst groß ist. Dadurch entstehen „gut geformte“ Dreiecke. Eng verwandt damit ist das \textit{Voronoi-Diagramm} \cite{voronoi}. Es teilt die Ebene in Regionen auf, sodass jeder Punkt genau die Fläche erhält, die ihm am nächsten liegt. Die Delaunay-Triangulierung und das Voronoi-Diagramm sind dual zueinander: Verbindet man die Mittelpunkte der Voronoi-Zellen, entsteht die Delaunay-Triangulierung, und aus einer Delaunay-Triangulierung lässt sich wiederum das zugehörige Voronoi-Diagramm ableiten. In Abbildung \ref{fig:delaunay_voronoi} ist die Delaunay-Triangulierung und das Voronoi-Diagram für einige Punkte dargestellt.
         
         \input{data/delaunay_voronoi/figure.tex}
         
-        \textit{Prozedurale Generierung} \at{@incomplete}p
-    
+        \textit{Prozedurale Generierung} \at{@incomplete}
     
     \section{Model Synthesis}
         Mit dem \textit{Model Synthesis} \cite{merrel} Algorithmus \ref{alg:ms_merrel} können, basiert auf einem 3D Beispielmodell, eine große Menge an ähnlichen 3D Modellen prozedural generiert werden (siehe Abbildung \ref{fig:ms_output}). Das Beispielmodell muss zuvor in kleinere Bauteile zerlegt werden, aus denen der Algorithmus dann ein neues Modell generiert. Ein Bauteil kann ein komplexer Teil des Beispiels sein, kann aber auch einen leeren Teil des Beispiels enthalten. Die Bauteile werden wie Bauklötze zusammengebaut, wobei zwei Bauteile nur dann nebeneinander platziert werden dürfen, wenn diese auch im Beispielmodell nebeneinander vorkommen. Diese Eigenschaft wird auch Konsistenz genannt. Ein simples konsistentes Modell ist z.B. ein leeres Modell.
@@ -233,7 +229,7 @@
 
 
 \chapter{Wave Function Collapse auf Graphen}
-    In diesem Abschnitt wir dargestellt, wie der Wave Function Collapse Algorithmus erweitert wird, so dass die Ausgabe nicht nur auf einem Gitter, sondern auch auf Zellen mit freier Anordnung und Verteilung, einem Graphen, geschehen kann. Es wird erklärt welche Aspekt des Algorithmus angepasst werden. Desweiteren wird ein neues Konzept names \textit{Heat} eingeführt, welches dem Nutzer erlaubt die erzielte Ähnlichkeit zum Beispiel zu verringern um die Erfolgschance des Algorithmus zu verbessern \at{@wording das ist der indirekte effekt aber das ist ja nicht was der nutzer will. das nochmal umformulieren}.
+    In diesem Abschnitt wir dargestellt, wie der Wave Function Collapse Algorithmus erweitert wird, so dass die Ausgabe nicht nur auf einem Gitter, sondern auch auf Zellen mit freier Anordnung und Verteilung, einem Graphen, geschehen kann. Es wird erklärt welche Aspekt des Algorithmus angepasst werden. Desweiteren wird ein neues Konzept names \textit{Heat} eingeführt, womit die Erfolgsquote des Algorithmus für spezielle Graphen verbessert wird, indem Überlappungsregeln abgeschwächt werden, wodurch die Ausgabe eine geringere Ähnlichkeit zum Beispiel haben kann.
     
     
     \section{Beschränkung des Algorithmus und Idee zur Erweiterung}
@@ -250,8 +246,8 @@
         Ursprünglich arbeit Wave Function Collapse nur auf Gittern \cite{merrel, gumin}. Der Schritt zum Graphen als Fundament für die Ausgabe des Algorithmus ist naheliegend, da Gitter eine spezielle Art von Graphen darstellen. Im Umfang dieser Arbeit werden aber auch nicht alle Arten von Graphen betrachtet. Da jede Kanten eines Gitters zuvor eine lokale Benachbarung dargestellt haben und die Regelextraktion nur lokal arbeitet, beschränkt sich diese Arbeit nur auf Graphen in denen Kanten auch primär einen Knotenpunkt mit den Knotenpunkten in einem lokalen Umfeld verbindet. Der Algorithmus kann auch auf anderen Arten von Graphen angewendet werden, doch können daraus neue oder unerwartete Effekte hervortreten, die wiederum anderen Lösungswege benötigen.
         
         Ein Gitter enthällt implizit Information über Benachbarung und Position jeder Zelle. Diese Informationen werden bei Graphen explizit angegeben. Dazu kommt, dass je nach Anordnung nun nicht nur die Richtung zur Nachbarzelle, sondern auch deren Abstand und die Anzahl an Nachbarzellen variieren kann. Dieser Aspekt ist von Vorteil für die Gestaltung der Ausgabe, da nun beliebige Strukturen und Formen genutzt werden können. Doch der Nachteil ist, dass das Beispiel und die daraus extrahierten Regeln vom Algorithmus nicht mehr eins zu eins angewendet werden können.
-            
-    
+        
+        
         
     \section{Heat}
         In einem 2D Gitter sind die Nachbarn jeder Zelle per Definition in festen Richtungen und Abständen zu finden. Bei Graphen ist diese Anordnung frei. Während des Algorithmus werden die möglichen Zustände von Nachbarzellen auf Überlappung geprüft. Ein Zustand einer Zelle ist möglich, wenn er mit mindestens einem Zustand jeder Nachbarzelle überlappen kann. Die Überlappung zweier Zustände hängt von der Richtung zwischen den Umfeldern der Zustände abhängt ab. Das heißt, dass für den Nachbar im Norden einer Zelle nur die Überlappung der Zustände im Norden relevant ist. Die Richtung zu einer Nachbarzelle auf einem Graphen wird als der Vektor vom Mittelpunkt der Zelle zum Mittelpunkt der Nachbarzelle definiert. Der wichtigste Unterschied ist, dass die Richtung nun nicht mehr, wie auf dem Gitter, auf die Himmelsrichtungen beschränkt ist. 
@@ -268,8 +264,9 @@
         \textit{Heat} gibt an wie viele Himmelrichtungen der Algorithmus für Nachbarn betrachtet. Diese wird im Umfang dieser Arbeit für alle Zellen des Graphen einheitlich gesetzt und vor Beginn der Generierung festgelegt. Damit ein Zustand nun für eine Zelle möglich ist, muss dieser mit den Zuständen der Nachbarzellen überlappen. Nun muss die Überlappung entsprechend der Heat nicht nur noch entlang einer Himmelrichtung sein, sondern es können mehrere geprüft werden, wobei es reicht wenn eine der Himmelsrichtungen eine passende Regel hat. Ein Effekt höherer Heat ist, dass Zellen mehr mögliche Zustände haben, da es für jeden Zustand mehr passende Regeln gibt; die Entropie der Zellen ist tendenziell höher als bei geringer Heat.
         
         Die Anzahl der extrahierten Himmelsrichtungen begrenzt den Wertebereich für die Heat. Jeder Benachbarung kann minimal eine und maximal alle Himmelsrichtungen zugewiesen werden. Da Wave Function Collapse zuvor auf Gittern lief, konnten die Regelextraktion optimiert werden. Die reguläre Struktur des Gitters führt dazu, dass wenn für eine Zelle $A$ der Nachbar von $A$ im Norden($A_n$) passt und der Nachbar im Westen von $A_n$ passt, dann muss auch der Nachbar von $A$ im Nordwesten passen. Somit mussten nur die Überlappungsregeln für Norden, Süden, Westen und Osten gespeichert werden. Für die Generierung auf Graphen entfällt dies. Die diagonalen Himmelsrichtungen werden explizit gespeichert und behandelt.
-    
-        \at{@incomplete Zusammenhang von Heat und Entropie @visual mit Entropy nach einem Schritt}
+        
+
+            \at{@incomplete Zusammenhang von Heat und Entropie @visual mit Entropy nach einem Schritt}
     
     \section{Zusammenfassung}
         Ziel dieser Arbeit ist, die Generierung des Wave Function Collapse Algorithmus auf Graphen geschehen zu lassen. Hierfür wurden drei Anpassungen dargestellt:
@@ -282,12 +279,12 @@
 
 
 \chapter{Umsetzung}
-    Abbildung \ref{fig:app} zeigt einen Screenshot der, für diese Arbeit entwickelten, Anwendung, in dem die UI und eine generierte Ausgabe zusehen sind. Der Nutzer kann Beispielbilder auswählen, einen Graphen generieren und dann mittels Wave Function Collapse eine Ausgabe generieren. Der Code kann \href{https://github.com/MrMetube/wfc}{\textcolor{mblue}{\textbf{hier}}}(Stand: \today) gefunden werden. \at{@placement den link zum quellcode als fußnote}
+    Abbildung \ref{fig:app} zeigt einen Screenshot der, für diese Arbeit entwickelten, Anwendung, in dem die UI und eine generierte Ausgabe zusehen sind. Der Nutzer kann Beispielbilder auswählen, einen Graphen generieren und dann mittels Wave Function Collapse eine Ausgabe generieren. Der Quellcode ist hier\footnote{\url{https://github.com/MrMetube/wfc} (Stand: \today)} verfügbar.
     
     \input{data/app/figure.tex}
     
     \section{Generierung von Graphen}
-        Die Graphen auf denen der Wave Function Collapse arbeiten soll, werden in dieser Arbeit mit dem folgenden Algorithmus \ref{alg:graph_gen} generiert. Der Algorithmus nimmt als Eingabe eine Menge an Punkten, welche die Knotenpunkte des Graphen werden. Aus den Punkten wird eine Delaunay-Triangulierung erstellt. Hierfür wird der Boywer-Watson \cite{bowyer, watson} Algorithmus \ref{alg:bowyer_watson} verwendet. Danach wird das Voronoi-Diagramm zu der Triangulierung gefunden. Der duale Graph der Delaunay-Triangulierung ist das Voronoi-Diagramm, d.h. jeder Knotenpunkt des Voronoi-Diagramms entspricht einer Fläche der Triangulierung und jede Fläche im Voronoi-Diagramm entspricht einem Knotenpunkt in der Triangulierung. Die Kanten der Dreiecke geben an, welche Zellen aneinander angrenzen, während die Voronoi-Zellen die Form einer Zelle für die Darstellung geben. In Abbildung \ref{fig:graph_examples} sind einige Beispiele von generierten Graphen dargestellt. Es ist zuerkennen, dass regelmäßige Gitter nur eine spezielle Form von Graphen darstellen. \at{@incomplete daher regelmäßig und unregelmäßig in einem graphen zusammen möglich}
+        Die Graphen auf denen der Wave Function Collapse arbeiten soll, werden in dieser Arbeit mit dem folgenden Algorithmus \ref{alg:graph_gen} generiert. Der Algorithmus nimmt als Eingabe eine Menge an Punkten, welche die Knotenpunkte des Graphen werden. Aus den Punkten wird eine Delaunay-Triangulierung erstellt. Hierfür wird der Boywer-Watson \cite{bowyer, watson} Algorithmus \ref{alg:bowyer_watson} verwendet. Danach wird das Voronoi-Diagramm zu der Triangulierung gefunden. Der duale Graph der Delaunay-Triangulierung ist das Voronoi-Diagramm, d.h. jeder Knotenpunkt des Voronoi-Diagramms entspricht einer Fläche der Triangulierung und jede Fläche im Voronoi-Diagramm entspricht einem Knotenpunkt in der Triangulierung. Die Kanten der Dreiecke geben an, welche Zellen aneinander angrenzen, während die Voronoi-Zellen die Form einer Zelle für die Darstellung geben. In Abbildung \ref{fig:graph_examples} sind einige Beispiele von generierten Graphen dargestellt. Es ist zuerkennen, dass regelmäßige Gitter nur eine spezielle Form von Graphen darstellen. Daher können regelmäßige Gitter und unregelmäßige Graphen in einem Graphen kombiniert werden.
         
         \at{@visual für Boywer-Watson Algorithmus}
         
@@ -300,8 +297,7 @@
 
         \input{data/voronoi_clipping/figure.tex}
     
-    
-        \at{@flow überleitung, nun haben wir einen graphen auf dem WFC passieren kann }
+        Nun liegt eine Graph vor, mit dem der Wave Function Collapse Algorithmus arbeiten kann. Die Knoten und Kanten der Triangulierung geben die Anordnung und Benachbarung der Zellen an, während die Voronoi-Zellen die Form jeder Zelle für die Darstellung benutzt werden kann.
         
     \section{Phasen und Backtracking}
         Der Algorithmus \ref{alg:wfc_back} generiert die Ausgabe schrittweise. Ein \textit{Schritt} besteht aus vier Phasen: Search, Pick, Observe und Propagate. Schritte geschehen nacheinander und könne nur eine Zelle oder bis hin zu alle Zellen anpassen. Der Algorithmus führt Schritt aus, bis jede Zelle collapst ist oder ein Widerspruch gefunden wurde.
