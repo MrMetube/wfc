@@ -15,6 +15,12 @@
 \geometry{left=3.5cm, right=2.5cm, top=2.5cm, bottom=2.5cm}
 
 \usepackage{algorithm}
+\usepackage{algorithmic}
+
+\makeatletter
+\renewcommand{\ALG@name}{Algorithmus}
+\makeatother
+
 
 % ////////////////////////////////////////////////
 
@@ -401,34 +407,31 @@
 
 
 % ////////////////////////////////////////////////
-
 \bibliographystyle{plain}
 \bibliography{Literatur}
 
+
+
 % ////////////////////////////////////////////////
-
-
 \chapter*{Verwendetet Hilfsmittel}
-    \begin{table}[h]
-        \centering
-        \renewcommand{\arraystretch}{1.25}
-        \begin{tabular}{|p{.33\linewidth}|p{.64\linewidth}|} 
-            \hline \textbf{Hilfsmittel/Programm} & \textbf{Verwendung innerhalb der Arbeit}       \\
-            \hline Visual Studio Code           & Code- und Texteditor                            \\
-            \hline Odin-Programmiersprache      & Entwicklung der Anwendung                       \\
-            \hline raddebugger                  & Debugging der Anwendung                         \\
-            \hline Git                          & Versionsverwaltung                              \\
-            \hline Github                       & Backup und Synchronisierung der Arbeit          \\
-            \hline Google Scholar               & Recherche wissenschaftlicher Literatur          \\
-            \hline duck.ai, ChatGPT             & Brainstorming und Nachschlagen von Latex Syntax \\
-            \hline \end{tabular}
+\begin{table}[h]
+    \centering
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{|p{.33\linewidth}|p{.64\linewidth}|} 
+        \hline \textbf{Hilfsmittel/Programm} & \textbf{Verwendung innerhalb der Arbeit}       \\
+        \hline Visual Studio Code           & Code- und Texteditor                            \\
+        \hline Odin-Programmiersprache      & Entwicklung der Anwendung                       \\
+        \hline raddebugger                  & Debugging der Anwendung                         \\
+        \hline Git                          & Versionsverwaltung                              \\
+        \hline Github                       & Backup und Synchronisierung der Arbeit          \\
+        \hline Google Scholar               & Recherche wissenschaftlicher Literatur          \\
+        \hline duck.ai, ChatGPT             & Brainstorming und Nachschlagen von Latex Syntax \\
+        \hline \end{tabular}
     \end{table}
+    
 
 
-
-
-
-
+% ////////////////////////////////////////////////
 \chapter*{Selbstständigkeitserklärung}
 
 Durch meine Unterschrift erkläre ich, dass ich die vorliegende Arbeit mit dem Titel: \textit{Wave Function Collapse auf Graphen} selbständig verfasst und in gleicher oder ähnlicher Fassung noch nicht in einem anderen Studiengang als Prüfungsleistung vorgelegt habe. Ich habe alle von mir genutzten Hilfsmittel und Quellen, einschließlich generativer Modelle/KI angegeben und die den verwendeten Quellen und Hilfsmitteln wörtlich oder sinngemäß entnommenen Stellen in Form von Zitaten kenntlich gemacht. Darüber hinaus habe ich keine Hilfsmittel verwendet.
