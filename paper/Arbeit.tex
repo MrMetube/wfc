@@ -320,65 +320,82 @@
     \begin{itemize} 
     % Ergebnisse
     \item Base Case - Gitter - Vergleich zum WFC - Bilder mit unterschiedlichen Graphen: Einfache, Komposition(vier in eins, außen und innen). vielleicht auch eine Seite mit vielen beispielen und jeweils ein graph und eine gute ausgabe in einer tabelle?
+    
     % Diskussion
-    \item quadrat, hex und circle/spiral und deren kombinationen haben gute erfolgsquoten, während pure noise sehr schlecht ist, außer heat wird recht hoch gesetzt, warum? weil immer nur ein schlechter knoten reicht um lösungen sehr unwahrscheinlich zu machen und für noise keine uniforme verteilung der punkte besteht, im gegensatz haben die anderen eine uniforme verteilung wodurch es weniger wahrscheinlich ist , dass eine einzelne zelle schlecht ist. Hierfür wäre lokale heat oder heuristiken für dessen anpassung besser aber sind außerhalb des umfangs dieser arbeit
-    \item Lokale Ähnlichkeit im Vergleich zum Input \at{@placement ist das nicht schon bei heat gesagt, denn da muss das hier hin}
     \item Linienmuster und Flächenmuster in Beispielen(Flächenmuster dominieren wenn heat zu gering ist, linienmuster lassen sich nur bedingt in beliebigen graphen darstellen)
-    \item 
-    \item \at{@incomplete Lösungsraum undefiniert} Jede Kante des Graphen stellt eine Beschränkung des Lösungsraums dar. Bei einem Gitter ist jede Zelle, mit Ausnahme der Zellen am Rand, gleichermaßen beschränkt, jedoch kann die Anordnung des Graphen dazu führen dass einzelne Zelle weniger und andere stärker eingeschränkt werden. Eine Zelle mit zehn Nachbarn muss in einen Zustand kollabiert, welcher zu den Zuständen der zehn Nachbaren passt. Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthalten, während dass Gitter uniforme Beschränkung auf Zellen ergibt. Zur Erinnerung: es muss nur eine Zelle eine Widerspruch verursachen damit der Algorithmus fehlschlägt. Also sind solche Regionen starker Beschränkung besonderns entscheident für die Chance eine valide Ausgabe zu generieren, weil hier der Lösungsraum am kleinsten ist. \at{@incomplete Entropie erwähnen und @visual für Regionen mit der App darstellen, vergleich halb gelöstester Graph mit Weave und mit einem eher lokalen Beispiel. Unterschiedlicher effekt auf die Entropie der entfernten Zellen und auch für unterschiedliche teile des Graphen} \at{@incomplete hier was zu Oskar Stalberg und Townscaper als usecase mit wfc und dann postprocessing}
+    
+    \item quadrat, hex und circle/spiral und deren kombinationen haben gute erfolgsquoten, während pure noise sehr schlecht ist, außer heat wird recht hoch gesetzt, warum? weil immer nur ein schlechter knoten reicht um lösungen sehr unwahrscheinlich zu machen und für noise keine uniforme verteilung der punkte besteht, im gegensatz haben die anderen eine uniforme verteilung wodurch es weniger wahrscheinlich ist , dass eine einzelne zelle schlecht ist. Hierfür wäre lokale heat oder heuristiken für dessen anpassung besser aber sind außerhalb des umfangs dieser arbeit \at{@placement problem für future work}
             
-            \at{@placement dies ist teils schon im Konzept für heat erklärt}
-            \at{@visual weave beispiel mit vergleich der entropie nach einem Schritt mit höherere heat: effekt ist, dass die entropie entfernter zellen höher ist und nur direkte nachbar beeinfluss werden}
-            \at{@visual Danach ein zweiter vergleich mit unterschiedlichen graphen. gitter, kombination von gittern und vielleicht noise?}
+            \at{@incomplete Lösungsraum undefiniert} Jede Kante des Graphen stellt eine Beschränkung des Lösungsraums dar. Bei einem Gitter ist jede Zelle, mit Ausnahme der Zellen am Rand, gleichermaßen beschränkt, jedoch kann die Anordnung des Graphen dazu führen dass einzelne Zelle weniger und andere stärker eingeschränkt werden. Eine Zelle mit zehn Nachbarn muss in einen Zustand kollabiert, welcher zu den Zuständen der zehn Nachbaren passt. Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthalten, während dass Gitter uniforme Beschränkung auf Zellen ergibt. Zur Erinnerung: es muss nur eine Zelle eine Widerspruch verursachen damit der Algorithmus fehlschlägt. Also sind solche Regionen starker Beschränkung besonderns entscheident für die Chance eine valide Ausgabe zu generieren, weil hier der Lösungsraum am kleinsten ist. \at{@incomplete Entropie erwähnen und @visual für Regionen mit der App darstellen, vergleich halb gelöstester Graph mit Weave und mit einem eher lokalen Beispiel. Unterschiedlicher effekt auf die Entropie der entfernten Zellen und auch für unterschiedliche teile des Graphen}
+            
     \end{itemize}
     
     
     
     
     \at{@placement Artefakte. sollte das in sein future work?}
-    Auch bei Graphen kann die Ausgabe visuelle Artefakte des Graphens enthalten. In Abbildung \ref{fig:cell_size} sind die Voronoi-Zellen erkennbar. Nun muss der Graph aber nicht so dargestellt werden. Die Knoten des Graphen wurden konsistent dem Beispiel entsprechend gefüllt. Von hier können andere Methoden oder Postprocessing angewendet werden um die Ausgabe zugestallten. In der Abbildung wird beispielhaft die Größe der Zellen verkleinert, wodurch die harten Kanten der Sechecke etwas weniger betont erscheinen, aber nun auch der Hintergrund zu sehen ist. Hier könnte man auf andere Weise die Lücken füllen, so dass die secheckige Form der Zellen kachiert wird. \at{@incomplete die Ausgabe muss natürlich nicht direkt visuell verwendet werden sondern kann auch als grundlage für eine gänzlich andere Darstellung sein, wobei das Beispiel nur Nachbarschaften aber nicht direkt Farben oder Dinge darstellt sondern andere Konzepte @incomplete Oskar Stalberg und Townscaper hier erwähnen}
+    Auch bei Graphen kann die Ausgabe visuelle Artefakte des Graphens enthalten. In Abbildung \ref{fig:cell_size} sind die Voronoi-Zellen erkennbar. Nun muss der Graph aber nicht so dargestellt werden. Die Knoten des Graphen wurden konsistent dem Beispiel entsprechend gefüllt. Von hier können andere Methoden oder Postprocessing angewendet werden um die Ausgabe zugestallten. In der Abbildung wird beispielhaft die Größe der Zellen verkleinert, wodurch die harten Kanten der Sechecke etwas weniger betont erscheinen, aber nun auch der Hintergrund zu sehen ist. Hier könnte man auf andere Weise die Lücken füllen, so dass die secheckige Form der Zellen kachiert wird. \at{@incomplete die Ausgabe muss natürlich nicht direkt visuell verwendet werden sondern kann auch als grundlage für eine gänzlich andere Darstellung sein, wobei das Beispiel nur Nachbarschaften aber nicht direkt Farben oder Dinge darstellt sondern andere Konzepte @incomplete Oskar Stalberg und Townscaper als usecase mit wfc und dann postprocessing}
     \input{data/cell_size/figure.tex}
     
     
     
     \section{Der Effekt von Heat auf die Ausgabe}
         Im folgenden Abschnitt werden die positiven wie auch negativen Effekt von Heat mittels Beispielen erklärt. \at{@flow reihenfolge überdenken}
-        \\
-        \\
-        Abbildung \ref{fig:hex_heat} zeigt den Einfluss von Heat auf die Qualität der Ausgabe bei gleichem Beispiel und Graph. Das Beispiel kann auf dem Quadratgitter ohne weitere Probleme genutzt werden, siehe (b), während der Graph mit den Sechsecken bei geringer Heat uninteressante Ausgaben generiert, siehe (c).
+        
+        
         
         \input{data/hex_heat/figure.tex}
+        
+        Abbildung \ref{fig:hex_heat} zeigt den Einfluss von Heat auf die Qualität der Ausgabe bei gleichem Beispiel und Graph. Das Beispiel kann auf dem Quadratgitter ohne weitere Probleme genutzt werden, siehe (b), während der Graph mit den Sechsecken bei geringer Heat uninteressante Ausgaben generiert, siehe (c).
+        
         
         Eine intuitive Erklärung ist, dass die Linien im Beispiel stets nur eine Zelle breit sind. Im Graph können die horizontalen Linien generiert werden, weil die Sechsecke selbst horizontal in Reihen angeordnet sind, während es keine rein vertikalen Zellenspalten gibt. Jedes Sechseck hat zwei Nachbarzellen oberhalb und zwei unterhalb. Bei Heat=1 wird beiden Norden/Süden zugewiesen. Will der Algoritmus nun bei einer Zelle eine vertikalen Linie, also die Zustände die dieses Muster abbilden, platzieren, so müssen nun beide oberen Nachbarzellen auch eine Zustand, der eine vertikale Linie darstellt, erhalten. Hier kommt es zum Konflikt, da diese beiden Zellen horizontal in der gleichen Reihe liegen, es aber im Beispiel keine vertikalen Linien direkt nebeneinander gibt. Es kann also keine Zelle Teil einer vertikalen Linie sein. 
         
         Bei (d) können dennoch scheinbar vertikale Linien generiert werden, da nun die oberen Zellen jeweils als im Norden und imd Nordosten/-westen betrachtet werden. Ebenso können die horizontalen Nachbarn als im Westen oder im Süd-/Nord-westen behandelt werden. Soll eine Zelle nun Teil einer vertikalen Linie sein, kann nur eine der oberen Nachbarnzellen als im Norden behandelt werden und die andere als die jeweilige Diagonale. 
         
         Der Effekt von höherer Heat ist, das die Menge an möglichen Zuständen vergrößert wird, indem mehr Überlappungsregeln in Betracht gezogen werden. Dadurch ist es auch unwahrscheinlicher, dass für eine Zelle keine Zustände mehr möglich sind und ein Widerspruch entsteht. Gleichzeitig werden nun aber auch Ausgaben generiert, die eine tatsächlich geringere Ähnlickkeit zum Beispiel haben. So ist die Ausgabe in (c) zwar weniger interessant als die in (d), aber die horizontalen Linien und die grauen Flächen dazwischen passen exakt zur Teilen des Beispiels. Bei (d) werden auch vertikalen Linien generiert, aber diese haben knicke und sind eher zickzackartig als die Senkrechten des Beispiels. Eine Erhöhung der Heat verschlechtert die lokale Ähnlichkeit der Ausgabe zum Beispiel und verbessert die Wahrscheinlichkeit erfolgreich eine nicht triviale Lösung zu generieren.
-        \\
-        \\
-        In Abbildung \ref{fig:heat_rotation} ist dargestellt, wie Heat auch als eine lokale Drehung des Gitters verstanden werden kann. In (b) ist das gewählte Beispiel (a) auf einem Quadratgitter ohne Drehung angewendet. Es können gute Ausgaben generiert werden. Dreht man das gesamte Quadratgitter nun um 22° so können die geraden Linien des Beispiels immernoch fehlerfrei platziert werden. Zwar sind die Zellen zueinander nicht mehr genau entlang der Himmelsrichtungen angeordnet, doch wird bei Heat=1 auf die nächste Richtung gerundet. Bei 8 Richtungen wird z.B. Osten von -22,5° bis 22,5° ausgewählt. Somit ist das Gitter bei (c) zwar optisch gedreht, aber kann genau wie das Gitter in (b) behandelt werden. Wird nun aber, wie in (d) noch weiter gedreht, so wird nun eine Benachbarung die vorher z.B. als Osten behandelt wurde nun als Nordosten behandelt. Der Effekt ist, dass die geradlinigen Muster des Beispiels nun (wie zuvor bei Abbildung \ref{fig:hex_heat}) nicht mehr platziert werden können. In der Ausgabe können nur noch flächenartige Muster vorkommen. In (e) ist zu sehen, dass dennoch gute Ausgaben generiert werden können, indem die Heat=2 gesetzt wird und jede Benachbarung nun z.B. als Nordosten und Osten behandelt wird. Der Algorithmus kann nun Ausgaben wie bei (c) generieren, da die Benachbarungen nun auch lokal wie die Benachbarungen aus (b) und (c) behandelt werden können. Heat kann also auch als eine lokale Drehung entgegen der tatsächlichen Ausrichtung des Gitters wirken. 
+        
+        
         
         \input{data/heat_rotation/figure.tex}
         
+        In Abbildung \ref{fig:heat_rotation} ist dargestellt, wie Heat auch als eine lokale Drehung des Gitters verstanden werden kann. In (b) ist das gewählte Beispiel (a) auf einem Quadratgitter ohne Drehung angewendet. Es können gute Ausgaben generiert werden. Dreht man das gesamte Quadratgitter nun um 22° so können die geraden Linien des Beispiels immernoch fehlerfrei platziert werden. Zwar sind die Zellen zueinander nicht mehr genau entlang der Himmelsrichtungen angeordnet, doch wird bei Heat=1 auf die nächste Richtung gerundet. Bei 8 Richtungen wird z.B. Osten von -22,5° bis 22,5° ausgewählt. Somit ist das Gitter bei (c) zwar optisch gedreht, aber kann genau wie das Gitter in (b) behandelt werden. Wird nun aber, wie in (d) noch weiter gedreht, so wird nun eine Benachbarung die vorher z.B. als Osten behandelt wurde nun als Nordosten behandelt. Der Effekt ist, dass die geradlinigen Muster des Beispiels nun (wie zuvor bei Abbildung \ref{fig:hex_heat}) nicht mehr platziert werden können. In der Ausgabe können nur noch flächenartige Muster vorkommen. In (e) ist zu sehen, dass dennoch gute Ausgaben generiert werden können, indem die Heat=2 gesetzt wird und jede Benachbarung nun z.B. als Nordosten und Osten behandelt wird. Der Algorithmus kann nun Ausgaben wie bei (c) generieren, da die Benachbarungen nun auch lokal wie die Benachbarungen aus (b) und (c) behandelt werden können. Heat kann also auch als eine lokale Drehung entgegen der tatsächlichen Ausrichtung des Gitters wirken. 
+        
         Der selbe Effekt kommt auch bei unregelmäßigen Graphen zum Spiel. Hier existiert zwar kein Winkel um den man den gesamten Graphen drehen kann, um ein Quadratgitter zu erhalten. Aber da Heat lokal und von Nachbar zu Nachbar unabhängig wirkt, kann es als eine lokale Drehung oder Verzerrung verstanden werden. Es ist so, als könnte der Algorithmus die Zellen lokal so verschieben und verdrehen, dass einen breitere Menge an Lösungen möglich ist. Es muss dabei beachtet werden, dass der Algorithmus nicht gezielt arbeitet. Ist eine Graph bereits mit geringer Heat gut lösbar, so wird höhere Heat nicht unbedingt auch bessere Ergebnisse liefern. Es ist sogar wahrscheinlich, dass die Ausgabe schlechter wird da die höhere Heat ja auch zu Regionen in der Ausgabe führt die nicht im Beispiel existieren und den Einfluss der Richtung mindert.
-        \\
-        \\
-        Abbildung \ref{fig:more_heat} zeigt wie die Qualität der Ausgabe, bei steigender Heat, sinken kann. Der Graph ist hier ein Quadratgitter und kann somit schon bei einer Heat von 1 gute Ausgaben generieren. Mit jedem Schritt wird der jeder tatsächlichen Benachbarung eine größere Menge an Möglichkeiten gegeben. Es entstehen mehr fehlerhafte Regionen in der Ausgabe. Ab einer Heat von 5 kann der Algorithmus einer perfekt nach Osten laufenden Benachbarung nicht nur Nordosten und Südosten sondern auch Norden und Süden zuweisen, also zu einander entgegengesetzte Himmelrichtungen. Liegt z.B. eine Zelle östlich von einer anderen so könnten beide sich als südlich der anderen behandeln. Ab Heat=6 könnte jede Benachbarung auch als eine der entgegengesetze Himmelrichtungen behandelt werden. Schließlich verliert die Anordnung der Zellen bei Heat=8 komplett die Bedeutung. Zur Vollständigkeit sind hier Ausgaben mit hoher Heat dargestellt, in der Praxis sollte man Heat so gering wie möglich halten.
+        
+        
         
         \input{data/more_heat/figure.tex}
-
+        
+        Abbildung \ref{fig:more_heat} zeigt wie die Qualität der Ausgabe, bei steigender Heat, sinken kann. Der Graph ist hier ein Quadratgitter und kann somit schon bei einer Heat von 1 gute Ausgaben generieren. Mit jedem Schritt wird der jeder tatsächlichen Benachbarung eine größere Menge an Möglichkeiten gegeben. Es entstehen mehr fehlerhafte Regionen in der Ausgabe. Ab einer Heat von 5 kann der Algorithmus einer perfekt nach Osten laufenden Benachbarung nicht nur Nordosten und Südosten sondern auch Norden und Süden zuweisen, also zu einander entgegengesetzte Himmelrichtungen. Liegt z.B. eine Zelle östlich von einer anderen so könnten beide sich als südlich der anderen behandeln. Ab Heat=6 könnte jede Benachbarung auch als eine der entgegengesetze Himmelrichtungen behandelt werden. Schließlich verliert die Anordnung der Zellen bei Heat=8 komplett die Bedeutung. Zur Vollständigkeit sind hier Ausgaben mit hoher Heat dargestellt, in der Praxis sollte man Heat so gering wie möglich halten.
         
         
-        \ref{fig:heat_plot} \at{@placement bei heat irgendwo} Die Entropie fällt stetig, da in jedem Schritt mindestens eine Zelle kollabiert wird. Es kann sein, dass dadurch andere Zellen auch kollabieren, was bedeutet dass die Entropie schnell fällt. Bei hoher Heat(ab ca 6) nähern sich die Daten der Asymptote. Diese wird dann erreicht, wenn in jedem Schritt nur eine Zelle kollabiert wird und alle Zellen unabhängig von einander sind. Bei geringer Heat haben die ersten Schritte einen großen Einfluss auf die Gesamtentropie des Graphen. Jede Entscheidung schränkt viele andere Zellen ein. Heat verringert den Einfluss einer Zelle, bis hin, dass eine Zelle nur noch ihre direkten Nachbarn beeinflusst. \at{@incomplete strukturieren und ausformulieren}
+        ////////////////////////////////////////////////\\
+        ////////////////////////////////////////////////\\
+        ////////////////////////////////////////////////\\
+        
+        
+        \at{@incomplete} \at{@visual weave beispiel mit vergleich der entropie nach einem Schritt mit höherere heat: effekt ist, dass die entropie entfernter zellen höher ist und nur direkte nachbar beeinfluss werden}
+            \at{@visual Danach ein zweiter vergleich mit unterschiedlichen graphen. gitter, kombination von gittern und vielleicht noise?}
         
         \input{data/heat_plot/figure.tex}
+        
+        Abbildung \ref{fig:heat_plot} zeigt die Beziehung zwischen der Heat und der Entropie aller Zelle. Die Gesamtentropie fällt stetig, da der Algorithmus in jedem Schritt eine Zelle kollabiert, wodurch diese nun eine Entropie von 0 hat. Gleichzeitig beeinflusst diese Zelle auch ihre Nachbarn und die wiederum deren Nachbarn indem nun bestimmte Zustände für diese nicht mehr möglich sind. Dabei kann es sein, dass anderen Zellen auch in einen Zustand einzigen Zustand kollabieren, da alle anderen Zustände unmöglich geworden sind. Die Entropie der Nachbarn wird also auch verringert. Schließlich hat der Algorithmus alle Zellen kollabiert und die Gesamtentropie fällt auf 0; der Ausgabe ist fertig generiert. 
+
+        Im Diagramm sind nur die erfolgreichen Schritte dargestellt. Kam es zu einem Widerspruch und Backtracking, so wurden die Daten fehlgeschlagenen Schritte überschrieben. Im Verlauf des Algorithmus mit Backtracking würde die Gesamtentropie scheinbar steigen, doch ein Schritt mit geringer Entropie kann niemals einen mit zu einem Schritt mit höherer Entropie führen.
+        
+        Im Diagramm sind mehrere Verläufe dargestellt, jeweils mit gleichem Beispielbild und Graphen, aber mit unterschiedlicher Heat. Es ist zu erkennen, dass die Gesamtentropie bei höherer Heat langsamer abfällt als bei kleinerer Heat. Auch unterschieden sich die Verläufe in der Steilheit. Bei niedriger Heat gibt es immer wieder Schritte die die Entropie stark reduzieren. Dabei handelt es sich um eine Zelle, dessen gewählter Zustand eine große Menge anderer Zellen beeinflusst hat. Währendessen tretten solche Fälle bei hoher Heat selten bis garnicht auf. Die meisten Schritte verringern die Entropie gleichstark. Grund dafür ist, dass Heat den Nachbarn einer Zelle mehr Überlappungsregeln zur Verfügung stellt. Es genpgt nur eine valide Regel, damit ein Zustand möglich ist. Somit haben Nachbarzellen länger mehr mögliche Zustände. Gleichzeitig haben aber auch die Nachbarn der Nachbarzellen nun auch mehr Kombinationsmöglichkeiten, von denen wieder nur mindestens eine passen muss. Bei höherer Heat vermindert sich der Einflussbereich einer kollabierten Zelle, bis sie nur noch ihre direkten Nachbarzellen beeinflusst. 
+        
+        Es ist auch zu erkennen, dass die Verläufe mit Heat 6, 7 und 8 beinahe identisch sind. Ab einem gewissen Punkt, sind Zellen so unabhängig von einander, dass höhere Heat keinen Unterschied mehr macht. Das Limit dieses Verhalten würde dann erreicht werden, wenn jede Zelle tatsächlich unabhängig von allen anderen Zellen ist. Dann kann der Algorithmus in jedem Schritt nur einen Zelle kollabieren und keine der anderen Zellen damit beschränken. Die Entropie fällt dann mit einer konstanten Rate und es müssen genauso viele Schritte wie es Zellen im Graphen gibt geschehen.
+        \\
+        \\
         
 
 
 
 
 \chapter{Zusammenfassung und Ausblick}
-    \at{@incomplete alles ausformulieren}
+    \at{@incomplete alles ausformulieren. Also Fragen oder Probleme meines Algorithmus formulieren sollte reichen}
     
     \begin{itemize}
     \item qualität der Ausgaben und schlechte Erfolgsquote bei noise
@@ -419,6 +436,7 @@
         \hline \textbf{Hilfsmittel/Programm} & \textbf{Verwendung innerhalb der Arbeit}       \\
         \hline Visual Studio Code           & Code- und Texteditor                            \\
         \hline Odin-Programmiersprache      & Entwicklung der Anwendung                       \\
+        \hline dearImgui                    & UI-Bibliothek für die Anwendung                 \\
         \hline raddebugger                  & Debugging der Anwendung                         \\
         \hline Git                          & Versionsverwaltung                              \\
         \hline Github                       & Backup und Synchronisierung der Arbeit          \\
