@@ -9,6 +9,7 @@
 \usepackage{amsmath, amssymb}                  % mathe formeln
 \usepackage{graphicx, caption, subcaption}     % for figures and subfigures
 \captionsetup[figure]{font=small,format=plain} % figure caption style
+
 \usepackage{float}                             % enforce figure placement
 \usepackage{setspace}                          % line doublespacing...
 \usepackage{geometry}
@@ -16,10 +17,7 @@
 
 \usepackage{algorithm}
 \usepackage{algorithmic}
-
-\makeatletter
-\renewcommand{\ALG@name}{Algorithmus}
-\makeatother
+\makeatletter \renewcommand{\ALG@name}{Algorithmus} \makeatother
 
 
 % ////////////////////////////////////////////////
@@ -71,8 +69,8 @@
 }
 
 % ////////////////////////////////////////////////
+
 \begin{titlepage}
-    
     \input{data/hsa_logo/figure.tex}
     
     \begin{verbatim}
@@ -121,12 +119,12 @@
             \textbf{Zweitgutachterin:} & & Prof.\,Dr.\,Anika Groß &\\
         \end{tabular}
     \end{flushleft}
-
 \end{titlepage}
 
 
 
 % ////////////////////////////////////////////////
+
 \tableofcontents
 
 % ////////////////////////////////////////////////
@@ -163,7 +161,7 @@
         
         \input{data/delaunay_voronoi/figure.tex}
         
-        \textit{Prozedurale Generierung} \at{@incomplete}
+        Unter \textit{Prozedurale Generierung} versteht man Algorithmen, die Inhalte wie z.B. Bilder, 3D Modelle oder Musik erzeugen können. Meist nimmt ein solcher Algorithmus nur eine kleine Menge an Daten als Eingabe und generiert daraus viele Variationen an Ausgaben. Dabei werden häufig Zufallszahl-Generatoren benutzt, aber der Ablauf ist nicht rein zufällig. Bei gleicher Initialisierung generiert ein solcher Algorithmus immer die selbe Ausgabe und kann durch Parameter gesteuert werden. Prozedurale Generierung wird in Computerspielen regelmäßig verwendet, da es den Entwicklern erlaubt den Spielern viele varierte Inhalte zu bieten, ohne diese alle vorher manuell anzufertigen und fest im Spiel einzubauen.
     
     \section{Model Synthesis}
         Mit dem \textit{Model Synthesis} \cite{merrel} Algorithmus \ref{alg:ms_merrel} können, basiert auf einem 3D Beispielmodell, eine große Menge an ähnlichen 3D Modellen prozedural generiert werden (siehe Abbildung \ref{fig:ms_output}). Das Beispielmodell muss zuvor in kleinere Bauteile zerlegt werden, aus denen der Algorithmus dann ein neues Modell generiert. Ein Bauteil kann ein komplexer Teil des Beispiels sein, kann aber auch einen leeren Teil des Beispiels enthalten. Die Bauteile werden wie Bauklötze zusammengebaut, wobei zwei Bauteile nur dann nebeneinander platziert werden dürfen, wenn diese auch im Beispielmodell nebeneinander vorkommen. Diese Eigenschaft wird auch Konsistenz genannt. Ein simples konsistentes Modell ist z.B. ein leeres Modell.
