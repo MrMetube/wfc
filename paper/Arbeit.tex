@@ -315,25 +315,23 @@
 
 
 \chapter{Ergebnisse und Diskussion}
-    \at{@incomplete alles ausformulieren}
+    \at{@incomplete einleitender Satz, alles ausformulieren}
 
-    \begin{itemize} 
-    % Ergebnisse
-    \item Base Case - Gitter - Vergleich zum WFC - Bilder mit unterschiedlichen Graphen: Einfache, Komposition(vier in eins, außen und innen). vielleicht auch eine Seite mit vielen beispielen und jeweils ein graph und eine gute ausgabe in einer tabelle?
-    
-    % Diskussion
-    \item Linienmuster und Flächenmuster in Beispielen(Flächenmuster dominieren wenn heat zu gering ist, linienmuster lassen sich nur bedingt in beliebigen graphen darstellen)
-    
-    
-            
-        \at{@incomplete Lösungsraum undefiniert} Jede Kante des Graphen stellt eine Beschränkung des Lösungsraums dar. Bei einem Gitter ist jede Zelle, mit Ausnahme der Zellen am Rand, gleichermaßen beschränkt, jedoch kann die Anordnung des Graphen dazu führen dass einzelne Zelle weniger und andere stärker eingeschränkt werden. Eine Zelle mit zehn Nachbarn muss in einen Zustand kollabiert, welcher zu den Zuständen der zehn Nachbaren passt. Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthalten, während dass Gitter uniforme Beschränkung auf Zellen ergibt. Zur Erinnerung: es muss nur eine Zelle eine Widerspruch verursachen damit der Algorithmus fehlschlägt. Also sind solche Regionen starker Beschränkung besonderns entscheident für die Chance eine valide Ausgabe zu generieren, weil hier der Lösungsraum am kleinsten ist. \at{@incomplete Entropie erwähnen und @visual für Regionen mit der App darstellen, vergleich halb gelöstester Graph mit Weave und mit einem eher lokalen Beispiel. Unterschiedlicher effekt auf die Entropie der entfernten Zellen und auch für unterschiedliche teile des Graphen}
-            
-    \end{itemize}
+    \section{\at{@naming}}
+        \begin{itemize} 
+        % Ergebnisse
+        \item Base Case - Gitter - Vergleich zum WFC - Bilder mit unterschiedlichen Graphen: Einfache, Komposition(vier in eins, außen und innen). vielleicht auch eine Seite mit vielen beispielen und jeweils ein graph und eine gute ausgabe in einer tabelle?
+        
+        % Diskussion
+        \item Linienmuster und Flächenmuster in Beispielen(Flächenmuster dominieren wenn heat zu gering ist, linienmuster lassen sich nur bedingt in beliebigen graphen darstellen)
+        
+        \item \at{@incomplete Lösungsraum undefiniert} Jede Kante des Graphen stellt eine Beschränkung des Lösungsraums dar. Bei einem Gitter ist jede Zelle, mit Ausnahme der Zellen am Rand, gleichermaßen beschränkt, jedoch kann die Anordnung des Graphen dazu führen dass einzelne Zelle weniger und andere stärker eingeschränkt werden. Eine Zelle mit zehn Nachbarn muss in einen Zustand kollabiert, welcher zu den Zuständen der zehn Nachbaren passt. Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthalten, während dass Gitter uniforme Beschränkung auf Zellen ergibt. Zur Erinnerung: es muss nur eine Zelle eine Widerspruch verursachen damit der Algorithmus fehlschlägt. Also sind solche Regionen starker Beschränkung besonderns entscheident für die Chance eine valide Ausgabe zu generieren, weil hier der Lösungsraum am kleinsten ist. \at{@incomplete Entropie erwähnen und @visual für Regionen mit der App darstellen, vergleich halb gelöstester Graph mit Weave und mit einem eher lokalen Beispiel. Unterschiedlicher effekt auf die Entropie der entfernten Zellen und auch für unterschiedliche teile des Graphen}
+        \end{itemize}
     
     
     
     
-    \at{@placement Artefakte. sollte das in sein future work?}
+    \at{@placement Artefakte}
     Auch bei Graphen kann die Ausgabe visuelle Artefakte des Graphens enthalten. In Abbildung \ref{fig:cell_size} sind die Voronoi-Zellen erkennbar. Nun muss der Graph aber nicht so dargestellt werden. Die Knoten des Graphen wurden konsistent dem Beispiel entsprechend gefüllt. Von hier können andere Methoden oder Postprocessing angewendet werden um die Ausgabe zugestallten. In der Abbildung wird beispielhaft die Größe der Zellen verkleinert, wodurch die harten Kanten der Sechecke etwas weniger betont erscheinen, aber nun auch der Hintergrund zu sehen ist. Hier könnte man auf andere Weise die Lücken füllen, so dass die secheckige Form der Zellen kachiert wird. \at{@incomplete die Ausgabe muss natürlich nicht direkt visuell verwendet werden sondern kann auch als grundlage für eine gänzlich andere Darstellung sein, wobei das Beispiel nur Nachbarschaften aber nicht direkt Farben oder Dinge darstellt sondern andere Konzepte @incomplete Oskar Stalberg und Townscaper als usecase mit wfc und dann postprocessing}
     \input{data/cell_size/figure.tex}
     
@@ -342,7 +340,7 @@
     \section{Der Effekt von Heat auf die Ausgabe}
         Im folgenden Abschnitt werden die positiven wie auch negativen Effekt von Heat mittels Beispielen erklärt. \at{@flow reihenfolge überdenken}
         
-        
+        % ////////////////////////////////////////////////
         
         \input{data/hex_heat/figure.tex}
         
@@ -355,7 +353,7 @@
         
         Der Effekt von höherer Heat ist, das die Menge an möglichen Zuständen vergrößert wird, indem mehr Überlappungsregeln in Betracht gezogen werden. Dadurch ist es auch unwahrscheinlicher, dass für eine Zelle keine Zustände mehr möglich sind und ein Widerspruch entsteht. Gleichzeitig werden nun aber auch Ausgaben generiert, die eine tatsächlich geringere Ähnlickkeit zum Beispiel haben. So ist die Ausgabe in (c) zwar weniger interessant als die in (d), aber die horizontalen Linien und die grauen Flächen dazwischen passen exakt zur Teilen des Beispiels. Bei (d) werden auch vertikalen Linien generiert, aber diese haben knicke und sind eher zickzackartig als die Senkrechten des Beispiels. Eine Erhöhung der Heat verschlechtert die lokale Ähnlichkeit der Ausgabe zum Beispiel und verbessert die Wahrscheinlichkeit erfolgreich eine nicht triviale Lösung zu generieren.
         
-        
+        % ////////////////////////////////////////////////
         
         \input{data/heat_rotation/figure.tex}
         
@@ -363,7 +361,7 @@
         
         Der selbe Effekt kommt auch bei unregelmäßigen Graphen zum Spiel. Hier existiert zwar kein Winkel um den man den gesamten Graphen drehen kann, um ein Quadratgitter zu erhalten. Aber da Heat lokal und von Nachbar zu Nachbar unabhängig wirkt, kann es als eine lokale Drehung oder Verzerrung verstanden werden. Es ist so, als könnte der Algorithmus die Zellen lokal so verschieben und verdrehen, dass einen breitere Menge an Lösungen möglich ist. Es muss dabei beachtet werden, dass der Algorithmus nicht gezielt arbeitet. Ist eine Graph bereits mit geringer Heat gut lösbar, so wird höhere Heat nicht unbedingt auch bessere Ergebnisse liefern. Es ist sogar wahrscheinlich, dass die Ausgabe schlechter wird da die höhere Heat ja auch zu Regionen in der Ausgabe führt die nicht im Beispiel existieren und den Einfluss der Richtung mindert.
         
-        
+        % ////////////////////////////////////////////////
         
         \input{data/more_heat/figure.tex}
         
@@ -395,30 +393,28 @@
 
 
 \chapter{Zusammenfassung und Ausblick}
-    \at{@incomplete bin ich zufrieden, was am algorithmus ist gut(hex und so läuft super), wo sind schwachstellen(noise graph)}
+    Dieses Kapitel bietet einen Rückblick auf die erfolgreiche Erweiterung des Wave Function Collapse Algorithmus. Auch werden noch bestehende Schwachstellen der präsentierten Methodik erklärt. Diese könnten als Ansatz für weiterführende Forschung und Entwicklung der Algorithmus dienen.
     
-    \section{zukünftige Forschung}
-    \at{@incomplete alles ausformulieren. Also Fragen oder Probleme meines Algorithmus formulieren sollte reichen}
+    \section{Fazit}
+        Diese Arbeit zeigt, wie der Wave Function Collapse Algorithmus erweitert werden kann, damit die generierten Ausgaben nicht nur auf Gittern sondern auch auf, vom Nutzer gegebenen, Graphen geschehen kann. Dem Algorithmus muss hierfür lediglich ein Graph gegeben. Die Erfolgschance und Qualität der Ausgabe hängt dabei von den Eingenschaften des verwendeten Beispiels und des Graphen ab. Kommt es dazu, dass der Algorithmus nur weniger interessant Ausgaben generieren kann, so kann der Nutzer mittels des neu eingeführtem Konzept, der Heat, dem entgegenwirken, indem die erzielte Ähnlichkeit der Ausgabe zum Beispiel abgeschwächt wird.
     
-    
-    \begin{itemize}
-    \item Mögliche Anwendungsbereiche, in 3D
-    \item Beispiel auch als Graph? Graph dynamisch, basiert auf dem Beispiel generieren?
-    \item Eigenschaften des Musters(Linien und Flächen) in Bezug auf Heat untersuchen
-    \item Eigenschaften des Gitters analysieren, Engpässe, unförmige Zellen, Abstände, Form der Zelle beachten
-    
-    % ////////////////////////////////////////////////
-    
-    \item qualität der Ausgaben und schlechte Erfolgsquote bei noise
-    \item quadrat, hex und circle/spiral und deren kombinationen haben gute erfolgsquoten, während pure noise sehr schlecht ist, außer heat wird recht hoch gesetzt, warum? weil immer nur ein schlechter knoten reicht um lösungen sehr unwahrscheinlich zu machen und für noise keine uniforme verteilung der punkte besteht, im gegensatz haben die anderen eine uniforme verteilung wodurch es weniger wahrscheinlich ist , dass eine einzelne zelle schlecht ist. Hierfür wäre lokale heat oder heuristiken für dessen anpassung besser aber sind außerhalb des umfangs dieser arbeit
-    \item Globale Heat steht in direkter verbindung mit uniformen Graphen. Ebend weil unregelmäßigkeit, nicht mit einem Wert gedeckelt werden kann
-    \item Eine globale Heat für alle Zellen hat einen negativen Effekt auf lokal regelmäßige Regionen eines Gitters und ein postiven Effekt auf sehr unregelmäßige Regionen des Gitters.
-    \item Anstatt dass die Heat global für alle Zellen zu Beginn bestimmt wird, kann man auch innerhalb des Algorithmus 'lernen' welche Regionen 'schwerer' zu lösen sind und dort die Heat schrittweise erhöhen bis eine Lösung gefunden werden kann.
-    \item Lokales Heating mit heating chance und cooling chance
-    \item simmulated annealing
-    \end{itemize}
+        Am besten funktioniert der Algorithmus auf Graphen mit relativ uniformen Verteilungen von Zellen. Hierbei muss es sich nicht nur um ein einfaches Gitter handeln. Der Graph kann auch eine Zusammensetzung aus unterschiedlichen Arten von regelmäßigen Graphen sein, welche mittels des dargestellten Algorithmus zur Generierung von Graphen verbunden werden können. Je nach Beispiel können auch komplexere Graphen gute Ergebnisse liefern, doch kann es hier auch oft zu Fehlschlägen kommen, da nur eine Zelle in einem Graphen genügt um einen Widerspruch auszulösen. Um die Erfolgschancen einer Generierung zu verbessern, wurde präsentiert, wie der Algorithmus angepasst werden kann, um Backtracking zu erlauben. Dadurch kann bei einem Widerspruch ein Großteil der Arbeit erhalten bleiben, indem zu einem validen Punkt zurückgegangen wird, um von dort aus weiterzuarbeiten.
     
     
+    
+    \section{Zukünftige Forschung}
+        \at{@incomplete einleitungs satz}
+        
+        \begin{enumerate}
+        \item Diese Arbeit hat den Algorithmus nur in 2D betrachtet. Währenddessen wurden Model Synthesis und Wave Function Collapse schon in 3D angewandt. Kann diese Erweiterung des Wave Function Collapse auch auf dreidimensionale Graphen angewandt werden?
+        \item Die Ausgabe kann nun auf einem Graphen geschehen, während das Beispiel immer noch auf einem Gitter liegt. Die tatsächlichen Richtungen in der Ausgabe werden auf die extrahierten Richtungen im Beispiel gerundet. Könnten Beispiele dann auch auf Graphen basieren, so dass der Algorithmus nun auch hier mit freien Anordnungen arbeiten kann?
+        \item In dieser Arbeit wird der Graph für die Ausgabe erst generiert und dann werden dessen Zellen vom Algorithmus bearbeitet. Kann der Graph stattdessen dynamisch während der Generierung angepasst oder gänzlich erst dann erstellt werden, so dass neue Zellen so platziert werden, dass die Ähnlichkeit zum Beispiel oder andere gewünschte Beschränkungen auf die Ausgabe erfüllt werden?
+        \item Es besteht eine Beziehung zwischen den Mustern eines Beispiels, der Struktur des Graphens und der gewählten Heat, die die Erfolgsquote und die Qualität der Ausgaben beeinflusst. So lassen sich bestimmte Muster nur schlecht auf bestimmte Regionen des Graphen anwenden oder führen oft zu Widersprüchen. Können solche Muster und Regionen vorzeitig erkannt werden oder bleibt es einem nur übrig diese manuell zu erkennen um sie zu umgehen?
+        \item Für diese Arbeit wird Heat immer als globaler Parameter der gesamten Ausgabe behandelt. Sind die Zellen des Graphen größtenteils uniform, so kann ein optimaler Wert für eine globale Heat gefunden werden. Unregelmäßigen Graphen hingegen enthalten Regionen die besser mit wenig Heat und Regionen die besser mit hoher Heat gelöst werden können. Kann der Algorithmus erweitert werden, so dass Heat entsprechend der Struktur und Anordnung lokal angepasst wird?
+        \item Desweiteren wird Heat vor Beginn der Generierung festgelegt. Wie kann diese stattdessen im Algorithmus mittels Heuristiken automatisch angepasst werden, wenn z.B. ein Widerspruch erreicht wurde?
+        \end{enumerate}
+
+
 
 
 
