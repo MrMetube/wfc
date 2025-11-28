@@ -220,8 +220,15 @@
             \input{data/extract_wrapping/figure.tex}
 
     \section{Visualisierung}
-        \at{@incomplete }
-
+        Die Ausgabe der Wave Function Collapse muss nicht direkt bildlich verwendet werden. Welche Bedeutung die Zellen und deren Zustände haben, ist dem Algorithmus egal. Dieser garantiert nur lokale Ähnlichkeit zum Beispiel. Im erfolgreiche Spiel \textit{Townscaper} \cite{stalberg_townscaper} von Oskar Stålberg wird Wave Function Collapse verwendet. In Abbildung \ref{fig:townscaper} sind einige Screenshots aus dem Spiel zu sehen.
+        
+        \input{data/townscaper/figure.tex}
+        
+        Hier kann die Spielerin aus Gebäuden eine Stadt bauen. Sie wählt dabei aber nicht die konkreten Gebäude aus, sondern legt nur fest, welche Art/Farbe an jeweiliger Stelle platziert werden soll. Das Spiel nutzt Wave Function Collapse, um die dementsprechend am besten passenden Gebäudeteile zu finden. Danach wird das gewählte Modell an den Knotenpunkt angepasst und mit Details wie Fensters oder Bänken ausgeschmückt.
+        
+        \input{data/townscaper_grid/figure.tex}
+        
+        Damit die Stadt nicht geradlinig verläuft, wird sie auf einer spezielle Art von Gitter gebaut. Abbildung \ref{fig:townscaper_grid} zeigt, wie die Teile, aus denen das Gitter besteht, generiert werden. Es ist zu erkennen, dass es auf einer Quadrilierung, aufbaut. Eine Quadrilierung ist ein Graph, dessen Kanten Vierecke bilden. Die sechseckigen Regionen werden im Spiel zusammengesetzt und an den Knoten kann die Spielerin Gebäude bauen. Die meisten Knotenpunkte haben vier Kanten, aber es gibt auch einzelne mit drei oder fünf Kanten. Im Spiel existieren für diese Arten von Knoten jeweils unterschiedliche Modelle von Gebäuden. Es müssen keine weiteren Modelle, für willkürlich viele Kanten an einem Knoten, erstellt werden, da dieser Prozess nur diese drei Arten von Knoten generiert. Es handelt sich also nicht um eine allgemeine Lösung, da die Beispielmodelle speziell für das genutzt Gitter erstellt wurden und nicht für anderen Art von Graphen funktionieren würden.
 
 
 
@@ -330,13 +337,8 @@
         \at{@placement Artefakte}
         Auch bei Graphen kann die Ausgabe visuelle Artefakte des Graphens enthalten. In Abbildung \ref{fig:cell_size} sind die Voronoi-Zellen erkennbar. Nun muss der Graph aber nicht so dargestellt werden. Den Knoten des Graphen wurden konsistente Zustände aus dem Beispiel zugewiesen. Danach könnten andere Methoden oder Postprocessing angewendet werden, um die Ausgabe zugestallten. In der Abbildung wird beispielhaft die Größe der Zellen verkleinert, wodurch die harten Kanten der Sechecke etwas weniger betont erscheinen, aber nun auch der Hintergrund zu sehen ist. Hier könnte man auf andere Weise die Lücken füllen, so dass die secheckige Form der Zellen kachiert wird. 
         
-        \at{@placement im hintergrund schon erklären und dann hier höchsten nochmal erwähnen}
-        \at{@visual des spiels} 
-        Natürlich muss die Ausgabe auch nicht direkt bildlich verwendet werden. Welche Bedeutung die Knoten des Graphs und deren Zustände haben, ist dem Algorithmus egal. Dieser garantiert nur lokale Ähnlichkeit zum Beispiel. Ein anderes Beispiel für eine solche Weiterverarbeitung ist das erfolgreiche Spiel \textit{Townscaper} \cite{stalberg_townscaper} \at{@visual} von Oskar Stålberg. Hier kann die Spielerin aus Gebäuden eine Stadt bauen. Sie wählt dabei aber nicht die konkreten Gebäude sondern legt nur fest, welche Art/Farbe an jeweiliger Stelle platziert werden soll. Das Spiel nutzt Wave Function Collapse, um die dementsprechend am besten passenden Gebäudeteile zu finden. Damit die Stadt nicht geradlinig ist, also Artefakte des unterliegenden Gitters zeigt wird auch eine spezielle Art von Gitter verwendet. Es handelt sich dabei um eine Quadrilierung, also ein Graph basiert auf Vierecken. Diese werden \at{@visual ref auf gitter von Townscaper} \cite{stalberg_grid}
         
-        \input{data/townscaper_grid/figure.tex}
         
-        Abbildung \ref{fig:townscaper_grid} zeigt, wie die Teile, aus denen das Gitter für Townscaper besteht, generiert werden. Es ist zu erkennen, dass es auf einer Quadrilierung, also ein Gitter aus Vierecken, aufbaut. Die sechseckigen Teile werden dann im Spiel zusammengesetzt und an den Knoten kann die Spielerin Gebäude bauen. Die meisten Knotenpunkte haben vier Kanten, aber es gibt auch einzelne mit drei oder fünf Kanten. Im Spiel existieren für diese Arten von Knoten jeweils unterschiedliche Modelle. Es müssen keine weiteren Modelle für willkürlich viele Kanten an einem Knoten erstellt werden, da dieser Prozess nur diese drei Arten von Knoten generiert.
         
     
     
@@ -411,7 +413,7 @@
         
         \begin{enumerate}
         \item Diese Arbeit hat den Algorithmus nur in 2D betrachtet. Währenddessen wurden Model Synthesis und Wave Function Collapse schon in 3D angewandt. Kann diese Erweiterung des Wave Function Collapse auch auf dreidimensionale Graphen angewandt werden?
-        \item Die Ausgabe kann nun auf einem Graphen geschehen, während das Beispiel immer noch auf einem Gitter liegt. Die tatsächlichen Richtungen in der Ausgabe werden auf die extrahierten Richtungen im Beispiel gerundet. Könnten Beispiele dann auch auf Graphen basieren, so dass der Algorithmus nun auch hier mit freien Anordnungen arbeiten kann?
+        \item Die Ausgabe kann nun auf einem Graphen geschehen, während das Beispiel immer noch auf einem Gitter liegt. Die tatsächlichen Richtungen in der Ausgabe werden auf die extrahierten Richtungen im Beispiel gerundet. Könnten Beispiele dann auch auf Graphen basieren, welche nicht direkt zum Graph der Ausgabe passen müssen?
         \item In dieser Arbeit wird der Graph für die Ausgabe erst generiert und dann werden dessen Zellen vom Algorithmus bearbeitet. Kann der Graph stattdessen dynamisch während der Generierung angepasst oder gänzlich erst dann erstellt werden, so dass neue Zellen so platziert werden, dass die Ähnlichkeit zum Beispiel oder andere gewünschte Beschränkungen auf die Ausgabe erfüllt werden?
         \item Es besteht eine Beziehung zwischen den Mustern eines Beispiels, der Struktur des Graphens und der gewählten Heat, die die Erfolgsquote und die Qualität der Ausgaben beeinflusst. So lassen sich bestimmte Muster nur schlecht auf bestimmte Regionen des Graphen anwenden oder führen oft zu Widersprüchen. Können solche Muster und Regionen vorzeitig erkannt werden oder bleibt es einem nur übrig diese manuell zu erkennen um sie zu umgehen?
         \item Für diese Arbeit wird Heat immer als globaler Parameter der gesamten Ausgabe behandelt. Sind die Zellen des Graphen größtenteils uniform, so kann ein optimaler Wert für eine globale Heat gefunden werden. Unregelmäßigen Graphen hingegen enthalten Regionen die besser mit wenig Heat und Regionen die besser mit hoher Heat gelöst werden können. Kann der Algorithmus erweitert werden, so dass Heat entsprechend der Struktur und Anordnung lokal angepasst wird?
