@@ -324,7 +324,7 @@
     % Diskussion
     \item Linienmuster und Flächenmuster in Beispielen(Flächenmuster dominieren wenn heat zu gering ist, linienmuster lassen sich nur bedingt in beliebigen graphen darstellen)
     
-    \item quadrat, hex und circle/spiral und deren kombinationen haben gute erfolgsquoten, während pure noise sehr schlecht ist, außer heat wird recht hoch gesetzt, warum? weil immer nur ein schlechter knoten reicht um lösungen sehr unwahrscheinlich zu machen und für noise keine uniforme verteilung der punkte besteht, im gegensatz haben die anderen eine uniforme verteilung wodurch es weniger wahrscheinlich ist , dass eine einzelne zelle schlecht ist. Hierfür wäre lokale heat oder heuristiken für dessen anpassung besser aber sind außerhalb des umfangs dieser arbeit \at{@placement problem für future work}
+    
             
             \at{@incomplete Lösungsraum undefiniert} Jede Kante des Graphen stellt eine Beschränkung des Lösungsraums dar. Bei einem Gitter ist jede Zelle, mit Ausnahme der Zellen am Rand, gleichermaßen beschränkt, jedoch kann die Anordnung des Graphen dazu führen dass einzelne Zelle weniger und andere stärker eingeschränkt werden. Eine Zelle mit zehn Nachbarn muss in einen Zustand kollabiert, welcher zu den Zuständen der zehn Nachbaren passt. Ein Graph kann somit stark beschränkte und schwach beschränkte Regionen enthalten, während dass Gitter uniforme Beschränkung auf Zellen ergibt. Zur Erinnerung: es muss nur eine Zelle eine Widerspruch verursachen damit der Algorithmus fehlschlägt. Also sind solche Regionen starker Beschränkung besonderns entscheident für die Chance eine valide Ausgabe zu generieren, weil hier der Lösungsraum am kleinsten ist. \at{@incomplete Entropie erwähnen und @visual für Regionen mit der App darstellen, vergleich halb gelöstester Graph mit Weave und mit einem eher lokalen Beispiel. Unterschiedlicher effekt auf die Entropie der entfernten Zellen und auch für unterschiedliche teile des Graphen}
             
@@ -395,28 +395,30 @@
 
 
 \chapter{Zusammenfassung und Ausblick}
-    \at{@incomplete alles ausformulieren. Also Fragen oder Probleme meines Algorithmus formulieren sollte reichen}
-    
-    \begin{itemize}
-    \item qualität der Ausgaben und schlechte Erfolgsquote bei noise
-    \item Mögliche Anwendungsbereiche
-    \item Beispiel auch als Graph?
-    \item in 3D
-    \item Graph dynamisch, basiert auf dem Beispiel generieren?
-    \item Eigenschaften des Musters(Linien und Flächen) in Bezug auf Heat untersuchen
-    \item Eigenschaften des Gitters analysieren, Engpässe, unförmige Zellen, Abstände, Form der Zelle beachten
-    \end{itemize}
+    \at{@incomplete bin ich zufrieden, was am algorithmus ist gut(hex und so läuft super), wo sind schwachstellen(noise graph)}
     
     \section{zukünftige Forschung}
+    \at{@incomplete alles ausformulieren. Also Fragen oder Probleme meines Algorithmus formulieren sollte reichen}
     
-    \section{Heat}
-        \begin{itemize}
-        \item Eine globale Heat für alle Zellen hat einen negativen Effekt auf lokal regelmäßige Regionen eines Gitters und ein postiven Effekt auf sehr unregelmäßige Regionen des Gitters.
-        \item Anstatt dass die Heat global für alle Zellen zu Beginn bestimmt wird, kann man auch innerhalb des Algorithmus 'lernen' welche Regionen 'schwerer' zu lösen sind und dort die Heat schrittweise erhöhen bis eine Lösung gefunden werden kann.
-        \item Lokales Heating mit heating chance und cooling chance
-        \item simmulated annealing
-        \end{itemize}
-
+    
+    \begin{itemize}
+    \item Mögliche Anwendungsbereiche, in 3D
+    \item Beispiel auch als Graph? Graph dynamisch, basiert auf dem Beispiel generieren?
+    \item Eigenschaften des Musters(Linien und Flächen) in Bezug auf Heat untersuchen
+    \item Eigenschaften des Gitters analysieren, Engpässe, unförmige Zellen, Abstände, Form der Zelle beachten
+    
+    % ////////////////////////////////////////////////
+    
+    \item qualität der Ausgaben und schlechte Erfolgsquote bei noise
+    \item quadrat, hex und circle/spiral und deren kombinationen haben gute erfolgsquoten, während pure noise sehr schlecht ist, außer heat wird recht hoch gesetzt, warum? weil immer nur ein schlechter knoten reicht um lösungen sehr unwahrscheinlich zu machen und für noise keine uniforme verteilung der punkte besteht, im gegensatz haben die anderen eine uniforme verteilung wodurch es weniger wahrscheinlich ist , dass eine einzelne zelle schlecht ist. Hierfür wäre lokale heat oder heuristiken für dessen anpassung besser aber sind außerhalb des umfangs dieser arbeit
+    \item Globale Heat steht in direkter verbindung mit uniformen Graphen. Ebend weil unregelmäßigkeit, nicht mit einem Wert gedeckelt werden kann
+    \item Eine globale Heat für alle Zellen hat einen negativen Effekt auf lokal regelmäßige Regionen eines Gitters und ein postiven Effekt auf sehr unregelmäßige Regionen des Gitters.
+    \item Anstatt dass die Heat global für alle Zellen zu Beginn bestimmt wird, kann man auch innerhalb des Algorithmus 'lernen' welche Regionen 'schwerer' zu lösen sind und dort die Heat schrittweise erhöhen bis eine Lösung gefunden werden kann.
+    \item Lokales Heating mit heating chance und cooling chance
+    \item simmulated annealing
+    \end{itemize}
+    
+    
 
 
 
