@@ -760,63 +760,29 @@ presets :: [] proc (generates: ^[dynamic] Generate_Kind) {
     },
     proc (generates: ^[dynamic] Generate_Kind) {
         clear(generates)
-        append(generates, Generate_Grid {
-            center    = {.25, .25},
-            radius = .24,
-        })
+        
         append(generates, Generate_Grid {
             center    = {.25, .75},
-            radius = .24,
-            is_hex = true,
+            radius = .75,
+            angle = 24 * RadiansPerDegree,
         })
         append(generates, Generate_Grid {
             center    = {.75, .25},
-            radius = .24,
-            is_hex    = true,
-        })
-        append(generates, Generate_Grid {
-            center    = {.75, .75},
-            radius = .24,
-        })
-        base_heat = 2
-    },
-    proc (generates: ^[dynamic] Generate_Kind) {
-        clear(generates)
-        append(generates, Generate_Grid {
-            center = {.5, 1},
-            radius = .51,
-        })
-        append(generates, Generate_Grid {
-            center = {.5, 0},
-            radius = .51,
+            radius = .48,
+            angle  = 45 * RadiansPerDegree,
             is_hex = true,
         })
         
-        append(generates, Generate_Noise {
-            center = .5,
-            radius = {0.51, 0.51/3},
-            min_distance = 0.75,
-        })
-        base_heat = 3
-    },
-    proc (generates: ^[dynamic] Generate_Kind) {
-        clear(generates)
         append(generates, Generate_Grid {
-            center    = {.5, .5},
-            radius = .51,
+            center = {.875, .125},
+            radius = .25,
         })
-        
-        append(generates, Generate_Noise {
-            center = .5,
-            radius = {0.16, 0.51},
-            min_distance = 1,
+        append(generates, Generate_Grid {
+            center    = {.125, .875},
+            radius = .25,
+            is_hex = true,
         })
-        
-        append(generates, Generate_Circle {
-            radius = 0.277,
-            spiral_size = 1,
-        })
-        base_heat = 3
+        base_heat = 2
     },
 }
 

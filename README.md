@@ -1,6 +1,6 @@
 # Wave Function Collapse auf Graphen
 
-Diese App ist in der [Odin](https://github.com/odin-lang/Odin) Programmiersprache geschrieben. Eine kompilierte Exe-Datei ```wfc.exe``` ist im ``build``-Verzeichnis hinterlegt. Es besteht keine Garantie, dass diese auf anderen Geräten funktioniert. Zur Not kann die Anwendung auch manuell kompiliert werden.
+Diese App ist in der [Odin](https://github.com/odin-lang/Odin) Programmiersprache geschrieben.
 
 ## Build
 ```
