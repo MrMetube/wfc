@@ -37,6 +37,7 @@ show_average_colors := true
 show_points         := false
 show_triangulation  := false
 show_voronoi_cells  := false
+show_cells_filled   := false
 
 show_step_details   := false
 show_heat           := false
@@ -174,7 +175,7 @@ main :: proc () {
         }
     }
     
-    entropy := seed_random_series()
+    entropy := seed_random_series(123)
     collapse: Collapse
     
     generates: [dynamic] Generate_Kind
@@ -233,30 +234,39 @@ main :: proc () {
         }
         
         if show_cells {
-            max_entropy: f32
-            for id in 0..<len(collapse.states) {
-                probability := collapse.states[id].probability
-                
-                max_entropy -= probability * log2(probability)
-            }
-            spall_begin("draw cells")
-            for &cell in collapse.cells {
-                if .edge in cell.flags do continue
-                
-                color: v4
-                if show_average_colors || .collapsed in cell.flags {
-                    color = calculate_average_color(&collapse, &cell)
-                }
-                if show_entropy {
-                    t := cell.entropy / max_entropy
-                    color = linear_blend(color, Red, t)
-                }
-                
-                if color.a != 0 {
+            if show_cells_filled {
+                color_wheel := color_wheel
+                for &cell, index in collapse.cells {
+                    if .edge in cell.flags do continue
+                    
+                    color := color_wheel[index % len(color_wheel)]
                     draw_cell(cell, color)
                 }
+            } else {
+                max_entropy: f32
+                for id in 0..<len(collapse.states) {
+                    probability := collapse.states[id].probability
+                    
+                    max_entropy -= probability * log2(probability)
+                }
+                
+                for &cell in collapse.cells {
+                    if .edge in cell.flags do continue
+                    
+                    color: v4
+                    if show_average_colors || .collapsed in cell.flags {
+                        color = calculate_average_color(&collapse, &cell)
+                    }
+                    if show_entropy {
+                        t := cell.entropy / max_entropy
+                        color = linear_blend(color, Red, t)
+                    }
+                    
+                    if color.a != 0 {
+                        draw_cell(cell, color)
+                    }
+                }
             }
-            spall_end()
         }
         
         if show_points {
@@ -582,7 +592,7 @@ setup_grid :: proc (c: ^Collapse, entropy: ^RandomSeries, generates: ^[dynamic] 
 
 generate_points :: proc(points: ^[dynamic] v2d, count: i32, kind: Generate_Kind) {
     // @note(viktor): We get numerical instability if points are perfectly vertically or horizontally aligned
-    entropy := seed_random_series()
+    entropy := seed_random_series(123)
     
     count := count
     

@@ -2,7 +2,6 @@
 #+no-instrumentation
 package main
 
-import "core:math/rand"
 import "base:intrinsics"
 
 @(private="file") MaxRandomValue :lane_u32: max(u32)
@@ -27,7 +26,6 @@ next_random_lane_u32 :: xor_shift
 next_random_u32 :: proc (series: ^RandomSeries) ->  (result: u32) {
     next_random_lane_u32(series)
     result = extract(series.state, 0)
-    result = rand.uint32()
     return result
 }
 xor_shift :: proc (series: ^RandomSeries) ->  (x: lane_u32) {
