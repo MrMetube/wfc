@@ -272,15 +272,14 @@
         
         \input{data/cosine.tex}
         
-        Nun kann mit dieser Auswahlt weitergearbeitet werden. Der Nachbar wird als in dieser Himmelrichtung liegend behandelt und daraus ergibt sich, welche Überlappungsregeln benutzt werden. Sind die Zellen beinahe oder ausschließlich entlang der Himmelrichtungen angeordnet, dann funktioniert diese Rundung gut. Liegt eine Nachbarrichtung nun aber genau zwischen zwei Himmelrichtungen, so haben beide die gleiche Ähnlichkeit und der Algorithmus muss willkürlich eine der beiden wählen. Diese Entscheidung wird bereits vor Beginn der Generierung getroffen, was den schlechtesten Zeitpunkt dafür darstellt, da am wenigsten Information vorliegt. Um zu wissen welche Himmelrichtung bessere Ergebnisse liefert, müssten beide Optionen jeweils ausprobiert und verglichen werden. Da jede Zelle mit ihrem finalen Zustand aber jede andere Zelle beeinflussen kann, müsste jede Kombination für alle Zellen geprüft werden, was schnell unmöglich wird. Stattdessen wäre es besser die Entscheidung bis zum letzten Moment, also dann wenn eine Zelle collapst wird, aufzuschieben. Zu diesem Zeitpunkt hat der Algorithmus die meisten Informationen und kann dadurch einen Widerspruch besser vermeiden. Beim Kollabieren wird der Zelle immernoch ein einziger Zustand zugewiesen, wodurch implizit ebend die Himmelsrichtung, mit der der gewählte Zustand mit den Nachbarzellen überlappt, ausgewählt wird.
+        Nun kann mit dieser Auswahlt weitergearbeitet werden. Der Nachbar wird als in dieser Himmelrichtung liegend behandelt und daraus ergibt sich, welche Überlappungsregeln benutzt werden. Sind die Zellen beinahe oder ausschließlich entlang der Himmelrichtungen angeordnet, dann funktioniert diese Rundung gut. Liegt eine Nachbarrichtung nun aber genau zwischen zwei Himmelrichtungen, so haben beide die gleiche Ähnlichkeit und der Algorithmus muss willkürlich eine der beiden wählen. Diese Entscheidung wird bereits vor Beginn der Generierung getroffen, was den schlechtesten Zeitpunkt dafür darstellt, da am wenigsten Information vorliegt. Um zu wissen welche Himmelrichtung bessere Ergebnisse liefert, müssten beide Optionen jeweils ausprobiert und verglichen werden. Da jede Zelle mit ihrem finalen Zustand aber jede andere Zelle beeinflussen kann, müsste jede Kombination für alle Zellen geprüft werden, was schnell unmöglich wird. Stattdessen wäre es besser die Entscheidung bis zum letzten Moment, also dann wenn eine Zelle kollabiert wird, aufzuschieben. Zu diesem Zeitpunkt hat der Algorithmus die meisten Informationen und kann dadurch einen Widerspruch besser vermeiden. Beim Kollabieren wird der Zelle immernoch ein einziger Zustand zugewiesen, wodurch implizit ebend die Himmelsrichtung, mit der der gewählte Zustand mit den Nachbarzellen überlappt, ausgewählt wird.
         \\
         \\
         \textit{Heat} gibt an wie viele Himmelrichtungen der Algorithmus für Nachbarn betrachtet. Diese wird im Umfang dieser Arbeit für alle Zellen des Graphen einheitlich gesetzt und vor Beginn der Generierung festgelegt. Damit ein Zustand nun für eine Zelle möglich ist, muss dieser mit den Zuständen der Nachbarzellen überlappen. Nun muss die Überlappung entsprechend der Heat nicht nur noch entlang einer Himmelrichtung sein, sondern es können mehrere geprüft werden, wobei es reicht wenn eine der Himmelsrichtungen eine passende Regel hat. Ein Effekt höherer Heat ist, dass Zellen mehr mögliche Zustände haben, da es für jeden Zustand mehr passende Regeln gibt; die Entropie der Zellen ist tendenziell höher als bei geringer Heat.
         
         Die Anzahl der extrahierten Himmelsrichtungen begrenzt den Wertebereich für die Heat. Jeder Benachbarung kann minimal eine und maximal alle Himmelsrichtungen zugewiesen werden. Da Wave Function Collapse zuvor auf Gittern lief, konnten die Regelextraktion optimiert werden. Die reguläre Struktur des Gitters führt dazu, dass wenn für eine Zelle $A$ der Nachbar von $A$ im Norden($A_n$) passt und der Nachbar im Westen von $A_n$ passt, dann muss auch der Nachbar von $A$ im Nordwesten passen. Somit mussten nur die Überlappungsregeln für Norden, Süden, Westen und Osten gespeichert werden. Für die Generierung auf Graphen entfällt dies. Die diagonalen Himmelsrichtungen werden explizit gespeichert und behandelt.
         
-
-            \at{@incomplete Zusammenhang von Heat und Entropie @visual mit Entropy nach einem Schritt}
+        \at{@incomplete Zusammenhang von Heat und Entropie}
     
     \section{Zusammenfassung}
         Ziel dieser Arbeit ist, die Generierung des Wave Function Collapse Algorithmus auf Graphen geschehen zu lassen. Hierfür wurden drei Anpassungen dargestellt:
@@ -314,45 +313,55 @@
         Nun liegt eine Graph vor, mit dem der Wave Function Collapse Algorithmus arbeiten kann. Die Knoten und Kanten der Triangulierung geben die Anordnung und Benachbarung der Zellen an, während die Voronoi-Zellen die Form jeder Zelle für die Darstellung benutzt werden kann.
         
     \section{Phasen und Backtracking}
-        Der Algorithmus \ref{alg:wfc_back} generiert die Ausgabe schrittweise. Ein \textit{Schritt} besteht aus vier Phasen: Search, Pick, Observe und Propagate. Schritte geschehen nacheinander und könne nur eine Zelle oder bis hin zu alle Zellen anpassen. Der Algorithmus führt Schritt aus, bis jede Zelle collapst ist oder ein Widerspruch gefunden wurde.
+        Der Algorithmus \ref{alg:wfc_back} generiert die Ausgabe schrittweise. Ein \textit{Schritt} besteht aus vier Phasen: Search, Pick, Observe und Propagate. Schritte geschehen nacheinander und könne nur eine Zelle oder bis hin zu alle Zellen anpassen. Der Algorithmus führt Schritt aus, bis jede Zelle kollabiert ist oder ein Widerspruch gefunden wurde.
         
-        \input{data/wfc_back.tex} 
         
-        Zu Beginn werden die Zellen mit der geringsten Entropie gesucht. Es ist möglich, dass mehrere Zellen die gleiche Entropie haben. Zum Beispiel sind alle Zellen am Anfang in der Superposition aller Zustände, wodurch alle Zellen die selbe Entropie haben. Aus der Menge an gefundenen Zellen wird in diesem Fall in der Pick-Phase eine Zelle zufällig ausgewählt.
+        Zu Beginn werden die Zellen mit der geringsten Entropie gesucht. Es ist möglich, dass mehrere Zellen die gleiche Entropie haben. Aus der Menge an gefundenen Zellen wird in diesem Fall in der Pick-Phase eine Zelle zufällig ausgewählt. In der Observe-Phase wird ein Zustand aus der Superposition der gewählten Zelle zufällig ausgewählt und die Zelle wird in diesen Zustand kollabiert. Die anderen Zustände werden entfernt, was Einfluss auf die Nachbarzellen haben kann. Die Wahrscheinlichkeit eines Zustands, gewählt zu werden, hängt von dessen Häufigkeit im Beispiel ab. Danach beginnt die Propagate-Phase. Eine Liste aller geänderten Zellen wird mit der observierten Zelle initialisiert. Jede Zelle in der Liste wird einzeln entfernt und wie folgt bearbeitet. Alle Nachbarzellen der betrachten Zellen prüfen, welche ihrer Zustände mit keinem der Zustände der betrachteten Zellen noch überlappen. Diese Zustände werden entfernt und jede Nachbarzelle die sich so verändert hat, wird der Liste angefügt. Sollte dabei auch der letzte mögliche Zustand einer Zelle unmöglich gewurden sein, so wurde ein Widerspruch erreicht. Diese Phase dauert so lange, bis die Liste leer ist, sich also keine Zellen mehr verändern.
         
-        In der Observe-Phase wird ein Zustand aus der Superposition der gewählten Zelle zufällig ausgewählt und die Zelle wird in diesen Zustand kollabiert. Die anderen Zustände werden entfernt, was Einfluss auf die Nachbarzellen haben kann. Die Wahrscheinlichkeit eines Zustands, gewählt zu werden, hängt von dessen Häufigkeit im Beispiel ab. 
+        \input{data/wfc_back.tex}
         
-        Danach beginnt die Propagate-Phase. Eine Liste aller geänderten Zellen wird mit der observierten Zelle initialisiert. Jede Zelle in der Liste wird einzeln entfernt und wie folgt bearbeitet. Alle Nachbarzellen der betrachten Zellen prüfen, welche ihrer Zustände mit keinem der Zustände der betrachteten Zellen noch überlappen. Diese Zustände werden entfernt und jede Nachbarzelle die sich so verändert hat, wird der Liste angefügt. Sollte dabei auch der letzte mögliche Zustand einer Zelle unmöglich gewurden sein, so wurde ein Widerspruch erreicht; es kann nun keine Lösung mehr gefunden werden. Diese Phase dauert so lange, bis die Liste leer ist, sich also keine Zellen mehr verändern.
-        \\
-        \\
-        \at{@flow zu dicht} Wenn der Algorithmus einen Widerspruch entdeckt, muss nicht immer alle Arbeit verworfen werden. Gerade bei größeren oder komplizierteren Mustern oder Graphen kann es sein, dass beim ersten Versuch keine Lösung gefunden wird. Wenn ein Widerspruch in einer Zelle aber nun nur von den direkten Nachbar abhängt, so ist es wahrscheinlich, dass weiter entfernte bereits gelöste Zellen dennoch kompatibel sind und nicht verworfen werden müssen. Um einen lokalen Widerspruch aufzulösen muss meistens nur lokal eine andere Entscheidung getroffen werden.
+        \at{@flow zu dicht, aber was kann ich dagegen tun?} Wenn der Algorithmus einen Widerspruch entdeckt, muss nicht immer alle Arbeit verworfen werden. Gerade bei größeren oder komplizierteren Mustern oder Graphen kann es sein, dass beim ersten Versuch keine Lösung gefunden wird. Wenn ein Widerspruch in einer Zelle aber nun nur von den direkten Nachbar abhängt, so ist es wahrscheinlich, dass weiter entfernte bereits gelöste Zellen dennoch kompatibel sind und nicht verworfen werden müssen. Um einen lokalen Widerspruch aufzulösen muss meistens nur lokal eine andere Entscheidung getroffen werden.
         
-        Um Backtracking umzusetzen müssen mehr Informationen behalten werden als nur der Zustand des Gitters im aktuellen Schritt. Will man nun einen oder mehrere Schritte zurückgehen, muss man wissen, welche Entscheidung man zuvor bereits getroffen hat, um dessen Effekt rückgängig zu machen. Dabei genügt es nicht nur die collapste Zelle und den Zustand wieder zu entfernen, weil jede Zelle von mehreren Nachbarn beeinflusst wird. Die Menge der möglichen Zustände einer Zelle ist die Schnittmenge der möglichen Nachbarzuständen der Nachbarzellen. Somit kann es sein, dass ein Zustand A aus der Menge wegen mehreren Nachbarn fehlt. Nimmt man nun durch Backtracking eine dieser Beschränkungen wieder zurück, so ist es nicht offensichtlich, ob Zustand A nun wieder möglich ist, ohne alles neu zu berechnen und zu propagieren bis sich keine Zelle mehr ändert. Stattdessen kann man aber auch speichern, in welchem Schritt ein Zustand entfernt wurde. Ein Zustand wird beim Backtracken dann wieder möglich, wenn der Schritt in dem er entfernt wurde nach dem nun aktuellen Schritt liegt. Es genügt nur diesen einen Schritt pro Zustand zu speichern, da der Algorithmus selbst jeden Zustand bis auf einen pro Zelle entfernen muss, aber einen Zustand niemals in einem späteren Schritt wieder hinzufügt. In der Umsetzung wird für jede Zelle eine Liste aller Zustände gespeichert. Jeder Zustand ist entweder möglich und wurde noch nicht als entfernt markiert oder ist unmöglich und speichert den Schritt an dem er unmöglich wurde. Es wäre auch möglich einfach eine Kopie aller Zellen in jedem Schritt zu machen. Dann müssten beim Backtracken nur die alten Zellen wieder geladen werden. Der Unterschied zur anderen Methode ist dabei, dass für jeden Schritt die Zellen (oder deren Änderungen) immer wieder kopiert werden, während die benutzte Methode für jede Zelle ihre Änderungen für jeden Schritt speichert. Da ein Zustand aber nur einmal entfernt wird, muss ebend nur jeweils ein Schritt und nicht eine lange Liste aller Schritte pro Zustand gespeichert werden.
+        Um Backtracking umzusetzen müssen mehr Informationen behalten werden als nur der Zustand des Gitters im aktuellen Schritt. Will man nun einen oder mehrere Schritte zurückgehen, muss man wissen, welche Entscheidung man zuvor bereits getroffen hat, um dessen Effekt rückgängig zu machen. Dabei genügt es nicht nur die kollabierten Zelle und den Zustand wieder zu entfernen, weil jede Zelle von mehreren Nachbarn beeinflusst wird. Die Menge der möglichen Zustände einer Zelle ist die Schnittmenge der möglichen Nachbarzuständen der Nachbarzellen. Somit kann es sein, dass ein Zustand A aus der Menge wegen mehreren Nachbarn fehlt. Nimmt man nun durch Backtracking eine dieser Beschränkungen wieder zurück, so ist es nicht offensichtlich, ob Zustand A nun wieder möglich ist, ohne alles neu zu berechnen und zu propagieren bis sich keine Zelle mehr ändert. Stattdessen kann man aber auch speichern, in welchem Schritt ein Zustand entfernt wurde. Ein Zustand wird beim Backtracken dann wieder möglich, wenn der Schritt in dem er entfernt wurde nach dem nun aktuellen Schritt liegt. Es genügt nur diesen einen Schritt pro Zustand zu speichern, da der Algorithmus selbst jeden Zustand bis auf einen pro Zelle entfernen muss, aber einen Zustand niemals in einem späteren Schritt wieder hinzufügt. In der Umsetzung wird für jede Zelle eine Liste aller Zustände gespeichert. Jeder Zustand ist entweder möglich und wurde noch nicht als entfernt markiert oder ist unmöglich und speichert den Schritt an dem er unmöglich wurde. Es wäre auch möglich einfach eine Kopie aller Zellen in jedem Schritt zu machen. Dann müssten beim Backtracken nur die alten Zellen wieder geladen werden. Der Unterschied zur anderen Methode ist dabei, dass für jeden Schritt die Zellen (oder deren Änderungen) immer wieder kopiert werden, während die benutzte Methode für jede Zelle ihre Änderungen für jeden Schritt speichert. Da ein Zustand aber nur einmal entfernt wird, muss ebend nur jeweils ein Schritt und nicht eine lange Liste aller Schritte pro Zustand gespeichert werden.
         
         Desweiteren sollen bereits getroffenen Entscheidungen, die zu einem Widerspruch führen, nicht noch einmal wiederholt werden. Die Entscheidungspunkte in der Pick- und Observe-Phase können gleich behandelt werden. Es wird jeweils eine Liste an Auswahlmöglichkeiten für später gespeichert. Die ausgewählte Zelle oder den ausgewählten Zustand werden aus der Liste entfernt. Wird gebacktrackt, so kann einfach die nächste Möglichkeit aus der Liste auswählt und entfernt werden. Der Algorithmus läuft ab dann normal weiter. Nun wurde aber eine neue Schwachstelle in den Algorithmus eingeführt. Wenn zuvor in der Search-Phase keine Zellen mehr gefunden wurden, bedeutete dies, dass alle Zellen tatsächlich kollabiert waren. Nun kann es aber sein, dass alle gefundenen Zellen ausprobiert wurde und zu einem Widerspruch geführt haben. Somit würde keine Zelle mehr wählbar sein. Auch in der Observe-Phase war es zuvor unmöglich keinen Zustand mehr auswählen zu können, da eine Zelle ohne mögliche Zustände bereits zuvor als Widerspruch identifiziert wurden wäre. In beiden Fällen wird dies wie ein Widerspruch behandelt und es muss zum Backtracking kommen. Schließlich wurden alle von diesem Schritt folgenden Entscheidungen bereits getroffen und ausgewertet und keine Lösung gefunden. Somit führt dieser Schritt zwar nicht direkt zu einem Widerspruch in einer Zelle, aber alle folgen Schritte werden irgendwann zu einem Widerspruch führen.
 
 
 \chapter{Ergebnisse und Diskussion}
-    \at{@incomplete einleitender Satz, alles ausformulieren}
-
-    \section{allgemein, aussehen, muster \at{@naming}}
-        \begin{itemize} 
-        \item Base Case - Gitter - Vergleich zum WFC - Bilder mit unterschiedlichen Graphen: Einfache, Komposition(vier in eins, außen und innen). vielleicht auch eine Seite mit vielen beispielen und jeweils ein graph und eine gute ausgabe in einer tabelle?
-        
-        \item Linienmuster und Flächenmuster in Beispielen(Flächenmuster dominieren wenn heat zu gering ist, linienmuster lassen sich nur bedingt in beliebigen graphen darstellen)
-        \end{itemize}
-        
-        
-        
-        
-        
+    Dieses Kapitel präsentiert die erreichenten Ergebnisse. Zuerst werden die \at{@incomplete nach dem ausformulieren hier beschreiben.}. Danach werden die positiven wie auch negativen Effekte von Heat mittels Beispielen erklärt.
     
-    
-    
-    \section{Der Effekt von Heat auf die Ausgabe}
-        Im folgenden Abschnitt werden die positiven wie auch negativen Effekt von Heat mittels Beispielen erklärt. \at{@flow reihenfolge überdenken}
+    \section{Übersicht / Auswertung \at{@naming}}
+        Im folgenden Abschnitt werden \at{@incomplete siehe Abbildungen \ref{fig:results_1} und \ref{fig:results_2}}
         
-        % ////////////////////////////////////////////////
+        \input{data/results/figure_1.tex}
+        \input{data/results/figure_2.tex}
+        
+        
+        \at{@incomplete beispiele nummerienen und genau sagen welche beispiel wo gemeint sind.}
+        
+        \begin{enumerate}
+        \item erste reihe zeigt die Zellen, (a) Quadratgitter, (b) Sechseckgitter, (c) Kreisförmig, (d) Zufall, (e) eine Mischung aus unterschiedlichen gedrehten und angeordneten Gittern in einem Graphen
+        \item erste spalte zeigt das Beispiel und danach kommen ausgewählte Ausgaben mit dem Beispiel und dem Graph
+        \item maximal eine Minute laufen lassen, wenn nicht geschafft dann mit dnf markiert
+        \item Heat ist (a)=1, (b,c) = 2, (d) einmal 2 und einmal 3, (e) = 2. Wurde so gewählt, dass interessante Ausgaben entstehen
+        \item (a) ausgaben sind äquivalent zu WFC nach Gumin, Gitter
+        \item (b) ab hier Heat 2, bis auf kleine Makel sind es gute Ausgaben, Gitter
+        \item (c) stellt uniforme verteilte Zellen dar, die nun nicht mehr auf einem Gitter liegen, 
+        \item (d 2) erste beispiele konnten keine ergebnisse nach 1 minute laufzeit erzeugen. einzelne Ausgaben sind fast eintönig
+        \item (d 3) vorherige fehlschläge und uninteressante ausgaben sind nun besser. im gegenzug sind vorher gute ausgaben nun schlechter(mehr fehler, weniger struktur erkennbar)
+        \item (e) die einzelnen Gitterausschnitte sind gut, aber an den rändern wo zwei gitter angrenzen, entstehen schwer lösbar regionen. einige ausgaben verlieren hier an qualität
+        \end{enumerate}
+    
+    % ////////////////////////////////////////////////
+    
+    \section{Heat und Ähnlichkeit}
+        Dieser Abschnitt erklärt die Beziehung zwischen Heat und die erreichte Ähnlichkeit der Ausgabe zum Beispiel.
+        
+        \input{data/heat_more/figure.tex}
+        
+        Abbildung \ref{fig:heat_more} zeigt wie die Qualität der Ausgabe, bei steigender Heat, sinken kann. Der Graph ist hier ein Quadratgitter und kann somit schon bei einer Heat von 1 gute Ausgaben generieren. Mit jedem Schritt wird der jeder tatsächlichen Benachbarung eine größere Menge an Möglichkeiten gegeben. Es entstehen mehr fehlerhafte Regionen in der Ausgabe. Ab einer Heat von 5 kann der Algorithmus einer perfekt nach Osten laufenden Benachbarung nicht nur Nordosten und Südosten sondern auch Norden und Süden zuweisen, also zu einander entgegengesetzte Himmelrichtungen. Liegt z.B. eine Zelle östlich von einer anderen so könnten beide sich als südlich der anderen behandeln. Ab Heat=6 könnte jede Benachbarung auch als eine der entgegengesetze Himmelrichtungen behandelt werden. Schließlich verliert die Anordnung der Zellen bei Heat=8 komplett die Bedeutung. Zur Vollständigkeit sind hier Ausgaben mit hoher Heat dargestellt, in der Praxis sollte man Heat so gering wie möglich halten.
+        
+        
         
         \input{data/heat_hex/figure.tex}
         
@@ -365,7 +374,7 @@
         
         Der Effekt von höherer Heat ist, das die Menge an möglichen Zuständen vergrößert wird, indem mehr Überlappungsregeln in Betracht gezogen werden. Dadurch ist es auch unwahrscheinlicher, dass für eine Zelle keine Zustände mehr möglich sind und ein Widerspruch entsteht. Gleichzeitig werden nun aber auch Ausgaben generiert, die eine tatsächlich geringere Ähnlickkeit zum Beispiel haben. So ist die Ausgabe in (c) zwar weniger interessant als die in (d), aber die horizontalen Linien und die grauen Flächen dazwischen passen exakt zur Teilen des Beispiels. Bei (d) werden auch vertikalen Linien generiert, aber diese haben knicke und sind eher zickzackartig als die Senkrechten des Beispiels. Eine Erhöhung der Heat verschlechtert die lokale Ähnlichkeit der Ausgabe zum Beispiel und verbessert die Wahrscheinlichkeit erfolgreich eine nicht triviale Lösung zu generieren.
         
-        % ////////////////////////////////////////////////
+        
         
         \input{data/heat_rotation/figure.tex}
         
@@ -375,36 +384,35 @@
         
         % ////////////////////////////////////////////////
         
-        \input{data/heat_more/figure.tex}
-        
-        Abbildung \ref{fig:heat_more} zeigt wie die Qualität der Ausgabe, bei steigender Heat, sinken kann. Der Graph ist hier ein Quadratgitter und kann somit schon bei einer Heat von 1 gute Ausgaben generieren. Mit jedem Schritt wird der jeder tatsächlichen Benachbarung eine größere Menge an Möglichkeiten gegeben. Es entstehen mehr fehlerhafte Regionen in der Ausgabe. Ab einer Heat von 5 kann der Algorithmus einer perfekt nach Osten laufenden Benachbarung nicht nur Nordosten und Südosten sondern auch Norden und Süden zuweisen, also zu einander entgegengesetzte Himmelrichtungen. Liegt z.B. eine Zelle östlich von einer anderen so könnten beide sich als südlich der anderen behandeln. Ab Heat=6 könnte jede Benachbarung auch als eine der entgegengesetze Himmelrichtungen behandelt werden. Schließlich verliert die Anordnung der Zellen bei Heat=8 komplett die Bedeutung. Zur Vollständigkeit sind hier Ausgaben mit hoher Heat dargestellt, in der Praxis sollte man Heat so gering wie möglich halten.
-        
-        % ////////////////////////////////////////////////
+    
+    
+    
+    \section{Heat und Entropie}
+        \at{@incomplete einleitung}
         
         \input{data/heat_entropy/figure.tex}
         
-        In Abbildung \ref{fig:heat_entropy} ist dargestellt, wie höhere Heat die Entropie von Zellen über den Verlauf des Algorithmus beeinflusst. Das gewählte Beispiel generiert vertikale und horizontale verwobene Linien \at{@incomplete Linienmuster}. Die Zellen sind jeweils nach einem und nach fünf Schritten dargestellt. Der Algorithmus hat jeweils anderen Zellen und jeweils andere Zustände zufällig ausgewählt, doch der Trend ist erkennbar. Eine kollabierte Zelle beschränkt die Menge an möglichen Zuständen ihrer Nachbarn und verringert somit deren Entropie. Dies kann soweit gehen, dass die Nachbarzellen auch nur noch einen möglichen Zustand haben und von selbst kollabieren. Bei geringer Heat kann sie auch auf entfernte Zellen einen großen Einfluss haben. Wird die Heat erhöht, so wird der Einflussbereich einzelner Zellen immer kleiner, weil jede Zelle weniger Einfluss auf ihre Nachbarn hat, und diese Nachbar wiederum ihre Nachbar weniger beschränken. Es bedarf mehr Schritte um die selbe Anzahl an Zellen zu kollabieren.
+        In Abbildung \ref{fig:heat_entropy} ist dargestellt, wie höhere Heat die Entropie von Zellen über den Verlauf des Algorithmus beeinflusst. Die Zellen sind jeweils nach einem und nach fünf Schritten dargestellt. Der Algorithmus hat jeweils anderen Zellen und jeweils andere Zustände zufällig ausgewählt, doch der Trend ist erkennbar. Eine kollabierte Zelle beschränkt die Menge an möglichen Zuständen ihrer Nachbarn und verringert somit deren Entropie. Dies kann soweit gehen, dass die Nachbarzellen auch nur noch einen möglichen Zustand haben und von selbst kollabieren. Bei geringer Heat kann sie auch auf entfernte Zellen einen großen Einfluss haben. Wird die Heat erhöht, so wird der Einflussbereich einzelner Zellen immer kleiner, weil jede Zelle weniger Einfluss auf ihre Nachbarn hat, und diese Nachbar wiederum ihre Nachbar weniger beschränken. Es bedarf mehr Schritte um die selbe Anzahl an Zellen zu kollabieren.
         
-        % ////////////////////////////////////////////////
+        
         
         \input{data/heat_plot/figure.tex}
         
-        Abbildung \ref{fig:heat_plot} zeigt die Beziehung zwischen der Heat und der Entropie aller Zelle. Die Gesamtentropie fällt stetig, da der Algorithmus in jedem Schritt eine Zelle kollabiert, wodurch diese nun eine Entropie von 0 hat. Gleichzeitig beeinflusst diese Zelle auch ihre Nachbarn und die wiederum deren Nachbarn indem nun bestimmte Zustände für diese nicht mehr möglich sind. Dabei kann es sein, dass anderen Zellen auch in einen Zustand einzigen Zustand kollabieren, da alle anderen Zustände unmöglich geworden sind. Die Entropie der Nachbarn wird also auch verringert. Schließlich hat der Algorithmus alle Zellen kollabiert und die Gesamtentropie fällt auf 0; der Ausgabe ist fertig generiert. 
-
+        Abbildung \ref{fig:heat_plot} zeigt die Beziehung zwischen der Heat und der Entropie aller Zelle. Die Gesamtentropie fällt stetig, da der Algorithmus in jedem Schritt eine Zelle kollabiert, wodurch diese nun eine Entropie von 0 hat. Gleichzeitig beeinflusst diese Zelle auch ihre Nachbarn und die wiederum deren Nachbarn indem nun bestimmte Zustände für diese nicht mehr möglich sind. Dabei kann es sein, dass anderen Zellen auch in einen Zustand einzigen Zustand kollabieren, da alle anderen Zustände unmöglich geworden sind. Die Entropie der Nachbarn wird also auch verringert. Schließlich hat der Algorithmus alle Zellen kollabiert und die Gesamtentropie fällt auf 0; die Ausgabe ist fertig generiert. 
+        
         Im Diagramm sind nur die erfolgreichen Schritte dargestellt. Kam es zu einem Widerspruch und Backtracking, so wurden die Daten fehlgeschlagenen Schritte überschrieben. Im Verlauf des Algorithmus mit Backtracking würde die Gesamtentropie scheinbar steigen, doch ein Schritt mit geringer Entropie kann niemals einen mit zu einem Schritt mit höherer Entropie führen.
         
         Im Diagramm sind mehrere Verläufe dargestellt, jeweils mit gleichem Beispielbild und Graphen, aber mit unterschiedlicher Heat. Es ist zu erkennen, dass die Gesamtentropie bei höherer Heat langsamer abfällt als bei kleinerer Heat. Auch unterschieden sich die Verläufe in der Steilheit. Bei niedriger Heat gibt es immer wieder Schritte die die Entropie stark reduzieren. Dabei handelt es sich um eine Zelle, dessen gewählter Zustand eine große Menge anderer Zellen beeinflusst hat. Währendessen tretten solche Fälle bei hoher Heat selten bis garnicht auf. Die meisten Schritte verringern die Entropie gleichstark. Grund dafür ist, dass Heat den Nachbarn einer Zelle mehr Überlappungsregeln zur Verfügung stellt. Es genpgt nur eine valide Regel, damit ein Zustand möglich ist. Somit haben Nachbarzellen länger mehr mögliche Zustände. Gleichzeitig haben aber auch die Nachbarn der Nachbarzellen nun auch mehr Kombinationsmöglichkeiten, von denen wieder nur mindestens eine passen muss. Bei höherer Heat vermindert sich der Einflussbereich einer kollabierten Zelle, bis sie nur noch ihre direkten Nachbarzellen beeinflusst. 
         
         Es ist auch zu erkennen, dass die Verläufe mit Heat 6, 7 und 8 beinahe identisch sind. Ab einem gewissen Punkt, sind Zellen so unabhängig von einander, dass höhere Heat keinen Unterschied mehr macht. Das Limit dieses Verhalten würde dann erreicht werden, wenn jede Zelle tatsächlich unabhängig von allen anderen Zellen ist. Dann kann der Algorithmus in jedem Schritt nur einen Zelle kollabieren und keine der anderen Zellen damit beschränken. Die Entropie fällt dann mit einer konstanten Rate und es müssen genauso viele Schritte wie es Zellen im Graphen gibt geschehen.
-        \\
-        \\
-        
+
+
 
 
 
 
 \chapter{Zusammenfassung und Ausblick}
-    Dieses Kapitel bietet einen Rückblick auf die erfolgreiche Erweiterung des Wave Function Collapse Algorithmus. Auch werden noch bestehende Schwachstellen der präsentierten Methodik erklärt. Diese könnten als Ansatz für weiterführende Forschung und Entwicklung der Algorithmus dienen.
+    Dieses Kapitel bietet einen Rückblick auf die erfolgreiche Erweiterung des Wave Function Collapse Algorithmus. Auch werden noch bestehende Schwachstellen der präsentierten Methodik erklärt. Diese könnten als Ansatz für weiterführende Forschung und Weiterentwicklung des Algorithmus dienen.
     
     \section{Fazit}
         Diese Arbeit zeigt, wie der Wave Function Collapse Algorithmus erweitert werden kann, damit die generierten Ausgaben nicht nur auf Gittern sondern auch auf, vom Nutzer gegebenen, Graphen geschehen kann. Dem Algorithmus muss hierfür lediglich ein Graph gegeben. Die Erfolgschance und Qualität der Ausgabe hängt dabei von den Eingenschaften des verwendeten Beispiels und des Graphen ab. Kommt es dazu, dass der Algorithmus nur weniger interessant Ausgaben generieren kann, so kann der Nutzer mittels des neu eingeführtem Konzept, der Heat, dem entgegenwirken, indem die erzielte Ähnlichkeit der Ausgabe zum Beispiel abgeschwächt wird.
@@ -414,13 +422,13 @@
     
     
     \section{Zukünftige Forschung}
-        \at{@incomplete einleitungs satz}
+        Im folgenden Abschnitt werden einige bestehende Probleme der präsentierten Methode genannt und offene Fragen formuliert.
         
         \begin{enumerate}
         \item Diese Arbeit hat den Algorithmus nur in 2D betrachtet. Währenddessen wurden Model Synthesis und Wave Function Collapse schon in 3D angewandt. Kann diese Erweiterung des Wave Function Collapse auch auf dreidimensionale Graphen angewandt werden?
         \item Die Ausgabe kann nun auf einem Graphen geschehen, während das Beispiel immer noch auf einem Gitter liegt. Die tatsächlichen Richtungen in der Ausgabe werden auf die extrahierten Richtungen im Beispiel gerundet. Könnten Beispiele dann auch auf Graphen basieren, welche nicht direkt zum Graph der Ausgabe passen müssen?
         \item In dieser Arbeit wird der Graph für die Ausgabe erst generiert und dann werden dessen Zellen vom Algorithmus bearbeitet. Kann der Graph stattdessen dynamisch während der Generierung angepasst oder gänzlich erst dann erstellt werden, so dass neue Zellen so platziert werden, dass die Ähnlichkeit zum Beispiel oder andere gewünschte Beschränkungen auf die Ausgabe erfüllt werden?
-        \item Es besteht eine Beziehung zwischen den Mustern eines Beispiels, der Struktur des Graphens und der gewählten Heat, die die Erfolgsquote und die Qualität der Ausgaben beeinflusst. So lassen sich bestimmte Muster nur schlecht auf bestimmte Regionen des Graphen anwenden oder führen oft zu Widersprüchen. Können solche Muster und Regionen vorzeitig erkannt werden oder bleibt es einem nur übrig diese manuell zu erkennen um sie zu umgehen?
+        \item Es besteht eine Beziehung zwischen den Mustern eines Beispiels, der Struktur des Graphens und der gewählten Heat, die die Erfolgsquote und die Qualität der Ausgaben beeinflusst. So lassen sich bestimmte Muster nur schlecht auf bestimmte Regionen des Graphen anwenden oder führen oft zu Widersprüchen. Können solche Muster und Regionen vorzeitig erkannt werden?
         \item Für diese Arbeit wird Heat immer als globaler Parameter der gesamten Ausgabe behandelt. Sind die Zellen des Graphen größtenteils uniform, so kann ein optimaler Wert für eine globale Heat gefunden werden. Unregelmäßigen Graphen hingegen enthalten Regionen die besser mit wenig Heat und Regionen die besser mit hoher Heat gelöst werden können. Kann der Algorithmus erweitert werden, so dass Heat entsprechend der Struktur und Anordnung lokal angepasst wird?
         \item Desweiteren wird Heat vor Beginn der Generierung festgelegt. Wie kann diese stattdessen im Algorithmus mittels Heuristiken automatisch angepasst werden, wenn z.B. ein Widerspruch erreicht wurde?
         \end{enumerate}
