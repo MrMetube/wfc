@@ -43,7 +43,7 @@ show_heat           := false
 show_entropy        := false
 
 // @todo(viktor): visual dimension vs. point count for generates
-dimension: v2i = {15, 15}
+dimension: v2i = {75, 75}
 
 cells_background_color := v4{0.95, 0.95, 0.95, 1}
 
@@ -192,7 +192,7 @@ main :: proc () {
         delete(collapse.cells)
     }
     
-    preset_0(&generates)
+    presets[0](&generates)
     active_generate_index = 0
     
     // @todo(viktor): Can we not rely on this pregen?
@@ -262,7 +262,7 @@ main :: proc () {
         if show_points {
             for cell in collapse.cells {
                 color := v4_to_rl_color(Red)
-                rl.DrawCircleV(world_to_screen(cell.p), 6, color)
+                rl.DrawCircleV(world_to_screen(cell.p), 3, color)
             }
         }
         
@@ -270,7 +270,7 @@ main :: proc () {
             for cell in collapse.cells {
                 color := v4_to_rl_color(Orange)
                 for neighbour in cell.neighbours {
-                    rl.DrawLineEx(world_to_screen(cell.p), world_to_screen(neighbour.cell.p), 6, color)
+                    rl.DrawLineEx(world_to_screen(cell.p), world_to_screen(neighbour.cell.p), 3, color)
                 }
             }
         }
@@ -278,8 +278,8 @@ main :: proc () {
         if show_voronoi_cells {
             for cell in collapse.cells {
                 color := v4_to_rl_color(Emerald)
-                rl.DrawCircleV(world_to_screen(cell.p), 4, color)
-                draw_cell_outline(cell, color, thickness = 6)
+                rl.DrawCircleV(world_to_screen(cell.p), 2, color)
+                draw_cell_outline(cell, color, thickness = 3)
             }
         }
         
@@ -326,6 +326,8 @@ main :: proc () {
 }
 
 restart :: proc (this_frame: ^Frame, reset_heat := false) {
+    if this_frame == nil do return
+    
     this_frame.tasks += { .rewind }
     this_frame.rewind_to = 0
     this_frame.reset_heat = reset_heat
@@ -594,8 +596,8 @@ generate_points :: proc(points: ^[dynamic] v2d, count: i32, kind: Generate_Kind)
         rotated_radius := rotate(radius, angle)
         min := center - rotated_radius
         
-        count = round(i32, cast(f64) count * square_root(radius.x * radius.y))
-        side := round(i32, square_root(cast(f32) count))
+        count := cast(f64) count * square_root(radius.x * radius.y)
+        side  := round(i32, square_root(count))
         
         #reverse for p, index in points {
             delta := p - center
@@ -676,14 +678,16 @@ generate_points :: proc(points: ^[dynamic] v2d, count: i32, kind: Generate_Kind)
       case Generate_Noise:
         radius := vec_cast(f64, kind.radius)
         center := vec_cast(f64, kind.center)
-        count = round(i32, cast(f64) count * square_root(radius.x * radius.y))
-        
-        min_dist_squared := cast(f64) square(kind.min_distance)
+        area := radius.x * radius.y * 4
+        count := cast(f64) count * area
+        max := square_root(area / count)
+        t := linear_blend(cast(f64) 0, max, cast(f64) kind.min_distance)
+        min_dist_squared := square(t)
         for _ in 0..<count {
             new_point: v2d
             
             valid := false
-            attemps := 100
+            attemps := 20
             for !valid && attemps > 0 {
                 new_point = center + random_bilateral(&entropy, v2d) * radius
                 valid = true
@@ -700,70 +704,110 @@ generate_points :: proc(points: ^[dynamic] v2d, count: i32, kind: Generate_Kind)
                 attemps -= 1
             }
             
-            append(points, new_point)
+            if valid do append(points, new_point)
         }
     }
 }
 
-preset_0 :: proc (generates: ^[dynamic] Generate_Kind) {
-    clear(generates)
-    append(generates, Generate_Grid {
-        center    = {.5, .5},
-        radius = .51,
-    })
-}
+presets :: [] proc (generates: ^[dynamic] Generate_Kind) {
+    proc (generates: ^[dynamic] Generate_Kind) {
+        clear(generates)
+        append(generates, Generate_Grid {
+            center = {.5, .5},
+            radius = .51,
+        })
 
-preset_2 :: proc (generates: ^[dynamic] Generate_Kind) {
-    clear(generates)
-    append(generates, Generate_Grid {
-        center    = {.5, .5},
-        radius = .51,
-    })
-    
-    append(generates, Generate_Noise {
-        center = .5,
-        radius = {0.16, 0.51},
-    })
-    
-    append(generates, Generate_Circle {
-        radius = 0.277,
-        spiral_size = 1,
-    })
-}
+        base_heat = 1
+    },
+    proc (generates: ^[dynamic] Generate_Kind) {
+        clear(generates)
+        append(generates, Generate_Grid {
+            center = {.5, .5},
+            radius = .51,
+            is_hex = true,
+        })
 
-preset_3 :: proc (generates: ^[dynamic] Generate_Kind) {
-    clear(generates)
-    append(generates, Generate_Grid {
-        center    = {.5, .5},
-        radius = .51,
-    })
-    
-    append(generates, Generate_Noise {
-        center = .5,
-        radius = {0.51, 0.15},
-    })
-}
+        base_heat = 2
+    },
+    proc (generates: ^[dynamic] Generate_Kind) {
+        clear(generates)
+        append(generates, Generate_Circle {
+            radius = .51,
+            spiral_size = 1,
+        })
 
-preset_1 :: proc (generates: ^[dynamic] Generate_Kind) {
-    clear(generates)
-    append(generates, Generate_Grid {
-        center    = {.25, .25},
-        radius = .24,
-    })
-    append(generates, Generate_Grid {
-        center    = {.25, .75},
-        radius = .24,
-        is_hex = true,
-    })
-    append(generates, Generate_Grid {
-        center    = {.75, .25},
-        radius = .24,
-        is_hex    = true,
-    })
-    append(generates, Generate_Grid {
-        center    = {.75, .75},
-        radius = .24,
-    })
+        base_heat = 2
+    },
+    proc (generates: ^[dynamic] Generate_Kind) {
+        clear(generates)
+        append(generates, Generate_Noise {
+            center = {.5, .5},
+            radius = .51,
+            min_distance = 1,
+        })
+
+        base_heat = 3
+    },
+    proc (generates: ^[dynamic] Generate_Kind) {
+        clear(generates)
+        append(generates, Generate_Grid {
+            center    = {.25, .25},
+            radius = .24,
+        })
+        append(generates, Generate_Grid {
+            center    = {.25, .75},
+            radius = .24,
+            is_hex = true,
+        })
+        append(generates, Generate_Grid {
+            center    = {.75, .25},
+            radius = .24,
+            is_hex    = true,
+        })
+        append(generates, Generate_Grid {
+            center    = {.75, .75},
+            radius = .24,
+        })
+        base_heat = 2
+    },
+    proc (generates: ^[dynamic] Generate_Kind) {
+        clear(generates)
+        append(generates, Generate_Grid {
+            center = {.5, 1},
+            radius = .51,
+        })
+        append(generates, Generate_Grid {
+            center = {.5, 0},
+            radius = .51,
+            is_hex = true,
+        })
+        
+        append(generates, Generate_Noise {
+            center = .5,
+            radius = {0.51, 0.51/3},
+            min_distance = 0.75,
+        })
+        base_heat = 3
+    },
+    proc (generates: ^[dynamic] Generate_Kind) {
+        clear(generates)
+        append(generates, Generate_Grid {
+            center    = {.5, .5},
+            radius = .51,
+        })
+        
+        append(generates, Generate_Noise {
+            center = .5,
+            radius = {0.16, 0.51},
+            min_distance = 1,
+        })
+        
+        append(generates, Generate_Circle {
+            radius = 0.277,
+            spiral_size = 1,
+        })
+        base_heat = 3
+    },
 }
 
 ////////////////////////////////////////////////

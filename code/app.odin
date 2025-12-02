@@ -1,5 +1,6 @@
 package main
 
+import "core:fmt"
 import rl "vendor:raylib"
 import imgui "../lib/imgui"
 
@@ -80,10 +81,10 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
         }
         
         imgui.text("Presets")
-        imgui.same_line(); if imgui.button("P0") do preset_0(generates)
-        imgui.same_line(); if imgui.button("P1") do preset_1(generates)
-        imgui.same_line(); if imgui.button("P2") do preset_2(generates)
-        imgui.same_line(); if imgui.button("P3") do preset_3(generates)
+        for preset, index in presets {
+            imgui.same_line(); if imgui.button(fmt.tprintf("P%v", index)) do preset(generates)
+        }
+        
         {
             for _, index in generates {
                 is_active := index == active_generate_index
