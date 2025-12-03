@@ -19,7 +19,7 @@
 \usepackage{algorithmic}
 \makeatletter \renewcommand{\ALG@name}{Algorithmus} \makeatother
 
-
+\usepackage{pifont} % Häkchen und Kreuzchen
 % ////////////////////////////////////////////////
 
 % 
@@ -38,6 +38,9 @@
 \DeclareRobustCommand{\at}[1]{
     \textcolor{mgreen}{#1}
 }
+
+\DeclareRobustCommand{\tick}[0]{\ding{51}}
+\DeclareRobustCommand{\cross}[0]{\ding{55}}
 
 
 
@@ -133,7 +136,7 @@
 
 \chapter*{Zusammenfassung}
 \begin{quote}
-\@todo(viktor):{ Der \textbf{abstract} }
+\at{@incomplete Der \textbf{abstract} }
 \end{quote}
 
 
@@ -142,18 +145,24 @@
 
 
 \chapter{Einleitung}
-    \at{@incomplete}
+    Diese Kapitel erklärt zuerst die Motivation hinter dieser Arbeit und geht auf das zulösende Problem und das genaue Ziel dieser Arbeit ein. Danach wird ein Überblick den Aufbau der Arbeit gegeben.
     
     \section{Motivation}
-        Wave Function Collapse ist ein spannender Algorithmus, welcher, basiert auf einem einzigen Beispielmodell oder -bild, prozedural eine große Menge an ähnlichen Modellen und Bildern generieren kann. Bisher bestimmte die Form des Beispiels auch die Form des Ausgabe. Ein Beispielbild besteht aus Pixeln also werden auch Bilder aus Pixels generiert. Auch bei 3D Modellen beschränkt sich der Nutzer meist auf  z.B. würfelförmige Bauteile aus denen dann einen Modell zusammengestellt wird. Auch wenn der Innebereich solcher Bauteil beliebige Formen haben kann, werden die Bauteile dennoch würfelartig aneinander gebaut.
+        Wave Function Collapse ist ein spannender Algorithmus, welcher, basiert auf einem einzigen Beispielmodell oder -bild, eine große Menge an ähnlichen Modellen und Bildern prozedural generieren kann. Bisher bestimmte die Form des Beispiels auch die Form des Ausgabe. Ein Beispielbild besteht aus Pixeln also werden auch Bilder aus Pixels generiert. Auch bei 3D Modellen beschränkt sich der Nutzer meist auf  z.B. würfelförmige Bauteile aus denen dann einen Modell zusammengestellt wird. Auch wenn der Innebereich solcher Bauteil beliebige Formen haben kann, werden die Bauteile dennoch würfelartig aneinander gebaut.
         
-        Es muss aber nicht so sein, denn der Algorithmus selbst ist agnostisch gegenüber der Form der Ein- und Ausgabe. Es können ja nicht nur Bilder, sondern auch 3D Modelle generiert werden. Es sollte also möglich sein, dass der Algorithmus der Formen und Muster in einem Beispielbild auch auf eine anders geformte Struktur ausgeben kann. Genauer sollten die Ausgabe nicht nur auf einem Gitter, sondern nun auch auf Graphen, geschehen können.
+        Es muss aber nicht so sein, denn der Algorithmus selbst ist agnostisch gegenüber der Form der Ein- und Ausgabe. Es können nicht nur Bilder, sondern auch 3D Modelle generiert werden. Es sollte also möglich sein, dass der Algorithmus die Muster in einem Beispielbild auch auf eine anders geformte Struktur replizieren kann. Genauer sollten die Ausgabe nicht nur auf einem Gitter, sondern nun auch auf Graphen, geschehen können.
         
         Wäre dies möglich, so könnten Nutzer mit dem Algorithmus beliebige Strukturen als Basis nutzen und wären nicht mehr auf reine Gitter beschränkt. Dadurch könnten unregelmäßige oder organische Anordnungen, wie sind in der Natur, historischen Städten oder einem Mosaik vorkommen, als Basis für Ausgaben genutzt werden.
     
+    
+    
     \section{Problemstellung und Ziel}
-        \at{@incomplete}
+        Ziel dieser Arbeit ist es, den Wave Function Collapse Algorithmus so erweitern, dass dieser eine Ausgabe auf Graphen generieren kann. Das heißt, dass die Struktur der Eingabe nicht mehr exakt zur Struktur der Ausgabe passen muss, sondern dass z.B. ein Beispielbild auf unterschiedlich strukturierte Graphen anwendbar sein soll, ohne dass das Beispielbild dafür verändert werden muss. 
         
+        Das Kernproblem dabei ist, wie genau der Algorithmus die Informationen aus dem Beispielbild auf die Knoten eine Graphens einheitlich anwenden kann, wenn die Anordnung der Knoten und der Anzahl der Kanten pro Knoten im Graphen stark variieren können und keinerlei Ähnlichkeit zu dem Pixelgitter eines Bilds haben müssen. Gleichzeitig sollte der erweiterte Algorithmus immernoch die selbe Qualität für Ausgaben auf Gittern, als spezielle Art von Graphen, beibehalten. Insgesamt sollen die generierten Ausgaben eine gewisse Ähnlichkeit zum Beispiel haben, wobei diese vielleicht abgeschwächt werden muss. Dennoch sollte der Algorithmus eine hohe Ähnlichkeit erzielen.
+    
+    
+    
     \section{Aufbau der Arbeit}
         Es folgen fünf Kapitel in dieser Arbeit. Zuerst werden grundlegende Begriffe erklärt und es wird ein Überblick über den Stand der Technik im Bereich Wave Function Collapse gegeben. Danach wird die Beschränkung des Algorithmus genauer beschrieben und darauf eingegangen wie der Algorithmus erweitert wird und welchen Änderungen es dafür bedarf. Danach wird erklärt wie diese Änderungen umgesetzt wurden. Es folgt ein Überblick über die erzielten Resultate und es wird genauer auf Aspekte der Erweiterung eingegangen. Schließlich folgt eine Zusammenfassung der Arbeit, in der auch auf die Vor- und die Nachteile genannt werden.
 
@@ -278,8 +287,8 @@
         \textit{Heat} gibt an wie viele Himmelrichtungen der Algorithmus für Nachbarn betrachtet. Diese wird im Umfang dieser Arbeit für alle Zellen des Graphen einheitlich gesetzt und vor Beginn der Generierung festgelegt. Damit ein Zustand nun für eine Zelle möglich ist, muss dieser mit den Zuständen der Nachbarzellen überlappen. Nun muss die Überlappung entsprechend der Heat nicht nur noch entlang einer Himmelrichtung sein, sondern es können mehrere geprüft werden, wobei es reicht wenn eine der Himmelsrichtungen eine passende Regel hat. Ein Effekt höherer Heat ist, dass Zellen mehr mögliche Zustände haben, da es für jeden Zustand mehr passende Regeln gibt; die Entropie der Zellen ist tendenziell höher als bei geringer Heat.
         
         Die Anzahl der extrahierten Himmelsrichtungen begrenzt den Wertebereich für die Heat. Jeder Benachbarung kann minimal eine und maximal alle Himmelsrichtungen zugewiesen werden. Da Wave Function Collapse zuvor auf Gittern lief, konnten die Regelextraktion optimiert werden. Die reguläre Struktur des Gitters führt dazu, dass wenn für eine Zelle $A$ der Nachbar von $A$ im Norden($A_n$) passt und der Nachbar im Westen von $A_n$ passt, dann muss auch der Nachbar von $A$ im Nordwesten passen. Somit mussten nur die Überlappungsregeln für Norden, Süden, Westen und Osten gespeichert werden. Für die Generierung auf Graphen entfällt dies. Die diagonalen Himmelsrichtungen werden explizit gespeichert und behandelt.
-        
-        \at{@incomplete Zusammenhang von Heat und Entropie}
+    
+    
     
     \section{Zusammenfassung}
         Ziel dieser Arbeit ist, die Generierung des Wave Function Collapse Algorithmus auf Graphen geschehen zu lassen. Hierfür wurden drei Anpassungen dargestellt:
@@ -330,8 +339,17 @@
 \chapter{Ergebnisse und Diskussion}
     Dieses Kapitel präsentiert die erreichenten Ergebnisse. Zuerst werden die \at{@incomplete nach dem ausformulieren hier beschreiben.}. Danach werden die positiven wie auch negativen Effekte von Heat mittels Beispielen erklärt.
     
-    \section{Übersicht / Auswertung \at{@naming}}
-        Im folgenden Abschnitt werden \at{@incomplete siehe Abbildungen \ref{fig:results_1} und \ref{fig:results_2}}
+    \section{Übersicht und Auswertung \at{@naming}}
+        Im folgenden Abschnitt werden die Ausgaben des neuen Algorithmus dargestellt und erklärt. Abbildungen \ref{fig:results_1} und \ref{fig:results_2} zeigen eine Übersicht von Beispielen, Graphen und jeweils darauf generierte Ausgaben. In der ersten Reihe sind die Zellen der jeweiligen Graphen farbig dargestellt. Die erste Spalte zeigt die benutzen Beispielbilder. An drei Stellen fehlt die Ausgabe, da der Algorithmus innerhalb eines Zeitlimits von einer Minute keine Ausgabe generieren konnte. Zwar konnte der Algorithmus einem großem Teil der Zellen einen Zustand zuweisen, doch kam es immer wieder zu Widersprüchen.
+        
+        Zu den Graphen: \at{@incomplete ausführlicher und layout überdenken}
+        \begin{itemize}
+        \item (a) Quadratgitter mit Heat=1
+        \item (b) Sechseckgitter mit Heat=2
+        \item (c) Kreiförmige Anordnung der Punkte mit Heat=2
+        \item (d) Zufällige Anordnung der Punkte, einmal mit Heat=2 und einmal mit Heat = 3
+        \item (e) mehrere unterschiedlich große und gedrehte Gitter in einem Graph mit Heat = 2
+        \end{itemize}
         
         \input{data/results/figure_1.tex}
         \input{data/results/figure_2.tex}
@@ -341,8 +359,6 @@
         
         \begin{enumerate}
         \item erste reihe zeigt die Zellen, (a) Quadratgitter, (b) Sechseckgitter, (c) Kreisförmig, (d) Zufall, (e) eine Mischung aus unterschiedlichen gedrehten und angeordneten Gittern in einem Graphen
-        \item erste spalte zeigt das Beispiel und danach kommen ausgewählte Ausgaben mit dem Beispiel und dem Graph
-        \item maximal eine Minute laufen lassen, wenn nicht geschafft dann mit dnf markiert
         \item Heat ist (a)=1, (b,c) = 2, (d) einmal 2 und einmal 3, (e) = 2. Wurde so gewählt, dass interessante Ausgaben entstehen
         \item (a) ausgaben sind äquivalent zu WFC nach Gumin, Gitter
         \item (b) ab hier Heat 2, bis auf kleine Makel sind es gute Ausgaben, Gitter
@@ -388,7 +404,9 @@
     
     
     \section{Heat und Entropie}
-        \at{@incomplete einleitung}
+        Im folgenden Abschnitt wird die Beziehung zwischen Heat und Entropie genauer untersucht.
+        
+        
         
         \input{data/heat_entropy/figure.tex}
         
@@ -424,6 +442,7 @@
     \section{Zukünftige Forschung}
         Im folgenden Abschnitt werden einige bestehende Probleme der präsentierten Methode genannt und offene Fragen formuliert.
         
+        \at{@incomplete fragezeichen umformulieren oder auslassen und einleitung anpassen}
         \begin{enumerate}
         \item Diese Arbeit hat den Algorithmus nur in 2D betrachtet. Währenddessen wurden Model Synthesis und Wave Function Collapse schon in 3D angewandt. Kann diese Erweiterung des Wave Function Collapse auch auf dreidimensionale Graphen angewandt werden?
         \item Die Ausgabe kann nun auf einem Graphen geschehen, während das Beispiel immer noch auf einem Gitter liegt. Die tatsächlichen Richtungen in der Ausgabe werden auf die extrahierten Richtungen im Beispiel gerundet. Könnten Beispiele dann auch auf Graphen basieren, welche nicht direkt zum Graph der Ausgabe passen müssen?
