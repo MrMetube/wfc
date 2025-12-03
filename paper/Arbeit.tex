@@ -19,7 +19,6 @@
 \usepackage{algorithmic}
 \makeatletter \renewcommand{\ALG@name}{Algorithmus} \makeatother
 
-\usepackage{pifont} % Häkchen und Kreuzchen
 % ////////////////////////////////////////////////
 
 % 
@@ -38,9 +37,6 @@
 \DeclareRobustCommand{\at}[1]{
     \textcolor{mgreen}{#1}
 }
-
-\DeclareRobustCommand{\tick}[0]{\ding{51}}
-\DeclareRobustCommand{\cross}[0]{\ding{55}}
 
 
 
@@ -136,7 +132,13 @@
 
 \chapter*{Zusammenfassung}
 \begin{quote}
-\at{@incomplete Der \textbf{abstract} }
+
+Es wird eine Erweiterung des \textit{Wave Function Collapse} Algorithmus, die aus einem Beispiel ähnliche Ausgaben nicht nur wie zuvor auf regelmäßigen Gittern, sondern nun auch auf beliebigen Graphen, prozedural generieren kann, präsentiert. 
+Die unterliegenden Struktur der Ausgabe wird von der Struktur des Beispiel entkoppelt und es können komplexere oder gar zuvor unmögliche, Ausgaben erstellt werden, ohne dass das Beispiel für diese angepasst werden muss. 
+Ein neues Konzept namens \textit{Heat} definiert wie der Algorithmus die, aus dem Beispiel extrahierten, Regeln auf die Knoten des Graphen und deren Nachbarknoten anwendet. Dadurch können die Knoten beliebig angeordnet werden, anstatt auf ein Gitter beschränkt zu sein. Desweiteren wird Backtracking in der Generierung eingeführt, um die Laufzeit zu verbessern. Es wird auch gezeigt wie die, für die Ausgabe genutzten, Graphen automatisch erzeugt werden.
+Der erweiterte Algorithmus kann mit dem selben Beispiel erfolgreich eine Vielzahl an Ausgaben auf unterschiedlichen Graphen generieren. Die Qualität der generierten Ausgabe hängt in gleichen Teilen von dem Beispiel, dem Graphen und der gewählten Heat ab. Diese Beziehung wird genauer untersucht.
+Es wurde sich auf zweidimensionale Graphen beschränkt. Außerdem ist Heat als globaler, graphweiter Wert definiert. Dies macht die Methode besonders geeignet für Graphen mit relativ gleichmäßig verteilten Knoten. Bei stark unregelmäßige Graphstrukturen scheitert der Algorithmus häufiger oder kann nie eine zufriedenstellende Ausgabe generieren.
+
 \end{quote}
 
 
@@ -443,6 +445,7 @@
         Im folgenden Abschnitt werden einige bestehende Probleme der präsentierten Methode genannt und offene Fragen formuliert.
         
         \at{@incomplete fragezeichen umformulieren oder auslassen und einleitung anpassen}
+        \at{@incomplete nicht planare Graphen}
         \begin{enumerate}
         \item Diese Arbeit hat den Algorithmus nur in 2D betrachtet. Währenddessen wurden Model Synthesis und Wave Function Collapse schon in 3D angewandt. Kann diese Erweiterung des Wave Function Collapse auch auf dreidimensionale Graphen angewandt werden?
         \item Die Ausgabe kann nun auf einem Graphen geschehen, während das Beispiel immer noch auf einem Gitter liegt. Die tatsächlichen Richtungen in der Ausgabe werden auf die extrahierten Richtungen im Beispiel gerundet. Könnten Beispiele dann auch auf Graphen basieren, welche nicht direkt zum Graph der Ausgabe passen müssen?
