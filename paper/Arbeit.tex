@@ -177,21 +177,16 @@
     
     
     \section{Beschränkungen}
-        \at{@incomplete fragezeichen umformulieren oder auslassen und einleitung anpassen}
-        \at{@incomplete nicht planare Graphen}
+        In diesem Abschnitt wird kurz auf die wichtigsten Beschränkungen des erweiterten Algorithmus und der Herangehensweise und Verwendung dessen eingegangen.
         
-        \begin{enumerate}
-        \item Diese Arbeit hat den Algorithmus nur in 2D betrachtet. Währenddessen wurden Model Synthesis und Wave Function Collapse schon in 3D angewandt. Kann diese Erweiterung des Wave Function Collapse auch auf dreidimensionale Graphen angewandt werden?
-        \item Die Ausgabe kann nun auf einem Graphen geschehen, während das Beispiel immer noch auf einem Gitter liegt. Die tatsächlichen Richtungen in der Ausgabe werden auf die extrahierten Richtungen im Beispiel gerundet. Könnten Beispiele dann auch auf Graphen basieren, welche nicht direkt zum Graph der Ausgabe passen müssen?
-        \item In dieser Arbeit wird der Graph für die Ausgabe erst generiert und dann werden dessen Zellen vom Algorithmus bearbeitet. Kann der Graph stattdessen dynamisch während der Generierung angepasst oder gänzlich erst dann erstellt werden, so dass neue Zellen so platziert werden, dass die Ähnlichkeit zum Beispiel oder andere gewünschte Beschränkungen auf die Ausgabe erfüllt werden?
-        \item Es besteht eine Beziehung zwischen den Mustern eines Beispiels, der Struktur des Graphens und der gewählten Heat, die die Erfolgsquote und die Qualität der Ausgaben beeinflusst. So lassen sich bestimmte Muster nur schlecht auf bestimmte Regionen des Graphen anwenden oder führen oft zu Widersprüchen. Können solche Muster und Regionen vorzeitig erkannt werden?
-        \item Für diese Arbeit wird Heat immer als globaler Parameter der gesamten Ausgabe behandelt. Sind die Zellen des Graphen größtenteils uniform, so kann ein optimaler Wert für eine globale Heat gefunden werden. Unregelmäßigen Graphen hingegen enthalten Regionen die besser mit wenig Heat und Regionen die besser mit hoher Heat gelöst werden können. Kann der Algorithmus erweitert werden, so dass Heat entsprechend der Struktur und Anordnung lokal angepasst wird?
-        \item Desweiteren wird Heat vor Beginn der Generierung festgelegt. Wie kann diese stattdessen im Algorithmus mittels Heuristiken automatisch angepasst werden, wenn z.B. ein Widerspruch erreicht wurde?
-        \end{enumerate}
-
-
-
-
+        Diese Arbeit hat ausschließlich mit zweidimensionalen Beispielen gearbeitet, obwohl Model Synthesis und Wave Function Collapse auch in 3D angewendet wurden. 
+        
+        Die Graphen wurden stets vor Beginn der Generierung erstellt. Der Algorithmus zur Generierung der Graphen erstellt dabei immer eine Triangulierung, also sind alle Zellen stark vernetzt mit naheliegenden Zellen. Dies bietete sich an, da Wave Function Collapse lokale Regeln aus den Beispielen auf die Ausgabe anwendet. Andererseits wäre es möglich auch anderen Arten von Graphen zu verwenden. So könnten relativ zur Triangulierung Kanten entfernt werden um Diskontinuitäten in der Ausgabe zu erzeugen. Andersherum könnten neue Kanten eingefügt werden, um entfernte Zellen miteinander zu verbinden, was in der Ausgabe zu brückenähnlichen Effekten führen könnte. 
+        
+        Desweiteren wurden uniform verteilte Zellen präferiert, da diese Erfahrungsgemäß eine bessere Erfolgsquote hatten. Dies hängt direkt damit zusammen, dass Heat als globaler Wert für alle Zellen genutzt wurde. Unregelmäßigere Anordnungen enthalten eher Zellen mit extremer Anzahl an Nachbarn oder anderen außergewöhnlichen Eigenschaften, wobei Zellen mit vielen Nachbarn mehr eingeschränkt sind und dadurch häufiger Widersprüche auslösen können. Haben alle Zellen relativ ähnliche Eigenschaften, so lässt sich leichter ein guter Heat-Wert für sie finden.
+        
+        Letztlich wurde die Heat immer manuell vom Nutzer vor Beginn festgelegt. Wurde sie während der Generierung angepasst, so verwarf der Algorithmus alle Arbeit und startete neu. Es wäre aber möglich, die Heat während des Ablaufs manuell oder automatisch z.B. mittels Heuristiken anzupassen und weiterzuarbeiten.
+        
 
 
 % ////////////////////////////////////////////////
