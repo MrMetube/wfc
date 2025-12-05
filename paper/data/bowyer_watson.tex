@@ -3,11 +3,11 @@
     \label{alg:bowyer_watson}
         
     \begin{enumerate}
-        \item Geben sei eine Menge an Punkte
+        \item Gegeben sei eine Menge an Punkte
         \item Erstelle das Super-Dreieck so dass es jeden Punkt enthält
         
         \item Füge jeden Punkt schrittweise in die Triangulierung ein: \begin{enumerate}
-            \item Finde die Dreiecke in dessen Umkreis der Punkt liegt
+            \item Finde die Dreiecke, in dessen Umkreis der Punkt liegt
             \subitem Diese Dreiecke können nicht zur Triangulierung gehören
             \item Sammel alle Kanten dieser Dreiecke
             \subitem Gibt es eine Kante nur einmal, ist sie Teil der Hülle der Dreiecke
@@ -17,7 +17,7 @@
             \item Füge die neuen Dreiecke in die Triangulierung ein
         \end{enumerate}
         
-        \item Entferne alle Dreiecke, die eine Kanten mit dem Super-Dreieck teilen
+        \item Entferne alle Dreiecke, die eine Kante mit dem Super-Dreieck teilen
     \end{enumerate}
         
 \end{algorithm}
