@@ -169,14 +169,12 @@ Options:
         .help      = "Print this usage information.",
         .debugger  = "Start/Restart the debugger.",
         .run       = "Run the program.",
-        .web       = "Build for the web.",
         .renderdoc = "Run the program with renderdoc attached and launch renderdoc with the capture after the program closes.",
     }
-    // Ughh..
+    
     width: int
     for task in Task do width = max(len(fmt.tprint(task)), width)
-    format := fmt.tprintf("  %%-%vv - %%v\n", width)
-    for text, task in infos do fmt.printf(format, task, text)
+    for text, task in infos do fmt.printf("  %-*v - %v\n", width, task, text)
     
     os2.exit(1)
 }
