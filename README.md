@@ -35,14 +35,9 @@ This project:
 
 ## Technical Information
 * the program is written in [Odin](https://odin-lang.org/) and uses [Raylib](https://www.raylib.com/) to display and [DearImGUI](https://github.com/ocornut/imgui) for the ui.
-* besides that is implemented from scratch
-* 
-* Odin compiler (>= version you use; add your version)
-* Go through the provided build script or set up Odin environment
+* everything besides that is implemented from scratch
 
-*(Optional: list OS compatibility or dependencies if there are any.)*
-
-## Build & Run
+### Build & Run
 If you feel brave, try if you can build and run it on your machine. No warranties.  
 
 You will need to install the odin compiler.
