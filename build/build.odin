@@ -15,7 +15,8 @@ Pedantic      :: !false
 debug    :: `-debug`
 check    :: `-custom-attribute:printlike`
 
-flags    := [] string {`-error-pos-style:unix`,`-vet-cast`,`-vet-shadowing`,`-microarch:native`,`-target:windows_amd64`}
+flags    := [] string {`-vet-cast`,`-vet-shadowing`}
+native   := [] string {`-microarch:native`,`-target:windows_amd64`}
 pedantic := [] string {
     `-warnings-as-errors`,`-vet-unused-imports`,`-vet-semicolon`,`-vet-unused-variables`,`-vet-style`,
     `-vet-packages:main`,`-vet-unused-procedures`
@@ -63,10 +64,7 @@ main :: proc() {
         }
     }
     
-    if .help in tasks {
-        usage()
-        os.exit(1)
-    }
+    if .help in tasks do usage()
     
     make_directory_if_not_exists(data_dir)
     err := os.set_current_directory(build_dir)
@@ -95,6 +93,7 @@ main :: proc() {
         if build {
             odin_build(&cmd, code_dir, debug_exe_path)
             append(&cmd, ..flags)
+            append(&cmd, ..native)
             append(&cmd, debug)
             append(&cmd, flags_for_imgui)
             append(&cmd, check)
@@ -161,7 +160,7 @@ main :: proc() {
     }
 }
 
-usage :: proc () {
+usage :: proc () -> ! {
     fmt.printf(`Usage:
   %v [<options>]
 Options:
@@ -170,6 +169,7 @@ Options:
         .help      = "Print this usage information.",
         .debugger  = "Start/Restart the debugger.",
         .run       = "Run the program.",
+        .web       = "Build for the web.",
         .renderdoc = "Run the program with renderdoc attached and launch renderdoc with the capture after the program closes.",
     }
     // Ughh..
@@ -177,6 +177,8 @@ Options:
     for task in Task do width = max(len(fmt.tprint(task)), width)
     format := fmt.tprintf("  %%-%vv - %%v\n", width)
     for text, task in infos do fmt.printf(format, task, text)
+    
+    os2.exit(1)
 }
 
 Procs :: [dynamic] os2.Process

@@ -6,7 +6,7 @@ import imgui "../lib/imgui"
 
 step_depth: [dynamic] f32
 
-ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generates: ^[dynamic] Generate_Kind) {
+ui :: proc (c: ^Collapse, images: [dynamic] File, this_frame: ^Frame, generates: ^[dynamic] Generate_Kind) {
     region: v2
     current := len(c.steps) != 0 ? peek(c.steps)^ : {}
     
@@ -188,11 +188,8 @@ ui :: proc (c: ^Collapse, images: map[string] File, this_frame: ^Frame, generate
             pad: f32 = 6
             columns := max(1, round(int, region.x / (image_width+pad)))
             imgui.push_item_width(image_width)
-            @static selected_image_index: int
-            image_index := 0
-            for _, &image in images {
-                defer image_index += 1
-                
+            @(static) selected_image_index: int
+            for &image, image_index in images {
                 if image_index % columns != 0 do imgui.same_line()
                 
                 imgui.push_id(&image)
