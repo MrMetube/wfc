@@ -72,17 +72,17 @@ ui :: proc (c: ^Collapse, images: [dynamic] File, this_frame: ^Frame, generates:
         }
     imgui.end()
     
-    imgui.begin("Grid")
+    imgui.begin("Graph")
+        imgui.text("Presets")
+        for preset, index in presets {
+            imgui.same_line(); if imgui.button(fmt.tprintf("P%v", index)) do preset(generates)
+        }
+        
         imgui.slider_int2("Size", &desired_dimension, 3, 500, flags = .Logarithmic)
         
         if imgui.button("Generate Graph") {
             this_frame.tasks += { .setup_grid }
             dimension = desired_dimension
-        }
-        
-        imgui.text("Presets")
-        for preset, index in presets {
-            imgui.same_line(); if imgui.button(fmt.tprintf("P%v", index)) do preset(generates)
         }
         
         {
